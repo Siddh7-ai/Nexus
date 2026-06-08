@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatApp — Ocean Teal</title>
+  <style>
+    /* ─── Ocean Teal Reset & Base ─────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ot-primary:       #0d9488;
+      --ot-primary-dark:  #0f766e;
+      --ot-primary-glow:  #14b8a6;
+      --ot-primary-light: #5eead4;
+      --ot-bg-deep:       #042f2e;
+      --ot-bg-mid:        #0a3d38;
+      --ot-bg-card:       #0f3d39;
+      --ot-bg-panel:      #0c3531;
+      --ot-bg-input:      #0a3330;
+      --ot-border:        #1a5e58;
+      --ot-text:          #ccfbf1;
+      --ot-text-muted:    #5eead4;
+      --ot-text-dim:      #2dd4bf;
+      --ot-online:        #34d399;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--ot-bg-deep);
+      color: var(--ot-text);
+    }
+
+    /* ─── Chat Wrapper ─────────────────────────────────── */
+    .chat-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      height: 100vh;
+      background: radial-gradient(ellipse at top left, rgba(13,148,136,.12) 0%, transparent 50%), var(--ot-bg-deep);
+    }
+
+    .chat-container {
+      width: 700px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--ot-bg-card);
+      border-left: 1px solid var(--ot-border);
+      border-right: 1px solid var(--ot-border);
+      box-shadow: 0 0 40px rgba(13,148,136,.2);
+    }
+
+    /* ─── Header ───────────────────────────────────────── */
+    .chat-header {
+      background: var(--ot-bg-panel);
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--ot-border);
+      flex-shrink: 0;
+    }
+
+    .chat-header-left { display: flex; align-items: center; gap: 12px; }
+    .app-logo { font-size: 26px; }
+    .chat-title { font-size: 17px; font-weight: 700; color: var(--ot-text); }
+    .welcome-text { font-size: 12.5px; color: var(--ot-text-muted); margin-top: 2px; }
+    .welcome-text strong { color: #99f6e4; }
+
+    .logout-btn {
+      background: transparent;
+      color: var(--ot-text-muted);
+      border: 1px solid var(--ot-border);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover {
+      color: var(--ot-text);
+      border-color: var(--ot-primary);
+      background: rgba(13,148,136,.15);
+    }
+
+    /* ─── Online Bar ───────────────────────────────────── */
+    .online-users {
+      background: var(--ot-bg-panel);
+      padding: 7px 20px;
+      font-size: 12.5px;
+      color: var(--ot-text-muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border-bottom: 1px solid var(--ot-border);
+      flex-shrink: 0;
+    }
+
+    .online-dot {
+      width: 7px; height: 7px;
+      background: var(--ot-online);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(52,211,153,.5);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 8px rgba(52,211,153,.5); }
+      50%      { box-shadow: 0 0 14px rgba(52,211,153,.7); }
+    }
+
+    /* ─── Messages ─────────────────────────────────────── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--ot-border); border-radius: 10px; }
+
+    .system-message {
+      text-align: center;
+      color: var(--ot-text-dim);
+      font-size: 11.5px;
+      background: rgba(13,148,136,.08);
+      padding: 4px 14px;
+      border-radius: 999px;
+      margin: 6px auto;
+      max-width: 70%;
+      border: 1px solid var(--ot-border);
+    }
+
+    .message-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      max-width: 72%;
+    }
+    .message-row.own  { align-self: flex-end;   flex-direction: row-reverse; }
+    .message-row.other { align-self: flex-start; flex-direction: row; }
+
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 2px solid var(--ot-bg-card);
+    }
+
+    .message-bubble {
+      padding: 9px 13px 7px;
+      border-radius: 14px;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .message-bubble.own {
+      background: var(--ot-primary);
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 12px rgba(13,148,136,.3);
+    }
+    .message-bubble.other {
+      background: #134e4a;
+      border: 1px solid var(--ot-border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-username { display: block; font-size: 11.5px; font-weight: 700; color: #5eead4; margin-bottom: 4px; }
+    .message-text  { font-size: 14px; line-height: 1.5; }
+    .message-bubble.own .message-text   { color: #fff; }
+    .message-bubble.other .message-text { color: var(--ot-text); }
+    .message-time { display: block; font-size: 10.5px; text-align: right; margin-top: 5px; }
+    .message-bubble.own .message-time   { color: rgba(255,255,255,.6); }
+    .message-bubble.other .message-time { color: var(--ot-text-dim); }
+
+    /* ─── Typing / Input ───────────────────────────────── */
+    .typing-indicator {
+      height: 24px;
+      padding: 0 20px;
+      font-size: 12px;
+      color: var(--ot-text-dim);
+      font-style: italic;
+      display: flex;
+      align-items: center;
+      border-top: 1px solid rgba(26,94,88,.4);
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--ot-bg-panel);
+      border-top: 1px solid var(--ot-border);
+      flex-shrink: 0;
+    }
+
+    .input-group input {
+      flex: 1;
+      padding: 11px 18px;
+      border: 1px solid var(--ot-border);
+      border-radius: 999px;
+      background: var(--ot-bg-input);
+      color: var(--ot-text);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .input-group input::placeholder { color: #1a5e58; }
+    .input-group input:focus {
+      border-color: var(--ot-primary);
+      box-shadow: 0 0 0 3px rgba(13,148,136,.15);
+    }
+
+    .input-group button {
+      background: var(--ot-primary);
+      color: white;
+      border: none;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      transition: background .2s, transform .1s, box-shadow .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .input-group button:hover:not(:disabled) {
+      background: var(--ot-primary-dark);
+      transform: scale(1.07);
+      box-shadow: 0 0 16px rgba(13,148,136,.5);
+    }
+    .input-group button:disabled {
+      background: var(--ot-bg-mid);
+      color: #1a5e58;
+      cursor: not-allowed;
+    }
+
+    /* ─── Theme badge ──────────────────────────────────── */
+    .theme-badge {
+      text-align: center;
+      padding: 8px;
+      background: var(--ot-bg-panel);
+      border-top: 1px solid var(--ot-border);
+      font-size: 11px;
+      color: var(--ot-text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Preview / Fallback UI in Ocean Teal -->
+  <div class="chat-wrapper">
+    <div class="chat-container">
+
+      <!-- Header -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <span class="app-logo"></span>
+          <div>
+            <div class="chat-title">ChatApp</div>
+            <div class="welcome-text">Welcome, <strong>Siddh</strong></div>
+          </div>
+        </div>
+        <button class="logout-btn">Logout</button>
+      </div>
+
+      <!-- Online -->
+      <div class="online-users">
+        <span class="online-dot"></span>
+        2 users online
+      </div>
+
+      <!-- Messages -->
+      <div class="messages">
+        <div class="system-message">Rahul joined</div>
+
+        <div class="message-row other">
+          <div class="avatar" style="background:#0d9488;">R</div>
+          <div class="message-bubble other">
+            <span class="message-username">Rahul</span>
+            <p class="message-text">Hey! How are you?</p>
+            <span class="message-time">10:30 AM</span>
+          </div>
+        </div>
+
+        <div class="message-row own">
+          <div class="message-bubble own">
+            <p class="message-text">I'm good, thanks!</p>
+            <span class="message-time">10:31 AM</span>
+          </div>
+          <div class="avatar" style="background:#0f766e;">S</div>
+        </div>
+
+        <div class="message-row other">
+          <div class="avatar" style="background:#0d9488;">R</div>
+          <div class="message-bubble other">
+            <span class="message-username">Rahul</span>
+            <p class="message-text">What's the plan today?</p>
+            <span class="message-time">10:32 AM</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing -->
+      <div class="typing-indicator"></div>
+
+      <!-- Input -->
+      <div class="input-group">
+        <input type="text" placeholder="Type a message..." />
+        <button>➤</button>
+      </div>
+
+      <!-- Badge -->
+      <div class="theme-badge">Ocean Teal</div>
+
+    </div>
+  </div>
+
+</body>
+</html>

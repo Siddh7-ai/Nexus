@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
+
+:root {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Removed: color-scheme: dark, color: #ccfbf1, background: #042f2e */
+  /* These were bleeding into light-themed pages (Features, Auth, Landing) */
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  /* REMOVED: overflow: hidden — this was blocking scroll on Features/Auth/Landing pages */
+  /* The chat page controls its own overflow via .chat-wrapper */
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  /* REMOVED: background: #042f2e — this bled through on white-background pages */
+  /* Each page sets its own background */
+}
+
+/* Restore default cursor globally */
+*,
+*::before,
+*::after {
+  cursor: auto;
+}
+
+button,
+a,
+[role="button"],
+select,
+label {
+  cursor: pointer;
+}
+
+/* Base element resets */
+button,
+input {
+  font: inherit;
+}

@@ -1,0 +1,47 @@
+****************1
+
+const express = require("express");          //import express module
+
+const app = express();                      //Create express application
+
+app.get("/", (req, res) => {                //Route request handler
+  res.send("Hello World!");
+});
+
+app.listen(5000, () => {                    //Start server on port 5000
+  console.log("Server started");
+});                                         //till now this is one way comm   this is http connection which is A==>browser
+
+
+******************2
+
+const express = require("express");         //import express module
+const http = require("http");        
+const { Server } = require("socket.io")       //import server.io module
+
+const app = express();                      //Create express application
+
+const server = http.createServer(app);      //Create HTTP server
+
+const io = new Server(server);              //Create Socket.IO server
+
+app.get("/", (req, res) => {                //Route request handler
+  res.send("Hello World!");
+});
+
+io.on("connection", (socket) => {          //Handle Socket.IO connections
+  console.log("A user connected"); 
+});
+
+server.listen(5000, () => {                    //Start server on port 5000
+  console.log("Server started");
+});                                          
+
+****************3 To connect mongo
+mongoose.connect("mongodb://127.0.0.1:27017/Chatapp")
+.then(() => {
+    console.log("MongoDB Connected");
+})
+.catch((err) => {
+    console.log(err);
+});
