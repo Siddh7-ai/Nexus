@@ -491,11 +491,6 @@ body.dark-theme .features-hero {
   background: rgba(21, 23, 28, 0.86);
 }
 
-body.dark-theme .highlight {
-  background: #f3f4f6;
-  color: #0f1013;
-}
-
 body.dark-theme .features-brand {
   color: #f3f4f6;
 }
@@ -600,4 +595,17 @@ body.dark-theme .reveal-actions button:hover {
   border-color: #f3f4f6;
   background: #f3f4f6;
   color: #0f1013;
+}
+
+body.dark-theme .features-count strong {
+  font-size: clamp(76px, 10vw, 124px);
+  line-height: 0.8;
+  color: rgba(17, 178, 184, 0.342);
+}
+
+body.dark-theme .highlight {
+  display: inline-block;
+  background: #fff;
+  color: #000;
+  padding: 0 8px;
 }
