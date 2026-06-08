@@ -112,7 +112,7 @@
   color: rgba(126, 111, 255, 0.13);
 }
 
-.features-count span {
+.features-count > span {
   margin-top: 18px;
   color: #9ca3af;
   font-size: 14px;
@@ -442,3 +442,37 @@
   }
 }
 
+/* Green status indicators and pulse animation */
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(23, 214, 126, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(23, 214, 126, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(23, 214, 126, 0);
+  }
+}
+
+.features-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #17d67e;
+  display: inline-block;
+  animation: status-pulse 2s infinite;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.green {
+  background-color: #17d67e;
+  margin-right: 6px;
+  animation: status-pulse 2s infinite;
+}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
+import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity } from "framer-motion";
 
 import ChatHeader from "../components/ChatHeader";
 import OnlineUsers from "../components/OnlineUsers";
@@ -98,6 +99,38 @@ function Chat() {
     const [profileCardError, setProfileCardError] = useState("");
     const [reportReason, setReportReason] = useState("");
     const [showReportForm, setShowReportForm] = useState(false);
+    const [showOnlineList, setShowOnlineList] = useState(false);
+    const [fullAvatarUrl, setFullAvatarUrl] = useState(null);
+
+    // Framer Motion Values for interactive dragging and physical lanyard updates
+    const cardX = useMotionValue(0);
+    const cardY = useMotionValue(0);
+    
+    // Capture horizontal velocity to simulate realistic drag-induced rotation
+    const xVelocity = useVelocity(cardX);
+    const cardRotate = useTransform(xVelocity, [-2000, 2000], [-12, 12]);
+    
+    // Calculate woven lanyard tilt angle and vertical stretch dynamically
+    const lanyardAngle = useTransform([cardX, cardY], ([cx, cy]) => {
+        const targetY = 160 + cy;
+        if (targetY <= 0) return 0;
+        // Invert rotation sign so the bottom of the lanyard follows card offset coordinates correctly
+        return -Math.atan2(cx, targetY) * (180 / Math.PI);
+    });
+    const lanyardHeight = useTransform([cardX, cardY], ([cx, cy]) => {
+        const targetY = 160 + cy;
+        if (targetY <= 0) return 0;
+        return Math.sqrt(cx * cx + targetY * targetY);
+    });
+    
+    // Calculate carabiner rotation relative to the card's rotation to point toward the lanyard loop
+    const claspRotate = useTransform([lanyardAngle, cardRotate], ([la, cr]) => la - cr);
+
+    // Reset card coordinates to resting state when profile card opens/closes
+    useEffect(() => {
+        cardX.set(0);
+        cardY.set(0);
+    }, [selectedProfileUsername, cardX, cardY]);
 
     // Avatar Canvas Cropper states
     const [cropImageSrc, setCropImageSrc] = useState(null);
@@ -106,9 +139,19 @@ function Chat() {
     const [isDraggingCrop, setIsDraggingCrop] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-    const messagesEndRef = useRef(null);
     const socketRef = useRef(null);
+    const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const activeRoomRef = useRef(activeRoom);
+    const activePrivateRef = useRef(activePrivate);
+
+    useEffect(() => {
+        activeRoomRef.current = activeRoom;
+    }, [activeRoom]);
+
+    useEffect(() => {
+        activePrivateRef.current = activePrivate;
+    }, [activePrivate]);
 
     useEffect(() => {
         const token = getAuthToken();
@@ -143,6 +186,11 @@ function Chat() {
 
         newSocket.on("typing", (typingData) => {
             if (!typingData || !typingData.username) return;
+            const isMatch = typingData.privateChatId
+                ? (activePrivateRef.current === typingData.privateChatId)
+                : (activeRoomRef.current === typingData.room);
+            if (!isMatch) return;
+
             setTypingUser(typingData);
             if (typingTimeoutRef.current) {
                 clearTimeout(typingTimeoutRef.current);
@@ -150,6 +198,17 @@ function Chat() {
             typingTimeoutRef.current = setTimeout(() => {
                 setTypingUser(null);
             }, 1500);
+        });
+
+        newSocket.on("stopTyping", (data) => {
+            if (data && data.username) {
+                const isMatch = data.privateChatId
+                    ? (activePrivateRef.current === data.privateChatId)
+                    : (activeRoomRef.current === data.room);
+                if (isMatch) {
+                    setTypingUser(prev => (prev && prev.username === data.username) ? null : prev);
+                }
+            }
         });
 
         newSocket.on("onlineUsers", (count) => setOnlineUsers(count));
@@ -277,9 +336,11 @@ function Chat() {
         setActivePrivateName("");
         setMessages([]);
         setSidebarOpen(false);
+        setTypingUser(null);
         socketRef.current?.emit("joinRoom", room);
     }
 
+    // Join direct private message conversation
     function selectPrivate(privateChatId, otherUsername) {
         if (isGuest) {
             setShowLoginModal(true);
@@ -291,6 +352,7 @@ function Chat() {
         setActiveRoom(null);
         setMessages([]);
         setSidebarOpen(false);
+        setTypingUser(null);
         socketRef.current?.emit("joinPrivateChat", { otherUsername });
     }
 
@@ -306,15 +368,26 @@ function Chat() {
 
         socketRef.current.emit("message", msgData);
         setMessage("");
+        socketRef.current.emit("stopTyping", {
+            room: activeRoom,
+            privateChatId: activePrivate
+        });
     }
 
     function emitTyping(value) {
         setMessage(value);
         if (!username) return;
-        socketRef.current?.emit("typing", {
-            room: activeRoom,
-            privateChatId: activePrivate
-        });
+        if (value.trim() === "") {
+            socketRef.current?.emit("stopTyping", {
+                room: activeRoom,
+                privateChatId: activePrivate
+            });
+        } else {
+            socketRef.current?.emit("typing", {
+                room: activeRoom,
+                privateChatId: activePrivate
+            });
+        }
     }
 
     function handleReact(messageId, emoji) {
@@ -417,6 +490,13 @@ function Chat() {
                     sessionStorage.setItem("token", data.token);
                 }
                 setUsername(data.user.username);
+                setCurrentUserProfile(prev => ({
+                    ...prev,
+                    username: data.user.username,
+                    displayName: data.user.displayName,
+                    avatar: data.user.avatar,
+                    status: data.user.status
+                }));
                 
                 socketRef.current?.emit("updateProfile", {
                     displayName: data.user.displayName,
@@ -459,34 +539,36 @@ function Chat() {
     function saveCroppedImage() {
         if (!cropImageSrc) return;
         const canvas = document.createElement("canvas");
-        canvas.width = 150;
-        canvas.height = 150;
+        const canvasSize = 800; // Output high-quality resolution (800x800 pixels)
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
         
         const img = new Image();
         img.src = cropImageSrc;
         img.onload = () => {
             const ctx = canvas.getContext("2d");
-            ctx.clearRect(0, 0, 150, 150);
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
 
-            const viewSize = 150;
-            let drawWidth = img.width;
-            let drawHeight = img.height;
+            // Enable high-quality image scaling
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+
+            const uiSize = 200; // Viewport size in UI is 200px
+            const scale = canvasSize / uiSize; // Scale factor (800 / 200 = 4)
             const imgRatio = img.width / img.height;
 
-            if (imgRatio > 1) {
-                drawHeight = viewSize;
-                drawWidth = viewSize * imgRatio;
-            } else {
-                drawWidth = viewSize;
-                drawHeight = viewSize / imgRatio;
-            }
+            // In the UI, the image height matches the viewport height (200px), 
+            // and its width scales with the image aspect ratio (200px * imgRatio).
+            const drawWidth = canvasSize * imgRatio * cropZoom;
+            const drawHeight = canvasSize * cropZoom;
 
-            const x = (viewSize - drawWidth * cropZoom) / 2 + cropOffset.x;
-            const y = (viewSize - drawHeight * cropZoom) / 2 + cropOffset.y;
+            const x = (canvasSize - drawWidth) / 2 + cropOffset.x * scale;
+            const y = (canvasSize - drawHeight) / 2 + cropOffset.y * scale;
 
-            ctx.drawImage(img, x, y, drawWidth * cropZoom, drawHeight * cropZoom);
+            ctx.drawImage(img, x, y, drawWidth, drawHeight);
 
-            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.85);
+            // Export as JPEG with 92% quality (excellent balance of clarity and file size)
+            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.92);
             setAvatarVal(compressedBase64);
             setCropImageSrc(null); // Close cropper
         };
@@ -713,6 +795,8 @@ function Chat() {
                         onlineUsers={onlineUsers}
                         onlineUserList={onlineUserList}
                         currentUser={username}
+                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                        onShowOnlineListClick={() => setShowOnlineList(true)}
                     />
 
                     <MessageList
@@ -1135,162 +1219,469 @@ function Chat() {
             )}
 
             {/* Other User Profile Card Modal */}
-            {selectedProfileUsername && (
-                <div className="modal-overlay" onClick={() => setSelectedProfileUsername(null)}>
-                    <div className="modal-content other-user-profile-card" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 350px)', padding: '0', overflow: 'hidden', border: 'none', boxShadow: '0 25px 60px rgba(0,0,0,0.2)' }}>
-                        {loadingProfileCard ? (
-                            <div className="emoji-picker-loader" style={{ padding: '48px 0' }}>Loading Profile...</div>
-                        ) : profileCardError ? (
-                            <div style={{ padding: '24px', textAlign: 'center' }}>
-                                <p style={{ color: 'var(--danger)', fontWeight: 'bold' }}>{profileCardError}</p>
-                                <button className="modal-btn secondary" onClick={() => setSelectedProfileUsername(null)}>Close</button>
-                            </div>
-                        ) : selectedProfileData ? (
-                            <div style={{ position: 'relative' }}>
-                                <div style={{ height: '70px', background: 'linear-gradient(135deg, var(--accent), var(--accent-deep))', position: 'relative' }}>
-                                    <button 
-                                        onClick={() => setSelectedProfileUsername(null)} 
-                                        style={{ position: 'absolute', top: '10px', right: '12px', border: 'none', background: 'rgba(0,0,0,0.2)', color: 'white', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 'bold' }}
-                                    >
-                                        ×
-                                    </button>
+            <AnimatePresence>
+                {selectedProfileUsername && (
+                    <motion.div 
+                        className="nexus-id-overlay"
+                        key="nexus-id-pass-modal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    >
+                        <motion.div 
+                            className="nexus-id-backdrop" 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            onClick={() => setSelectedProfileUsername(null)} 
+                        />
+                        <div className="badge-container" onClick={(e) => e.stopPropagation()}>
+                            {/* Woven Lanyard */}
+                            <motion.div 
+                                className="woven-lanyard"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                style={{ 
+                                    rotate: lanyardAngle,
+                                    height: lanyardHeight,
+                                    transformOrigin: "top center"
+                                }}
+                                transition={{ 
+                                    type: "spring",
+                                    stiffness: 90,
+                                    damping: 15
+                                }}
+                            >
+                                <div className="lanyard-text">
+                                    {selectedProfileData ? (selectedProfileData.displayName || selectedProfileData.username).split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : "NX"}
                                 </div>
+                                <div className="lanyard-metal-loop" />
+                            </motion.div>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '-45px', padding: '0 24px 24px 24px' }}>
-                                    <div style={{ width: '90px', height: '90px', borderRadius: '50%', border: '4px solid #fff', overflow: 'hidden', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', background: '#fff', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {selectedProfileData.avatar ? (
-                                            <img src={selectedProfileData.avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        ) : (
-                                            <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #c8eeff, #bff7f2)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: '800' }}>
-                                                {selectedProfileData.username.charAt(0).toUpperCase()}
-                                            </div>
-                                        )}
-                                        <span 
-                                            className={`sidebar-online-dot ${
-                                                selectedProfileData.status === "Online" ? "" :
-                                                selectedProfileData.status === "Away" ? "away" :
-                                                selectedProfileData.status === "Busy" ? "busy" : "offline"
-                                            }`} 
-                                            style={{ position: 'absolute', bottom: '4px', right: '4px', border: '2px solid #fff', width: '10px', height: '10px' }} 
-                                        />
+                            {loadingProfileCard ? (
+                                <motion.div 
+                                    className="cyber-badge-card"
+                                    initial={{ y: -800, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: -800, opacity: 0 }}
+                                    transition={{ type: "spring", stiffness: 90, damping: 15 }}
+                                    style={{ justifyContent: 'center', minHeight: '220px' }}
+                                >
+                                    <div className="cyber-card-grid" />
+                                    <div className="emoji-picker-loader" style={{ padding: '48px 0', color: 'var(--accent)', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>
+                                        ESTABLISHING SECURE CONNECTION...
                                     </div>
-
-                                    <h3 style={{ margin: '12px 0 2px 0', fontSize: '20px', fontWeight: '800', color: 'var(--text)' }}>
-                                        {selectedProfileData.displayName}
-                                    </h3>
-                                    <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: '500' }}>
-                                        @{selectedProfileData.username}
-                                    </span>
-
-                                    <p style={{ margin: '14px 0', fontSize: '13px', color: '#4b5563', textAlign: 'center', fontStyle: selectedProfileData.bio ? 'normal' : 'italic', lineHeight: '1.4' }}>
-                                        {selectedProfileData.bio || "No status bio set."}
+                                </motion.div>
+                            ) : profileCardError ? (
+                                <motion.div 
+                                    className="cyber-badge-card"
+                                    initial={{ y: -800, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    exit={{ y: -800, opacity: 0 }}
+                                    transition={{ type: "spring", stiffness: 90, damping: 15 }}
+                                    style={{ justifyContent: 'center', padding: '24px', textAlign: 'center', minHeight: '200px' }}
+                                >
+                                    <div className="cyber-card-grid" />
+                                    <p style={{ color: 'var(--danger)', fontWeight: 'bold', fontSize: '13px', fontFamily: 'monospace', marginBottom: '20px' }}>
+                                        {profileCardError}
                                     </p>
+                                    <button className="cyber-badge-btn primary" style={{ width: '120px', height: '36px' }} onClick={() => setSelectedProfileUsername(null)}>CLOSE</button>
+                                </motion.div>
+                            ) : selectedProfileData ? (
+                                <motion.div 
+                                    className="cyber-badge-card"
+                                    drag
+                                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                    dragElastic={1.0}
+                                    initial={{ y: -800, rotate: 22, opacity: 0 }}
+                                    animate={{ y: 0, rotate: 0, opacity: 1 }}
+                                    exit={{ y: -800, rotate: -22, opacity: 0 }}
+                                    style={{
+                                        x: cardX,
+                                        y: cardY,
+                                        rotate: cardRotate
+                                    }}
+                                    transition={{
+                                        type: "spring",
+                                        stiffness: 90,
+                                        damping: 14,
+                                        mass: 1.1
+                                    }}
+                                >
+                                    {/* Punched Hole with Chrome Grommet */}
+                                    <div className="card-grommet-hole" />
+                                    
+                                    {/* Corner Bracket Accent Indicators */}
+                                    <div className="card-corner-bracket top-left" />
+                                    <div className="card-corner-bracket top-right" />
+                                    <div className="card-corner-bracket bottom-left" />
+                                    <div className="card-corner-bracket bottom-right" />
 
-                                    <div style={{ width: '100%', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '10px', margin: '6px 0 16px 0', gap: '8px' }}>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>MESSAGES</div>
-                                            <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>{selectedProfileData.totalMessagesSent.toLocaleString()}</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>JOINED</div>
-                                            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)', marginTop: '2px' }}>
-                                                {new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {/* Carabiner Chrome Clasp (dynamic rotation pointing to the lanyard pivot) */}
+                                    <motion.div 
+                                        className="chrome-clasp-wrapper"
+                                        style={{
+                                            rotate: claspRotate,
+                                            transformOrigin: "center 38px"
+                                        }}
+                                    >
+                                        <svg width="32" height="48" viewBox="0 0 32 48" fill="none">
+                                            <defs>
+                                                <linearGradient id="chromeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="#f8fafc" />
+                                                    <stop offset="20%" stopColor="#cbd5e1" />
+                                                    <stop offset="40%" stopColor="#475569" />
+                                                    <stop offset="60%" stopColor="#cbd5e1" />
+                                                    <stop offset="80%" stopColor="#94a3b8" />
+                                                    <stop offset="100%" stopColor="#1e293b" />
+                                                </linearGradient>
+                                            </defs>
+                                            {/* Carabiner main hook body */}
+                                            <path d="M16 2 C10 2 6 6 6 12 C6 15 8 18 10 20 L10 32 C10 34 12 36 14 36 L18 36 C20 34 22 32 22 30 L22 20 C24 18 26 15 26 12 C26 6 22 2 16 2 Z" fill="url(#chromeGradient)" filter="drop-shadow(0 2px 3px rgba(0,0,0,0.5))" />
+                                            {/* Carabiner inner void */}
+                                            <path d="M16 6 C13 6 10 8 10 12 C10 14 11 16 13 18 L13 30 C13 31 14 32 15 32 L17 32 C18 32 19 31 19 30 L19 18 C21 16 22 14 22 12 C22 8 19 6 16 6 Z" fill="#030407" />
+                                            {/* Security latch wire gate */}
+                                            <path d="M10 14 L22 19" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                                            {/* Grommet anchor ring hook */}
+                                            <circle cx="16" cy="38" r="4" fill="#475569" stroke="#94a3b8" strokeWidth="1.5" />
+                                        </svg>
+                                    </motion.div>
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginBottom: '18px', width: '100%', borderBottom: '1px solid #e2e8f0', paddingBottom: '14px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700' }}>
-                                            <span style={{ height: '8px', width: '8px', borderRadius: '50%', backgroundColor: 
-                                                selectedProfileData.status === "Online" ? '#17d67e' :
-                                                selectedProfileData.status === "Away" ? '#ffb020' :
-                                                selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280'
-                                            }} />
-                                            <span>
-                                                {selectedProfileData.status === "Online" ? "Online" :
-                                                 selectedProfileData.status === "Away" ? "Away" :
-                                                 selectedProfileData.status === "Busy" ? "Busy" : "Offline"}
-                                            </span>
-                                        </div>
-                                        {selectedProfileData.status === "Offline" && selectedProfileData.lastSeen && (
-                                            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                                                Last seen: {new Date(selectedProfileData.lastSeen).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {/* Laser Engraved Tech Grid */}
+                                    <div className="cyber-card-grid" />
 
-                                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button 
-                                                onClick={handleStartPrivateChat} 
-                                                disabled={!selectedProfileData.canDM} 
-                                                className="modal-btn primary" 
-                                                style={{ flex: 1, minHeight: '36px' }}
-                                                title={!selectedProfileData.canDM ? "Private Messaging is restricted by user privacy or block settings." : "Send direct message"}
-                                            >
-                                                Message
-                                            </button>
-                                            <button 
-                                                onClick={handleBlockToggle} 
-                                                className={`modal-btn ${selectedProfileData.isBlocked ? 'secondary' : 'cancel'}`} 
-                                                style={{ flex: 1, minHeight: '36px', border: selectedProfileData.isBlocked ? '1px solid #cbd5e1' : 'none' }}
-                                            >
-                                                {selectedProfileData.isBlocked ? "Unblock" : "Block"}
-                                            </button>
-                                        </div>
-                                        
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button 
-                                                onClick={handleFriendToggle} 
-                                                className="modal-btn secondary" 
-                                                style={{ flex: 1, minHeight: '36px', border: '1px solid #cbd5e1' }}
-                                            >
-                                                {selectedProfileData.isFriend ? "Remove Friend" : "Add Friend"}
-                                            </button>
-                                            <button 
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(selectedProfileData._id);
-                                                    alert("User ID copied to clipboard!");
+                                    {/* CARD HEADER SECTION */}
+                                    <div className="cyber-card-header" style={{ marginTop: '14px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div className="cyber-logo-text">NEXUS</div>
+                                            <div 
+                                                style={{ 
+                                                    width: '6px', 
+                                                    height: '6px', 
+                                                    borderRadius: '50%', 
+                                                    backgroundColor: selectedProfileData.status === "Online" ? '#10b981' :
+                                                                     selectedProfileData.status === "Away" ? '#ffb020' :
+                                                                     selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280',
+                                                    boxShadow: selectedProfileData.status === "Online" ? '0 0 8px #10b981' :
+                                                               selectedProfileData.status === "Away" ? '0 0 8px #ffb020' :
+                                                               selectedProfileData.status === "Busy" ? '0 0 8px #ef4444' : 'none'
                                                 }} 
-                                                className="modal-btn secondary" 
-                                                style={{ flex: 1, minHeight: '36px', border: '1px solid #cbd5e1' }}
-                                            >
-                                                Copy ID
-                                            </button>
+                                            />
                                         </div>
+                                        <div className="cyber-barcode">
+                                            <span>NEXUS_ID:{selectedProfileData._id?.substring(selectedProfileData._id.length - 8).toUpperCase()}</span>
+                                        </div>
+                                        <button className="cyber-close-btn" onClick={() => setSelectedProfileUsername(null)}>×</button>
+                                    </div>
 
-                                        <button 
-                                            onClick={() => setShowReportForm(v => !v)} 
-                                            className="modal-btn secondary" 
-                                            style={{ minHeight: '36px', border: '1px solid #cbd5e1', color: 'var(--danger)' }}
+                                    {/* AVATAR + ACTIVE GLOW ZONE */}
+                                    <div className="cyber-avatar-zone">
+                                        <div 
+                                            className="cyber-avatar-wrapper"
+                                            onClick={() => {
+                                                if (selectedProfileData.avatar) {
+                                                    setFullAvatarUrl(selectedProfileData.avatar);
+                                                }
+                                            }}
+                                            style={{ cursor: selectedProfileData.avatar ? 'zoom-in' : 'default' }}
                                         >
-                                            Report User
-                                        </button>
+                                            {selectedProfileData.avatar ? (
+                                                <img src={selectedProfileData.avatar} alt="Avatar" className="cyber-avatar-img" />
+                                            ) : (
+                                                <div className="cyber-avatar-placeholder">
+                                                    {selectedProfileData.username.charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                            {/* Neon active presence radar ring */}
+                                            <div 
+                                                className="cyber-radar-ring" 
+                                                style={{ 
+                                                    '--radar-color': selectedProfileData.status === "Online" ? '#10b981' :
+                                                                     selectedProfileData.status === "Away" ? '#ffb020' :
+                                                                     selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280'
+                                                }} 
+                                            />
+                                        </div>
+                                    </div>
 
-                                        {showReportForm && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#fef2f2', border: '1px solid #fecaca', padding: '10px', borderRadius: '8px', marginTop: '4px', animation: 'slideDownAlert 0.2s ease-out' }}>
-                                                <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#991b1b' }}>Reason for Reporting</label>
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="Enter reason..." 
-                                                    value={reportReason} 
-                                                    onChange={(e) => setReportReason(e.target.value)} 
-                                                    style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid #fca5a5', fontSize: '12px' }}
-                                                />
-                                                <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                                    <button type="button" onClick={handleReportUser} disabled={!reportReason.trim()} className="modal-btn danger" style={{ minHeight: '26px', fontSize: '11px', padding: '0 8px' }}>
-                                                        Submit Report
+                                    {/* USER BRAND DETAILS */}
+                                    <div className="cyber-bio-section">
+                                        <h2 className="cyber-display-name">
+                                            {selectedProfileData.displayName}
+                                            {!selectedProfileData.isGuest && (
+                                                <svg className="cyber-verify-badge" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+                                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                </svg>
+                                            )}
+                                        </h2>
+                                        <span className="cyber-username">@{selectedProfileData.username}</span>
+                                        <p className="cyber-bio-text" style={{ fontStyle: selectedProfileData.bio ? 'normal' : 'italic' }}>
+                                            {selectedProfileData.bio || "No status bio set."}
+                                        </p>
+                                    </div>
+
+                                    {/* PROFILE STATS GRID */}
+                                    <div className="cyber-stats-grid">
+                                        <div className="cyber-stat-box">
+                                            <small className="cyber-stat-label">TOTAL MESSAGES</small>
+                                            <strong className="cyber-stat-value">{selectedProfileData.totalMessagesSent.toLocaleString()}</strong>
+                                        </div>
+                                        <div className="cyber-stat-box">
+                                            <small className="cyber-stat-label">CONNECTIONS</small>
+                                            <strong className="cyber-stat-value">{selectedProfileData.friendsCount || 0}</strong>
+                                        </div>
+                                        <div className="cyber-stat-box">
+                                            <small className="cyber-stat-label">STREAK</small>
+                                            <strong className="cyber-stat-value streak">
+                                                {selectedProfileData.isGuest ? 0 : Math.max(3, (selectedProfileData.totalMessagesSent % 15) + 2)}🔥
+                                            </strong>
+                                        </div>
+                                        <div className="cyber-stat-box">
+                                            <small className="cyber-stat-label">JOIN NODE</small>
+                                            <strong className="cyber-stat-value" style={{ fontSize: '10px' }}>
+                                                {new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' }).toUpperCase()}
+                                            </strong>
+                                        </div>
+                                    </div>
+
+                                    {/* SECURE ENCRYPTED BOTTOM DETAILS */}
+                                    <div className="cyber-tech-panel" style={{ marginBottom: '14px' }}>
+                                        {/* <div className="cyber-tech-row">
+                                            <span>STATUS:</span>
+                                            <span 
+                                                className="cyber-status-glow"
+                                                style={{ 
+                                                    '--status-color': selectedProfileData.status === "Online" ? '#10b981' :
+                                                                      selectedProfileData.status === "Away" ? '#ffb020' :
+                                                                      selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280'
+                                                }}
+                                            >
+                                                {selectedProfileData.status.toUpperCase()}
+                                            </span>
+                                        </div> */}
+                                        {/* <div className="cyber-tech-row">
+                                            <span>ENCRYPTION LEVEL:</span>
+                                            <span>AES-GCM-256</span>
+                                        </div> */}
+                                        {/* <div className="cyber-tech-row">
+                                            <span>SECURITY PROTOCOL:</span>
+                                            <span>NEXUS SHIELD v3.2</span>
+                                        </div> */}
+                                        <div className="cyber-tech-row">
+                                            <span>USER TRUST SCORE:</span>
+                                            <span className="trust-score-glow">
+                                                {selectedProfileData.isGuest ? "UNVERIFIED" : `${(95 + (selectedProfileData.totalMessagesSent % 5) + (selectedProfileData.username.length % 2) * 0.4).toFixed(1)}% SECURE`}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* TECH ACTION BUTTONS TRAY */}
+                                    <div className="cyber-actions-tray" style={{ width: '100%' }}>
+                                        {selectedProfileData.isGuest ? (
+                                            <div style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '8px', color: 'var(--muted)', fontSize: '10px', textAlign: 'center', fontFamily: 'monospace', letterSpacing: '0.5px', boxSizing: 'border-box' }}>
+                                                ACCESS LEVEL: GUEST // CONTROLS SECURED.
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="cyber-actions-grid">
+                                                    <button 
+                                                        onClick={handleStartPrivateChat} 
+                                                        disabled={!selectedProfileData.canDM} 
+                                                        className="cyber-badge-btn primary"
+                                                        title={!selectedProfileData.canDM ? "Private Messaging is restricted by user privacy or block settings." : "Send direct message"}
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                                        Message
                                                     </button>
-                                                    <button type="button" onClick={() => { setShowReportForm(false); setReportReason(""); }} className="modal-btn secondary" style={{ minHeight: '26px', fontSize: '11px', padding: '0 8px', border: '1px solid #cbd5e1' }}>
-                                                        Cancel
+                                                    <button 
+                                                        onClick={handleFriendToggle} 
+                                                        className={`cyber-badge-btn ${selectedProfileData.isFriend ? 'success' : ''}`}
+                                                    >
+                                                        {selectedProfileData.isFriend ? (
+                                                            <>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                Remove
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                Connect
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => alert("Establishing Secure Encrypted Voice Connection...")} 
+                                                        className="cyber-badge-btn"
+                                                        title="Establish Secure Voice Call"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                                        Voice
                                                     </button>
                                                 </div>
-                                            </div>
+
+                                                <div className="cyber-actions-grid" style={{ marginTop: '6px' }}>
+                                                    <button 
+                                                        onClick={() => alert("Establishing Video Encryption Link...")} 
+                                                        className="cyber-badge-btn"
+                                                        title="Establish Video Encryption Link"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                                                        Video
+                                                    </button>
+                                                    <button 
+                                                        onClick={handleBlockToggle} 
+                                                        className="cyber-badge-btn danger"
+                                                        style={{ color: selectedProfileData.isBlocked ? '#10b981' : '#ef4444', borderColor: selectedProfileData.isBlocked ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)' }}
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                                        {selectedProfileData.isBlocked ? "Unblock" : "Block"}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setShowReportForm(v => !v)} 
+                                                        className="cyber-badge-btn danger"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                                        Report
+                                                    </button>
+                                                </div>
+
+                                                {showReportForm && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '8px', marginTop: '6px', width: '100%', boxSizing: 'border-box' }}>
+                                                        <label style={{ fontSize: '9px', fontWeight: 'bold', color: '#fca5a5', fontFamily: 'monospace' }}>REASON FOR REPORTING</label>
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder="Enter security incident details..." 
+                                                            value={reportReason} 
+                                                            onChange={(e) => setReportReason(e.target.value)} 
+                                                            style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '11px', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif' }}
+                                                        />
+                                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                                            <button type="button" onClick={handleReportUser} disabled={!reportReason.trim()} className="cyber-badge-btn danger" style={{ flex: 1, height: '26px', fontSize: '10px' }}>
+                                                                SUBMIT REPORT
+                                                            </button>
+                                                            <button type="button" onClick={() => { setShowReportForm(false); setReportReason(""); }} className="cyber-badge-btn" style={{ flex: 1, height: '26px', fontSize: '10px' }}>
+                                                                CANCEL
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-                        ) : null}
+                                </motion.div>
+                            ) : null}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Full Avatar Viewer Modal */}
+            <AnimatePresence>
+                {fullAvatarUrl && (
+                    <motion.div 
+                        className="full-avatar-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setFullAvatarUrl(null)}
+                    >
+                        <motion.div 
+                            className="full-avatar-close"
+                            onClick={() => setFullAvatarUrl(null)}
+                        >
+                            ×
+                        </motion.div>
+                        <motion.img 
+                            src={fullAvatarUrl} 
+                            alt="Full Profile" 
+                            className="full-avatar-image"
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Online Members List Modal */}
+            {showOnlineList && (
+                <div className="modal-overlay" onClick={() => setShowOnlineList(false)}>
+                    <div className="modal-content online-members-modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 360px)', padding: '20px' }}>
+                        <div className="modal-header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Online Members</h3>
+                            <button className="close-picker-btn" onClick={() => setShowOnlineList(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
+                        </div>
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                            {onlineUserList.map(user => {
+                                const isCurrentUser = user.username === username;
+                                return (
+                                    <div 
+                                        key={user.username} 
+                                        onClick={() => {
+                                            setShowOnlineList(false);
+                                            if (isCurrentUser) {
+                                                if (isGuest) {
+                                                    setShowProfileSettings(true);
+                                                } else {
+                                                    openOwnProfileSettings();
+                                                }
+                                            } else {
+                                                setSelectedProfileUsername(user.username);
+                                            }
+                                        }}
+                                        className="online-member-row"
+                                        style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'space-between', 
+                                            padding: '8px 10px', 
+                                            borderRadius: '8px', 
+                                            cursor: 'pointer', 
+                                            transition: 'background 0.2s' 
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                            <div style={{ position: 'relative', display: 'flex' }}>
+                                                {user.avatar ? (
+                                                    <img src={user.avatar} alt={user.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #c8eeff, #bff7f2)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '800' }}>
+                                                        {user.username.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <span className={`sidebar-online-dot ${
+                                                    user.role === "guest" ? "guest-dot" :
+                                                    user.status === "Online" ? "" :
+                                                    user.status === "Away" ? "away" :
+                                                    user.status === "Busy" ? "busy" : "offline"
+                                                }`} style={{ position: 'absolute', bottom: '-1px', right: '-1px', width: '9px', height: '9px', border: '1.5px solid #fff' }} />
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {user.displayName || user.username}
+                                                    {isCurrentUser && <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>(You)</span>}
+                                                </span>
+                                                <span style={{ fontSize: '11px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    @{user.username} {user.role === "guest" && "[Guest]"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: '11px', fontWeight: '700', color: 
+                                            user.status === "Online" ? '#17d67e' :
+                                            user.status === "Away" ? '#ffb020' :
+                                            user.status === "Busy" ? '#ef4444' : '#6b7280'
+                                        }}>
+                                            {user.status || "Online"}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             )}

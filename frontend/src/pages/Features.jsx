@@ -87,7 +87,10 @@ export default function Features() {
 
           <div className="features-count">
             <strong>{FEATURES.length}</strong>
-            <span>Features live</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <i className="features-live-dot" />
+              Features live
+            </span>
           </div>
         </div>
       </section>
@@ -124,7 +127,10 @@ export default function Features() {
                     <Icon aria-hidden="true" />
                     <div className="feature-card-info">
                       <strong>{feature.title}</strong>
-                      <em className={`feature-status ${feature.tone}`}>{feature.status}</em>
+                      <em className={`feature-status ${feature.tone}`}>
+                        {feature.tone === "green" && <i className="status-dot green" />}
+                        {feature.status}
+                      </em>
                     </div>
                   </span>
                 </button>

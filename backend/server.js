@@ -120,6 +120,11 @@ io.on("connection", async (socket) => {
                 displayName = userDoc.displayName || socket.username;
                 avatar = userDoc.avatar || "";
                 status = userDoc.status || "Online";
+                if (status === "Offline") {
+                    status = "Online";
+                    userDoc.status = "Online";
+                    await userDoc.save();
+                }
             }
         } catch (err) {
             console.error("Error fetching connection user details:", err);
@@ -251,7 +256,9 @@ io.on("connection", async (socket) => {
                 username: socket.username,
                 role: socket.role,
                 displayName: socket.displayName || socket.username,
-                avatar: socket.avatar || ""
+                avatar: socket.avatar || "",
+                room: null,
+                privateChatId
             });
         } else {
             const targetRoom = room || "General chat";
@@ -260,7 +267,28 @@ io.on("connection", async (socket) => {
                 username: socket.username,
                 role: socket.role,
                 displayName: socket.displayName || socket.username,
-                avatar: socket.avatar || ""
+                avatar: socket.avatar || "",
+                room: targetRoom,
+                privateChatId: null
+            });
+        }
+    });
+
+    // Stop Typing
+    socket.on("stopTyping", ({ room, privateChatId }) => {
+        if (privateChatId) {
+            if (socket.role === "guest") return;
+            socket.to(`private_${privateChatId}`).emit("stopTyping", {
+                username: socket.username,
+                room: null,
+                privateChatId
+            });
+        } else {
+            const targetRoom = room || "General chat";
+            socket.to(targetRoom).emit("stopTyping", {
+                username: socket.username,
+                room: targetRoom,
+                privateChatId: null
             });
         }
     });

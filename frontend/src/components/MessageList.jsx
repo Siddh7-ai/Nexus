@@ -63,16 +63,19 @@ function ThoughtBubbleIndicator({ typingUser }) {
                 timeoutRef.current = setTimeout(() => {
                     setVisible(false);
                     setIsExiting(false);
+                    timeoutRef.current = null;
                 }, 1000);
             }
         }
+    }, [typingUser, visible, isExiting]);
 
+    useEffect(() => {
         return () => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
             }
         };
-    }, [typingUser, visible, isExiting]);
+    }, []);
 
     if (!visible || !typingUserRef.current) return null;
 
@@ -100,7 +103,7 @@ function ThoughtBubbleIndicator({ typingUser }) {
     );
 }
 
-const REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂"];
+const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👍"];
 
 function SeenStatus({ msg, currentUser, isPrivate }) {
     if (!isPrivate || msg.username !== currentUser || msg.isDeleted) return null;

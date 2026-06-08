@@ -44,6 +44,22 @@ router.get("/profile/:username", authenticateToken, async (req, res) => {
 
         const targetUser = await User.findOne({ username });
         if (!targetUser) {
+            // Check if this is a guest user
+            const isGuestMsg = await Message.findOne({ username, isGuest: true });
+            if (isGuestMsg || username.startsWith("guest_") || (requester && requester.username === username)) {
+                const msgCount = await Message.countDocuments({ username, isGuest: true });
+                return res.json({
+                    username,
+                    displayName: username,
+                    status: "Online",
+                    isGuest: true,
+                    bio: "Guest User",
+                    totalMessagesSent: msgCount,
+                    canDM: false,
+                    avatar: "",
+                    joinDate: isGuestMsg ? isGuestMsg.createdAt : new Date()
+                });
+            }
             return res.status(404).json({ message: "User not found" });
         }
 
@@ -68,6 +84,7 @@ router.get("/profile/:username", authenticateToken, async (req, res) => {
             status: targetUser.status,
             joinDate: targetUser.createdAt,
             totalMessagesSent: msgCount,
+            friendsCount: targetUser.friends ? targetUser.friends.length : 0,
             isSelf
         };
 
