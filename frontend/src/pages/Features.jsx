@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   FiActivity,
@@ -10,12 +10,14 @@ import {
   FiRadio,
   FiSearch,
   FiShield,
+  FiSun,
   FiType,
   FiUser,
   FiVideo
 } from "react-icons/fi";
 import logo from "../assets/logo.png";
 import "./Features.css";
+import { initTheme, toggleTheme } from "../utils/theme";
 
 const FEATURES = [
   { title: "Real-Time Messaging", icon: FiRadio, status: "Live", tone: "green" },
@@ -27,12 +29,21 @@ const FEATURES = [
   { title: "Smart User Profiles", icon: FiUser, status: "Live", tone: "green" },
   { title: "Universal Search", icon: FiSearch, status: "Soon", tone: "blue" },
   { title: "File Sharing", icon: FiFile, status: "Soon", tone: "blue" },
-  { title: "Dark Mode", icon: FiMoon, status: "Soon", tone: "blue" },
+  { title: "Dark Mode", icon: FiMoon, status: "Live", tone: "green" },
   { title: "AI Assistant", icon: FiCpu, status: "Soon", tone: "blue" },
   { title: "Video Calling", icon: FiVideo, status: "Soon", tone: "blue" }
 ];
 
 export default function Features() {
+  const [theme, setTheme] = useState("light");
+
+  useEffect(() => {
+    setTheme(initTheme());
+  }, []);
+
+  function handleThemeToggle() {
+    setTheme(toggleTheme());
+  }
   // Pre-initialize the revealed state to match the screenshot layout:
   // Card 01 (index 0), Card 07 (index 6), and Card 12 (index 11) are not revealed.
   // The rest (1, 2, 3, 4, 5, 7, 8, 9, 10) are revealed.
@@ -69,7 +80,12 @@ export default function Features() {
             <img src={logo} alt="Nexus logo" />
             <span><strong>Nexus</strong> Messenger</span>
           </Link>
-          <Link to="/chat" className="features-nav-link">Open chat</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <button className="theme-toggle-btn" onClick={handleThemeToggle} aria-label="Toggle theme">
+              {theme === 'dark' ? <FiSun /> : <FiMoon />}
+            </button>
+            <Link to="/chat" className="features-nav-link">Open chat</Link>
+          </div>
         </nav>
 
         <div className="features-kicker">

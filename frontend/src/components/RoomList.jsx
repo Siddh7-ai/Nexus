@@ -33,7 +33,7 @@ function Avatar({ username, avatarSrc, size = 28, className = "" }) {
     );
 }
 
-function RoomList({ activeRoom, activePrivate, onSelectRoom, onSelectPrivate, onlineUserList, currentUser, currentUserProfile, isGuest, onProfileClick, onUserProfileClick }) {
+function RoomList({ activeRoom, activePrivate, onSelectRoom, onSelectPrivate, onlineUserList, currentUser, currentUserProfile, isGuest, onProfileClick, onUserProfileClick, unreadCounts }) {
     const otherUsers = onlineUserList.filter(u => u.username !== currentUser);
     const isCurrentUserOnline = onlineUserList.some(u => u.username === currentUser);
 
@@ -87,9 +87,13 @@ function RoomList({ activeRoom, activePrivate, onSelectRoom, onSelectPrivate, on
                         className={`room-item ${activeRoom === room && !activePrivate ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
                         onClick={() => onSelectRoom(room)}
                         title={isLocked ? "Login required" : undefined}
+                        style={{ display: 'flex', alignItems: 'center' }}
                     >
                         <span className="room-icon">{ROOM_ICONS[room]}</span>
-                        <span className="room-name">{room}</span>
+                        <span className="room-name" style={{ flex: 1 }}>{room}</span>
+                        {unreadCounts && unreadCounts[room] > 0 && (
+                            <span className="unread-badge" style={{ marginRight: isLocked ? '8px' : '0' }}>{unreadCounts[room]}</span>
+                        )}
                         {isLocked && <FiLock className="sidebar-lock-icon" />}
                     </button>
                 );
@@ -136,6 +140,8 @@ function RoomList({ activeRoom, activePrivate, onSelectRoom, onSelectPrivate, on
                         </div>
                         {isLocked ? (
                             <FiLock className="sidebar-lock-icon dm-lock" />
+                        ) : unreadCounts && unreadCounts[privateChatId] > 0 ? (
+                            <span className="unread-badge">{unreadCounts[privateChatId]}</span>
                         ) : (
                             <span className="dm-badge">DM</span>
                         )}

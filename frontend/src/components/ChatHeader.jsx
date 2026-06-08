@@ -1,4 +1,6 @@
-function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, isGuest, onClearChatClick }) {
+import { FiSun, FiMoon } from "react-icons/fi";
+
+function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, isGuest, onClearChatClick, theme, onThemeToggle }) {
     const onlineLabel = `${onlineUsers} ${onlineUsers === 1 ? "user" : "users"} online`;
 
     return (
@@ -15,6 +17,9 @@ function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, 
             </div>
 
             <div className="chat-header-right">
+                <button className="theme-toggle-btn" onClick={onThemeToggle} aria-label="Toggle theme" style={{ marginRight: '8px' }}>
+                    {theme === "dark" ? <FiSun /> : <FiMoon />}
+                </button>
                 {isGuest && <span className="guest-badge-header">Guest Mode</span>}
                 {username && <span className="active-room-label">{username}{isGuest && <span className="guest-badge">[Guest]</span>}</span>}
                 <button className="clear-chat-btn" onClick={onClearChatClick} title="Clear conversation for you">

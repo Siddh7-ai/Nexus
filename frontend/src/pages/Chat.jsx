@@ -12,6 +12,7 @@ import MessageInput from "../components/MessageInput";
 import RoomList from "../components/RoomList";
 
 import "../App.css";
+import { initTheme, toggleTheme } from "../utils/theme";
 
 // Lazy-load emoji picker library to optimize bundle load times
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -60,6 +61,22 @@ function Chat() {
         }
         return parseJWT(token || "")?.username || "";
     });
+
+    const usernameRef = useRef(username);
+    useEffect(() => {
+        usernameRef.current = username;
+    }, [username]);
+
+    const [theme, setTheme] = useState("light");
+    const [unreadCounts, setUnreadCounts] = useState({});
+
+    useEffect(() => {
+        setTheme(initTheme());
+    }, []);
+
+    function handleThemeToggle() {
+        setTheme(toggleTheme());
+    }
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
@@ -181,8 +198,32 @@ function Chat() {
             setMessages(oldMessages);
         });
 
+        newSocket.on("unreadCounts", (counts) => {
+            setUnreadCounts(counts || {});
+        });
+
         newSocket.on("reply", (data) => {
-            setMessages((prev) => [...prev, data]);
+            const isMatch = data.privateChatId
+                ? (activePrivateRef.current === data.privateChatId)
+                : (activeRoomRef.current === data.room);
+
+            if (isMatch) {
+                setMessages((prev) => {
+                    if (prev.some(m => m._id === data._id)) return prev;
+                    return [...prev, data];
+                });
+            } else {
+                if (data.username !== usernameRef.current) {
+                    setUnreadCounts((prev) => {
+                        const key = data.privateChatId || data.room;
+                        if (!key) return prev;
+                        return {
+                            ...prev,
+                            [key]: (prev[key] || 0) + 1
+                        };
+                    });
+                }
+            }
         });
 
         newSocket.on("typing", (typingData) => {
@@ -338,6 +379,7 @@ function Chat() {
         setMessages([]);
         setSidebarOpen(false);
         setTypingUser(null);
+        setUnreadCounts(prev => ({ ...prev, [room]: 0 }));
         socketRef.current?.emit("joinRoom", room);
     }
 
@@ -354,6 +396,7 @@ function Chat() {
         setMessages([]);
         setSidebarOpen(false);
         setTypingUser(null);
+        setUnreadCounts(prev => ({ ...prev, [privateChatId]: 0 }));
         socketRef.current?.emit("joinPrivateChat", { otherUsername });
     }
 
@@ -563,10 +606,14 @@ function Chat() {
             const scale = canvasSize / uiSize; // Scale factor (800 / 200 = 4)
             const imgRatio = img.width / img.height;
 
-            // In the UI, the image height matches the viewport height (200px), 
-            // and its width scales with the image aspect ratio (200px * imgRatio).
-            const drawWidth = canvasSize * imgRatio * cropZoom;
-            const drawHeight = canvasSize * cropZoom;
+            let drawWidth, drawHeight;
+            if (imgRatio > 1) {
+                drawWidth = canvasSize * imgRatio * cropZoom;
+                drawHeight = canvasSize * cropZoom;
+            } else {
+                drawWidth = canvasSize * cropZoom;
+                drawHeight = (canvasSize / imgRatio) * cropZoom;
+            }
 
             const x = (canvasSize - drawWidth) / 2 + cropOffset.x * scale;
             const y = (canvasSize - drawHeight) / 2 + cropOffset.y * scale;
@@ -781,6 +828,7 @@ function Chat() {
                         isGuest={isGuest}
                         onProfileClick={isGuest ? () => setShowProfileSettings(true) : openOwnProfileSettings}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                        unreadCounts={unreadCounts}
                     />
                 </div>
 
@@ -795,6 +843,8 @@ function Chat() {
                         onMenuToggle={() => setSidebarOpen(v => !v)}
                         isGuest={isGuest}
                         onClearChatClick={() => setShowClearConfirm(true)}
+                        theme={theme}
+                        onThemeToggle={handleThemeToggle}
                     />
 
                     <OnlineUsers

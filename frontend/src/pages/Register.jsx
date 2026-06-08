@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "../App.css";
 import { getBackendUrl } from "../utils/config";
+import { FiSun, FiMoon } from "react-icons/fi";
+import { initTheme, toggleTheme } from "../utils/theme";
 
 import logo from "../assets/logo.png";
 
@@ -20,9 +22,18 @@ function Register() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState("light");
 
   const navigate = useNavigate();
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+
+  useEffect(() => {
+    setTheme(initTheme());
+  }, []);
+
+  function handleThemeToggle() {
+    setTheme(toggleTheme());
+  }
 
   async function handleRegister() {
     if (!username || !email || !password) {
@@ -60,6 +71,9 @@ function Register() {
 
   return (
     <div className="auth-wrapper">
+      <button className="floating-theme-toggle" onClick={handleThemeToggle} aria-label="Toggle theme">
+        {theme === 'dark' ? <FiSun /> : <FiMoon />}
+      </button>
       <div className="auth-pattern" aria-hidden="true" />
       <div className="auth-stage">
         <div className="auth-container">

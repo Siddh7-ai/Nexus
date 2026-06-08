@@ -4,19 +4,30 @@ import logo from '../assets/logo.png';
 import './Landing.css';
 import { useState, useEffect } from 'react';
 import { HiOutlineChatBubbleLeftRight } from 'react-icons/hi2';
+import { FiSun, FiMoon } from 'react-icons/fi';
 import { getBackendUrl } from '../utils/config';
+import { initTheme, toggleTheme } from '../utils/theme';
 
 export default function Landing() {
   const navigate = useNavigate();
 
   const [typedText, setTypedText] = useState('');
   const [showContent, setShowContent] = useState(false);
+  const [theme, setTheme] = useState('light');
 
   // Guest modal state
   const [showModal, setShowModal] = useState(false);
   const [guestUsername, setGuestUsername] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setTheme(initTheme());
+  }, []);
+
+  function handleThemeToggle() {
+    setTheme(toggleTheme());
+  }
 
   const fullText =
     'Connect instantly with the next-gen\nmessaging platform';
@@ -111,6 +122,9 @@ export default function Landing() {
 
         {/* Right — auth buttons */}
         <div className={`nav-actions ${showContent ? 'show' : ''}`}>
+          <button className="theme-toggle-btn" onClick={handleThemeToggle} aria-label="Toggle theme" style={{ marginRight: '8px' }}>
+            {theme === 'dark' ? <FiSun /> : <FiMoon />}
+          </button>
           <button className="nav-sign-in" onClick={() => navigate('/login')}>
             Sign In
           </button>

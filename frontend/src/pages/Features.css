@@ -476,3 +476,128 @@
   margin-right: 6px;
   animation: status-pulse 2s infinite;
 }
+
+/* ─── Features Dark Theme Overrides ────────────────────────── */
+body.dark-theme .features-page {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(86, 72, 199, 0.2), transparent 26%),
+    radial-gradient(circle at 16% 72%, rgba(20, 184, 166, 0.2), transparent 28%),
+    #0f1013;
+  color: #f3f4f6;
+}
+
+body.dark-theme .features-hero {
+  border-color: #2a2d35;
+  background: rgba(21, 23, 28, 0.86);
+}
+
+body.dark-theme .highlight {
+  background: #f3f4f6;
+  color: #0f1013;
+}
+
+body.dark-theme .features-brand {
+  color: #f3f4f6;
+}
+
+body.dark-theme .features-nav-link {
+  color: #f3f4f6;
+  border-color: #2a2d35;
+}
+
+body.dark-theme .reveal-header {
+  border-bottom-color: #2a2d35;
+}
+
+body.dark-theme .reveal-header h2 span {
+  background: #f3f4f6;
+  color: #0f1013;
+}
+
+body.dark-theme .reveal-progress span {
+  color: #f3f4f6;
+}
+
+body.dark-theme .feature-grid-container {
+  border-color: #2a2d35;
+  background: #15171c;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-theme .feature-flip-card {
+  border-right-color: #2a2d35;
+  border-bottom-color: #2a2d35;
+}
+
+body.dark-theme .feature-card-back {
+  background: #15171c;
+  color: #2a2d35;
+}
+
+body.dark-theme .feature-card-front {
+  background: #15171c;
+  color: #f3f4f6;
+}
+
+body.dark-theme .card-bg-number {
+  color: rgba(255, 255, 255, 0.02);
+}
+
+body.dark-theme .feature-card-front svg {
+  color: #f3f4f6;
+}
+
+body.dark-theme .feature-card-front strong {
+  color: #f3f4f6;
+}
+
+body.dark-theme .feature-status.green {
+  background: #f3f4f6;
+  color: #15171c;
+}
+
+body.dark-theme .feature-status.blue {
+  background: #1f2229;
+  color: #8b9099;
+}
+
+/* Hover styles in dark mode */
+body.dark-theme .feature-flip-card:hover .feature-card-face {
+  background: #f3f4f6;
+  color: #0f1013;
+}
+
+body.dark-theme .feature-flip-card:hover .feature-card-front svg,
+body.dark-theme .feature-flip-card:hover .feature-card-info {
+  opacity: 0;
+}
+
+body.dark-theme .feature-flip-card:hover .card-bg-number {
+  color: rgba(15, 16, 19, 0.3);
+}
+
+body.dark-theme .feature-flip-card:hover .feature-card-back {
+  color: rgba(15, 16, 19, 0.3);
+}
+
+body.dark-theme .feature-flip-card:hover .feature-status.green {
+  background: #15171c;
+  color: #f3f4f6;
+}
+
+body.dark-theme .feature-flip-card:hover .feature-status.blue {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+body.dark-theme .reveal-actions button {
+  border-color: #2a2d35;
+  background: #15171c;
+  color: #f3f4f6;
+}
+
+body.dark-theme .reveal-actions button:hover {
+  border-color: #f3f4f6;
+  background: #f3f4f6;
+  color: #0f1013;
+}

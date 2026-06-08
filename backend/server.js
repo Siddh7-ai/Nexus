@@ -155,8 +155,39 @@ io.on("connection", async (socket) => {
 
     emitPresence();
 
-    // Auto-join General chat room
-    socket.join("General chat");
+    // Auto-join all public rooms for background notifications
+    ROOMS.forEach(r => socket.join(r));
+
+    // Join personal room for private notifications
+    if (socket.username) {
+        socket.join(`user_${socket.username}`);
+    }
+
+    // Calculate and emit initial unread counts
+    (async () => {
+        if (!socket.username) return;
+        try {
+            const unreadCounts = {};
+            const unreadMessages = await Message.find({
+                username: { $ne: socket.username },
+                seenBy: { $ne: socket.username },
+                deletedFor: { $ne: socket.username }
+            });
+
+            for (const msg of unreadMessages) {
+                const chatKey = msg.privateChatId || msg.room;
+                if (!chatKey) continue;
+                const clearedAt = await getChatClearedAt(socket.username, chatKey);
+                if (clearedAt && msg.createdAt <= clearedAt) {
+                    continue;
+                }
+                unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
+            }
+            socket.emit("unreadCounts", unreadCounts);
+        } catch (err) {
+            console.error("Error calculating unread counts on connection:", err);
+        }
+    })();
 
     // Send old messages for General chat room on connect
     const clearedAt = await getChatClearedAt(socket.username, "General chat");
@@ -186,11 +217,24 @@ io.on("connection", async (socket) => {
             return;
         }
 
-        // Leave previous rooms (except private chats)
-        ROOMS.forEach(r => {
-            if (r !== room) socket.leave(r);
-        });
         socket.join(room);
+
+        // Mark room messages as seen on join
+        if (socket.username) {
+            try {
+                await Message.updateMany(
+                    {
+                        room,
+                        privateChatId: null,
+                        username: { $ne: socket.username },
+                        seenBy: { $ne: socket.username }
+                    },
+                    { $push: { seenBy: socket.username } }
+                );
+            } catch (err) {
+                console.error("Error marking room messages as seen:", err);
+            }
+        }
 
         const clearedAt = await getChatClearedAt(socket.username, room);
         const messagesQuery = {
@@ -309,11 +353,26 @@ io.on("connection", async (socket) => {
                 }
             }
 
+            const targetRoomName = data.privateChatId
+                ? `private_${data.privateChatId}`
+                : (data.room || "General chat");
+
+            const activeUsernames = [socket.username];
+            const socketIds = io.sockets.adapter.rooms.get(targetRoomName);
+            if (socketIds) {
+                for (const id of socketIds) {
+                    const s = io.sockets.sockets.get(id);
+                    if (s && s.username && !activeUsernames.includes(s.username)) {
+                        activeUsernames.push(s.username);
+                    }
+                }
+            }
+
             const msgData = {
                 username: socket.username,
                 text: data.text,
                 isGuest: socket.role === "guest",
-                seenBy: [socket.username],
+                seenBy: activeUsernames,
                 avatar: socket.avatar || "",
                 displayName: socket.displayName || socket.username
             };
@@ -330,6 +389,13 @@ io.on("connection", async (socket) => {
 
             if (data.privateChatId) {
                 io.to(`private_${data.privateChatId}`).emit("reply", savedMessage);
+
+                // Also notify the recipient if they are online (so their sidebar gets updated with unread count)
+                const parts = data.privateChatId.split("_");
+                const recipient = parts.find(u => u !== socket.username);
+                if (recipient) {
+                    io.to(`user_${recipient}`).emit("reply", savedMessage);
+                }
             } else {
                 io.to(msgData.room).emit("reply", savedMessage);
             }
