@@ -1,8 +1,6 @@
 import { FiSun, FiMoon } from "react-icons/fi";
 
 function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, isGuest, onClearChatClick, theme, onThemeToggle }) {
-    const onlineLabel = `${onlineUsers} ${onlineUsers === 1 ? "user" : "users"} online`;
-
     return (
         <div className="chat-header">
             <div className="chat-header-left">
@@ -12,7 +10,6 @@ function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, 
 
                 <div>
                     <div className="chat-title">{chatTitle || "# General chat"}</div>
-                    <div className="welcome-text">{onlineLabel}</div>
                 </div>
             </div>
 
