@@ -46,3 +46,32 @@ mongoose.connect("mongodb://127.0.0.1:27017/Chatapp")
     console.log(err);
 });
 
+
+*********************************************************Features*************************************************************************
+
+1. UI/UX design
+2. Smart chat rooms
+3. Typing indicator in bubble form
+4. User active, offline & customizable as Busy or Away
+5. Smart user card
+6. Secure auth
+7. React to message in any emoji
+8. Message delete for me and also delete for every one
+9. Clear chat
+10. Profile privacy setting (Who can see your profile pic/ Private message permission) 
+11. message sent count
+12. List Online members.
+13. Interactive card flip feature UI
+14. old chat save
+15. Guest user can use general chat 
+16. Interactive log in sign up with moving backgroud
+
+
+
+To be implemeted :
+
+1. Dark mode
+2. Image/File sharing 
+3. Custom room 
+4. If message comes than on side of user name show how many message are available to read 
+5. Chat wallpaper

@@ -138,6 +138,7 @@ function Chat() {
     const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
     const [isDraggingCrop, setIsDraggingCrop] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const [cropImgRatio, setCropImgRatio] = useState(1.0);
 
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -527,9 +528,14 @@ function Chat() {
         if (file) {
             const reader = new FileReader();
             reader.onload = (event) => {
-                setCropImageSrc(event.target.result);
-                setCropZoom(1.0);
-                setCropOffset({ x: 0, y: 0 });
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    setCropImgRatio(img.width / img.height);
+                    setCropImageSrc(event.target.result);
+                    setCropZoom(1.0);
+                    setCropOffset({ x: 0, y: 0 });
+                };
             };
             reader.readAsDataURL(file);
         }
@@ -539,7 +545,7 @@ function Chat() {
     function saveCroppedImage() {
         if (!cropImageSrc) return;
         const canvas = document.createElement("canvas");
-        const canvasSize = 800; // Output high-quality resolution (800x800 pixels)
+        const canvasSize = 1600; // Output ultra high-quality resolution (1600x1600 pixels)
         canvas.width = canvasSize;
         canvas.height = canvasSize;
         
@@ -668,7 +674,7 @@ function Chat() {
     function logout() {
         sessionStorage.removeItem("token");
         localStorage.removeItem("token");
-        navigate("/login");
+        navigate("/");
     }
 
     async function handleGuestNameChange(e) {
@@ -902,7 +908,15 @@ function Chat() {
                                 <div className="modal-body-section" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {/* Avatar Upload */}
                                     <div className="profile-settings-avatar-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                        <div className="profile-settings-avatar-wrapper" style={{ position: 'relative' }}>
+                                        <div 
+                                            className="profile-settings-avatar-wrapper" 
+                                            style={{ position: 'relative', cursor: avatarVal ? 'zoom-in' : 'default' }}
+                                            onClick={() => {
+                                                if (avatarVal) {
+                                                    setFullAvatarUrl(avatarVal);
+                                                }
+                                            }}
+                                        >
                                             {avatarVal ? (
                                                 <img src={avatarVal} alt="Avatar Preview" className="profile-settings-avatar-img" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }} />
                                             ) : (
@@ -1182,7 +1196,9 @@ function Chat() {
                                         left: '50%',
                                         top: '50%',
                                         transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropZoom})`,
-                                        maxHeight: '100%',
+                                        width: cropImgRatio > 1 ? 'auto' : '100%',
+                                        height: cropImgRatio > 1 ? '100%' : 'auto',
+                                        maxHeight: 'none',
                                         maxWidth: 'none',
                                         userSelect: 'none',
                                         pointerEvents: 'none'

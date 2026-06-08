@@ -24,7 +24,7 @@ const FEATURES = [
   { title: "Typing Indicators", icon: FiType, status: "Live", tone: "green" },
   { title: "Online Presence", icon: FiActivity, status: "Live", tone: "green" },
   { title: "Secure Auth", icon: FiShield, status: "Live", tone: "green" },
-  { title: "Smart User Profiles", icon: FiUser, status: "Soon", tone: "blue" },
+  { title: "Smart User Profiles", icon: FiUser, status: "Live", tone: "green" },
   { title: "Universal Search", icon: FiSearch, status: "Soon", tone: "blue" },
   { title: "File Sharing", icon: FiFile, status: "Soon", tone: "blue" },
   { title: "Dark Mode", icon: FiMoon, status: "Soon", tone: "blue" },
