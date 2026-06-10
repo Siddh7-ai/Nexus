@@ -219,10 +219,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
 function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick }) {
     if (messages.length === 0) {
         return (
-            <div className="messages empty-messages-placeholder">
-                <div className="empty-chat-illustration">💬</div>
-                <h3>No messages yet</h3>
-                <p>Messages sent after clearing the chat will appear here.</p>
+            <div className="messages">
                 <div ref={messagesEndRef}></div>
             </div>
         );

@@ -129,13 +129,13 @@ function Chat() {
     
     // Calculate woven lanyard tilt angle and vertical stretch dynamically
     const lanyardAngle = useTransform([cardX, cardY], ([cx, cy]) => {
-        const targetY = 160 + cy;
+        const targetY = 90 + cy;
         if (targetY <= 0) return 0;
         // Invert rotation sign so the bottom of the lanyard follows card offset coordinates correctly
         return -Math.atan2(cx, targetY) * (180 / Math.PI);
     });
     const lanyardHeight = useTransform([cardX, cardY], ([cx, cy]) => {
-        const targetY = 160 + cy;
+        const targetY = 90 + cy;
         if (targetY <= 0) return 0;
         return Math.sqrt(cx * cx + targetY * targetY);
     });
@@ -845,6 +845,9 @@ function Chat() {
                         onClearChatClick={() => setShowClearConfirm(true)}
                         theme={theme}
                         onThemeToggle={handleThemeToggle}
+                        isPrivate={!!activePrivate}
+                        privateUser={onlineUserList.find(u => u.username === activePrivateName)}
+                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                     />
 
                     <OnlineUsers
@@ -1415,34 +1418,41 @@ function Chat() {
                                         </svg>
                                     </motion.div>
 
-                                    {/* Laser Engraved Tech Grid */}
-                                    <div className="cyber-card-grid" />
+                                    {/* Top Accent Color Bar */}
+                                    <div className="card-top-bar" />
 
                                     {/* CARD HEADER SECTION */}
-                                    <div className="cyber-card-header" style={{ marginTop: '14px' }}>
+                                    <div className="cyber-card-header">
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <div className="cyber-logo-text">NEXUS</div>
                                             <div 
-                                                style={{ 
-                                                    width: '6px', 
-                                                    height: '6px', 
-                                                    borderRadius: '50%', 
-                                                    backgroundColor: selectedProfileData.status === "Online" ? '#10b981' :
-                                                                     selectedProfileData.status === "Away" ? '#ffb020' :
-                                                                     selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280',
-                                                    boxShadow: selectedProfileData.status === "Online" ? '0 0 8px #10b981' :
-                                                               selectedProfileData.status === "Away" ? '0 0 8px #ffb020' :
-                                                               selectedProfileData.status === "Busy" ? '0 0 8px #ef4444' : 'none'
-                                                }} 
-                                            />
-                                        </div>
-                                        <div className="cyber-barcode">
-                                            <span>NEXUS_ID:{selectedProfileData._id?.substring(selectedProfileData._id.length - 8).toUpperCase()}</span>
+                                                className="live-status-dot-only"
+                                                style={{
+                                                    background: selectedProfileData.status === "Online" ? 'rgba(16, 185, 129, 0.08)' :
+                                                                selectedProfileData.status === "Away" ? 'rgba(255, 176, 32, 0.08)' :
+                                                                selectedProfileData.status === "Busy" ? 'rgba(239, 68, 68, 0.08)' : 'rgba(107, 114, 128, 0.08)',
+                                                    borderColor: selectedProfileData.status === "Online" ? 'rgba(16, 185, 129, 0.3)' :
+                                                                 selectedProfileData.status === "Away" ? 'rgba(255, 176, 32, 0.3)' :
+                                                                 selectedProfileData.status === "Busy" ? 'rgba(239, 68, 68, 0.3)' : 'rgba(107, 114, 128, 0.3)'
+                                                }}
+                                            >
+                                                <span 
+                                                    className="live-pulse-dot" 
+                                                    style={{ 
+                                                        backgroundColor: selectedProfileData.status === "Online" ? '#10b981' :
+                                                                         selectedProfileData.status === "Away" ? '#ffb020' :
+                                                                         selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280',
+                                                        boxShadow: selectedProfileData.status === "Online" ? '0 0 10px #10b981' :
+                                                                   selectedProfileData.status === "Away" ? '0 0 10px #ffb020' :
+                                                                   selectedProfileData.status === "Busy" ? '0 0 10px #ef4444' : 'none'
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
                                         <button className="cyber-close-btn" onClick={() => setSelectedProfileUsername(null)}>×</button>
                                     </div>
 
-                                    {/* AVATAR + ACTIVE GLOW ZONE */}
+                                    {/* AVATAR + ACTIVE ZONE */}
                                     <div className="cyber-avatar-zone">
                                         <div 
                                             className="cyber-avatar-wrapper"
@@ -1460,15 +1470,6 @@ function Chat() {
                                                     {selectedProfileData.username.charAt(0).toUpperCase()}
                                                 </div>
                                             )}
-                                            {/* Neon active presence radar ring */}
-                                            <div 
-                                                className="cyber-radar-ring" 
-                                                style={{ 
-                                                    '--radar-color': selectedProfileData.status === "Online" ? '#10b981' :
-                                                                     selectedProfileData.status === "Away" ? '#ffb020' :
-                                                                     selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280'
-                                                }} 
-                                            />
                                         </div>
                                     </div>
 
@@ -1477,9 +1478,9 @@ function Chat() {
                                         <h2 className="cyber-display-name">
                                             {selectedProfileData.displayName}
                                             {!selectedProfileData.isGuest && (
-                                                <svg className="cyber-verify-badge" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-                                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                                <svg className="cyber-verify-badge" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }}>
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" strokeWidth="2.5"/>
+                                                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
                                                 </svg>
                                             )}
                                         </h2>
@@ -1489,10 +1490,13 @@ function Chat() {
                                         </p>
                                     </div>
 
+                                    {/* DASHED DIVIDER */}
+                                    <div className="card-divider-dashed" />
+
                                     {/* PROFILE STATS GRID */}
                                     <div className="cyber-stats-grid">
                                         <div className="cyber-stat-box">
-                                            <small className="cyber-stat-label">TOTAL MESSAGES</small>
+                                            <small className="cyber-stat-label">TOTAL MSGS</small>
                                             <strong className="cyber-stat-value">{selectedProfileData.totalMessagesSent.toLocaleString()}</strong>
                                         </div>
                                         <div className="cyber-stat-box">
@@ -1501,46 +1505,28 @@ function Chat() {
                                         </div>
                                         <div className="cyber-stat-box">
                                             <small className="cyber-stat-label">STREAK</small>
-                                            <strong className="cyber-stat-value streak">
-                                                {selectedProfileData.isGuest ? 0 : Math.max(3, (selectedProfileData.totalMessagesSent % 15) + 2)}🔥
+                                            <strong className="cyber-stat-value">
+                                                {selectedProfileData.isGuest ? 0 : Math.max(3, (selectedProfileData.totalMessagesSent % 15) + 2)}
                                             </strong>
                                         </div>
                                         <div className="cyber-stat-box">
                                             <small className="cyber-stat-label">JOIN NODE</small>
-                                            <strong className="cyber-stat-value" style={{ fontSize: '10px' }}>
-                                                {new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' }).toUpperCase()}
+                                            <strong className="cyber-stat-value">
+                                                {new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })}
                                             </strong>
                                         </div>
                                     </div>
 
-                                    {/* SECURE ENCRYPTED BOTTOM DETAILS */}
-                                    <div className="cyber-tech-panel" style={{ marginBottom: '14px' }}>
-                                        {/* <div className="cyber-tech-row">
-                                            <span>STATUS:</span>
-                                            <span 
-                                                className="cyber-status-glow"
-                                                style={{ 
-                                                    '--status-color': selectedProfileData.status === "Online" ? '#10b981' :
-                                                                      selectedProfileData.status === "Away" ? '#ffb020' :
-                                                                      selectedProfileData.status === "Busy" ? '#ef4444' : '#6b7280'
-                                                }}
-                                            >
-                                                {selectedProfileData.status.toUpperCase()}
-                                            </span>
-                                        </div> */}
-                                        {/* <div className="cyber-tech-row">
-                                            <span>ENCRYPTION LEVEL:</span>
-                                            <span>AES-GCM-256</span>
-                                        </div> */}
-                                        {/* <div className="cyber-tech-row">
-                                            <span>SECURITY PROTOCOL:</span>
-                                            <span>NEXUS SHIELD v3.2</span>
-                                        </div> */}
-                                        <div className="cyber-tech-row">
-                                            <span>USER TRUST SCORE:</span>
-                                            <span className="trust-score-glow">
-                                                {selectedProfileData.isGuest ? "UNVERIFIED" : `${(95 + (selectedProfileData.totalMessagesSent % 5) + (selectedProfileData.username.length % 2) * 0.4).toFixed(1)}% SECURE`}
-                                            </span>
+                                    {/* TRUST SCORE PANEL BAR */}
+                                    <div className="trust-score-bar">
+                                        <div className="trust-score-left">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                            </svg>
+                                            <span>Trust score</span>
+                                        </div>
+                                        <div className="trust-score-right">
+                                            <span>{(95 + (selectedProfileData.totalMessagesSent % 5) + (selectedProfileData.username.length % 2) * 0.4).toFixed(1)}% secure</span>
                                         </div>
                                     </div>
 
@@ -1552,83 +1538,79 @@ function Chat() {
                                             </div>
                                         ) : (
                                             <>
-                                                <div className="cyber-actions-grid">
+                                                <div className="card-actions-grid">
                                                     <button 
                                                         onClick={handleStartPrivateChat} 
                                                         disabled={!selectedProfileData.canDM} 
-                                                        className="cyber-badge-btn primary"
+                                                        className="action-btn-card solid"
                                                         title={!selectedProfileData.canDM ? "Private Messaging is restricted by user privacy or block settings." : "Send direct message"}
                                                     >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                                         Message
                                                     </button>
                                                     <button 
+                                                        onClick={() => alert("Establishing Secure Encrypted Voice Connection...")} 
+                                                        className="action-btn-card outline"
+                                                        title="Establish Secure Voice Call"
+                                                    >
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                                        Voice
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => alert("Establishing Video Encryption Link...")} 
+                                                        className="action-btn-card outline"
+                                                        title="Establish Video Encryption Link"
+                                                    >
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                                                        Video
+                                                    </button>
+                                                    <button 
                                                         onClick={handleFriendToggle} 
-                                                        className={`cyber-badge-btn ${selectedProfileData.isFriend ? 'success' : ''}`}
+                                                        className="action-btn-card outline"
                                                     >
                                                         {selectedProfileData.isFriend ? (
                                                             <>
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>
                                                                 Remove
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
                                                                 Connect
                                                             </>
                                                         )}
                                                     </button>
                                                     <button 
-                                                        onClick={() => alert("Establishing Secure Encrypted Voice Connection...")} 
-                                                        className="cyber-badge-btn"
-                                                        title="Establish Secure Voice Call"
-                                                    >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                                                        Voice
-                                                    </button>
-                                                </div>
-
-                                                <div className="cyber-actions-grid" style={{ marginTop: '6px' }}>
-                                                    <button 
-                                                        onClick={() => alert("Establishing Video Encryption Link...")} 
-                                                        className="cyber-badge-btn"
-                                                        title="Establish Video Encryption Link"
-                                                    >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                                                        Video
-                                                    </button>
-                                                    <button 
                                                         onClick={handleBlockToggle} 
-                                                        className="cyber-badge-btn danger"
-                                                        style={{ color: selectedProfileData.isBlocked ? '#10b981' : '#ef4444', borderColor: selectedProfileData.isBlocked ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)' }}
+                                                        className="action-btn-card outline"
                                                     >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                                                         {selectedProfileData.isBlocked ? "Unblock" : "Block"}
                                                     </button>
                                                     <button 
                                                         onClick={() => setShowReportForm(v => !v)} 
-                                                        className="cyber-badge-btn danger"
+                                                        className="action-btn-card outline"
                                                     >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                                                         Report
                                                     </button>
                                                 </div>
 
                                                 {showReportForm && (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px', borderRadius: '8px', marginTop: '6px', width: '100%', boxSizing: 'border-box' }}>
-                                                        <label style={{ fontSize: '9px', fontWeight: 'bold', color: '#fca5a5', fontFamily: 'monospace' }}>REASON FOR REPORTING</label>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(18, 199, 189, 0.05)', border: '1px solid rgba(18, 199, 189, 0.2)', padding: '10px', borderRadius: '8px', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
+                                                        <label style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--accent)', fontFamily: 'monospace' }}>REASON FOR REPORTING</label>
                                                         <input 
                                                             type="text" 
                                                             placeholder="Enter security incident details..." 
                                                             value={reportReason} 
                                                             onChange={(e) => setReportReason(e.target.value)} 
-                                                            style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '11px', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif' }}
+                                                            style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid rgba(18, 199, 189, 0.2)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '11px', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif' }}
                                                         />
-                                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                                            <button type="button" onClick={handleReportUser} disabled={!reportReason.trim()} className="cyber-badge-btn danger" style={{ flex: 1, height: '26px', fontSize: '10px' }}>
+                                                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                                                            <button type="button" onClick={handleReportUser} disabled={!reportReason.trim()} className="action-btn-card solid" style={{ flex: 1, height: '28px', fontSize: '10px' }}>
                                                                 SUBMIT REPORT
                                                             </button>
-                                                            <button type="button" onClick={() => { setShowReportForm(false); setReportReason(""); }} className="cyber-badge-btn" style={{ flex: 1, height: '26px', fontSize: '10px' }}>
+                                                            <button type="button" onClick={() => { setShowReportForm(false); setReportReason(""); }} className="action-btn-card outline" style={{ flex: 1, height: '28px', fontSize: '10px' }}>
                                                                 CANCEL
                                                             </button>
                                                         </div>

@@ -1,5 +1,5 @@
 import logo from "../assets/logo.png";
-import { FiLock, FiEdit2 } from "react-icons/fi";
+import { FiLock, FiEdit2, FiMessageSquare } from "react-icons/fi";
 
 const ROOMS = ["General chat", "Project chat", "Study chat"];
 const ROOM_ICONS = {
@@ -8,7 +8,7 @@ const ROOM_ICONS = {
     "Study chat": "📝"
 };
 
-function Avatar({ username, avatarSrc, size = 28, className = "" }) {
+function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = false }) {
     if (avatarSrc) {
         return (
             <img 
@@ -19,135 +19,246 @@ function Avatar({ username, avatarSrc, size = 28, className = "" }) {
             />
         );
     }
-    const colors = ["#bff7f2", "#c8eeff", "#d8f7cf", "#ffe1b8", "#e7dcff"];
+    const colors = darkVariant ? ["#121212"] : ["#bff7f2", "#c8eeff", "#d8f7cf", "#ffe1b8", "#e7dcff"];
     let colorIndex = 0;
-    for (let i = 0; i < username.length; i++) {
-        colorIndex += username.charCodeAt(i);
+    if (!darkVariant) {
+        for (let i = 0; i < username.length; i++) {
+            colorIndex += username.charCodeAt(i);
+        }
     }
     const color = colors[colorIndex % colors.length];
 
     return (
-        <div className={`avatar ${className}`} style={{ backgroundColor: color, width: size, height: size, fontSize: size * 0.45 }}>
+        <div 
+            className={`avatar ${className}`} 
+            style={{ 
+                backgroundColor: color, 
+                color: darkVariant ? "#ffffff" : "#23303d", 
+                width: size, 
+                height: size, 
+                fontSize: size * 0.42,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%'
+            }}
+        >
             {username.charAt(0).toUpperCase()}
         </div>
     );
 }
 
-function RoomList({ activeRoom, activePrivate, onSelectRoom, onSelectPrivate, onlineUserList, currentUser, currentUserProfile, isGuest, onProfileClick, onUserProfileClick, unreadCounts }) {
+function RoomList({ 
+    activeRoom, 
+    activePrivate, 
+    onSelectRoom, 
+    onSelectPrivate, 
+    onlineUserList, 
+    currentUser, 
+    currentUserProfile, 
+    isGuest, 
+    onProfileClick, 
+    onUserProfileClick, 
+    unreadCounts 
+}) {
     const otherUsers = onlineUserList.filter(u => u.username !== currentUser);
-    const isCurrentUserOnline = onlineUserList.some(u => u.username === currentUser);
+    
+    // Determine the active room at the top (default to "General chat" if none or if viewing direct messages)
+    const activeRoomName = activeRoom && !activePrivate ? activeRoom : null;
+    const topRoomName = activeRoomName || "General chat";
+    const isTopRoomActive = !!activeRoomName;
+    const gridRooms = ROOMS.filter(r => r !== topRoomName);
+
+    // Active Members slice for stacks
+    const activeMembers = otherUsers;
+    const visibleMembers = activeMembers.slice(0, 3);
+    const remainingCount = activeMembers.length - visibleMembers.length;
 
     return (
         <div className="room-sidebar">
-            <div className="sidebar-brand">
-                <img src={logo} alt="Nexus logo" className="sidebar-logo" />
-                <div>
-                    <div className="sidebar-title">Nexus</div>
-                    <div className="sidebar-subtitle">Messenger</div>
+            {/* Brand Header */}
+            <div className="brand-header">
+                <div className="brand-left">
+                    <div className="brand-logo-box">
+                        <img src={logo} alt="Nexus logo" className="brand-logo-img" />
+                    </div>
+                    <span className="brand-name">Nexus</span>
                 </div>
+                <span className="rooms-pill">3 rooms</span>
             </div>
 
-            <div
-                className="sidebar-user clickable-guest-profile"
-                onClick={onProfileClick}
-                title="Profile Settings"
-            >
-                <Avatar 
-                    username={currentUser || "U"} 
-                    avatarSrc={currentUserProfile?.avatar} 
-                    size={34} 
-                    className="sidebar-avatar" 
-                />
-                <div className="sidebar-user-copy">
-                    <span>
+            {/* Current User Card */}
+            <div className="user-profile-card" onClick={onProfileClick} title="Profile Settings">
+                <div className="user-card-info">
+                    <Avatar 
+                        username={currentUser || "U"} 
+                        avatarSrc={currentUserProfile?.avatar} 
+                        size={36} 
+                        className="user-card-avatar" 
+                        darkVariant={true}
+                    />
+                    <span className="user-card-name">
                         {currentUserProfile?.displayName || currentUser || "User"}
-                        {isGuest && <span className="guest-badge">[Guest]</span>}
+                        {isGuest && <span className="guest-badge-inline">[Guest]</span>}
                     </span>
-                    <small>
-                        {isGuest 
-                            ? "Guest Mode (Click to edit)" 
-                            : (currentUserProfile?.status || "Online")}
-                    </small>
                 </div>
-                <FiEdit2 className="sidebar-edit-icon" />
-                <span className={`sidebar-online-dot ${
-                    isGuest ? (isCurrentUserOnline ? "guest-dot" : "muted") :
-                    currentUserProfile?.status === "Online" ? "" :
-                    currentUserProfile?.status === "Away" ? "away" :
-                    currentUserProfile?.status === "Busy" ? "busy" : "offline"
-                }`} />
+                <FiEdit2 className="user-card-edit-icon" />
             </div>
 
-            <div className="room-section-label">Rooms</div>
-            {ROOMS.map(room => {
-                const isLocked = isGuest && room !== "General chat";
-                return (
-                    <button
-                        key={room}
-                        className={`room-item ${activeRoom === room && !activePrivate ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
-                        onClick={() => onSelectRoom(room)}
-                        title={isLocked ? "Login required" : undefined}
-                        style={{ display: 'flex', alignItems: 'center' }}
-                    >
-                        <span className="room-icon">{ROOM_ICONS[room]}</span>
-                        <span className="room-name" style={{ flex: 1 }}>{room}</span>
-                        {unreadCounts && unreadCounts[room] > 0 && (
-                            <span className="unread-badge" style={{ marginRight: isLocked ? '8px' : '0' }}>{unreadCounts[room]}</span>
-                        )}
-                        {isLocked && <FiLock className="sidebar-lock-icon" />}
-                    </button>
-                );
-            })}
+            {/* YOUR ROOMS Section */}
+            <div className="sidebar-section-label">Your Rooms</div>
 
-            <div className="room-section-label direct-label">Direct</div>
-
-            {otherUsers.length === 0 && (
-                <div className="room-empty">No users online</div>
-            )}
-
-            {otherUsers.map(user => {
-                const privateChatId = [currentUser, user.username].sort().join("_");
-                const isLocked = isGuest;
-                return (
-                    <div
-                        key={user.username}
-                        className={`room-item room-item-direct ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
-                        onClick={() => onSelectPrivate(privateChatId, user.username)}
-                        title={isLocked ? "Login required" : undefined}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '8px', cursor: 'pointer' }}
-                    >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-                            <div 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUserProfileClick(user.username);
-                                }}
-                                style={{ display: 'flex', position: 'relative', cursor: 'pointer' }}
-                                title="View Profile"
-                            >
-                                <Avatar username={user.username} avatarSrc={user.avatar} size={26} />
-                                <span className={`sidebar-online-dot ${
-                                    user.role === "guest" ? "guest-dot" :
-                                    user.status === "Online" ? "" :
-                                    user.status === "Away" ? "away" :
-                                    user.status === "Busy" ? "busy" : "offline"
-                                }`} style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '8px', height: '8px', border: '1px solid var(--sidebar)' }} />
+            {/* Top Active/Primary Room Card */}
+            <div 
+                className={`active-room-card ${isTopRoomActive ? "active" : "inactive"}`}
+                onClick={() => onSelectRoom(topRoomName)}
+            >
+                <div className="active-room-header">
+                    <div className="active-room-icon-box">
+                        <FiMessageSquare className="active-room-icon" />
+                    </div>
+                    <span className="active-room-title">{topRoomName}</span>
+                </div>
+                <div className="active-room-status">
+                    Active now · {onlineUserList.length} {onlineUserList.length === 1 ? "member" : "members"} online
+                </div>
+                {activeMembers.length > 0 && (
+                    <div className="avatar-stack">
+                        {visibleMembers.map((member, idx) => (
+                            <Avatar 
+                                key={member.username} 
+                                username={member.username} 
+                                avatarSrc={member.avatar} 
+                                size={22} 
+                                className="stack-avatar" 
+                                style={{ zIndex: 10 - idx }} 
+                            />
+                        ))}
+                        {remainingCount > 0 && (
+                            <div className="stack-avatar stack-remaining" style={{ zIndex: 1 }}>
+                                +{remainingCount}
                             </div>
-                            <span className="room-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {user.displayName || user.username}
-                                {user.role === "guest" && <span className="guest-badge">[Guest]</span>}
-                            </span>
-                        </div>
-                        {isLocked ? (
-                            <FiLock className="sidebar-lock-icon dm-lock" />
-                        ) : unreadCounts && unreadCounts[privateChatId] > 0 ? (
-                            <span className="unread-badge">{unreadCounts[privateChatId]}</span>
-                        ) : (
-                            <span className="dm-badge">DM</span>
                         )}
                     </div>
-                );
-            })}
+                )}
+            </div>
+
+            {/* Inactive Rooms Grid */}
+            <div className="grid-rooms-container">
+                {gridRooms.map(room => {
+                    const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
+                    const isLocked = isGuest && room !== "General chat";
+                    
+                    const roomOnline = otherUsers;
+                    const visibleRoomOnline = roomOnline.slice(0, 2);
+                    const remainingRoomOnline = roomOnline.length - visibleRoomOnline.length;
+
+                    return (
+                        <div 
+                            key={room} 
+                            className={`room-grid-card ${isLocked ? "locked-room" : ""}`}
+                            onClick={() => !isLocked && onSelectRoom(room)}
+                            title={isLocked ? "Login required" : undefined}
+                        >
+                            <div className="grid-card-top">
+                                <div className="grid-card-icon-box">
+                                    <span className="grid-card-emoji-icon">{ROOM_ICONS[room]}</span>
+                                </div>
+                                {isLocked ? (
+                                    <FiLock className="grid-lock-icon" />
+                                ) : unread > 0 ? (
+                                    <span className="grid-unread-badge">{unread}</span>
+                                ) : null}
+                            </div>
+                            <span className="grid-card-title">{room.replace(" chat", "")}</span>
+                            <span className="grid-card-unread-text">
+                                {unread > 0 ? `${unread} unread msg` : "No unread msg"}
+                            </span>
+                            {roomOnline.length > 0 && (
+                                <div className="avatar-stack">
+                                    {visibleRoomOnline.map((member, idx) => (
+                                        <Avatar 
+                                            key={member.username} 
+                                            username={member.username} 
+                                            avatarSrc={member.avatar} 
+                                            size={18} 
+                                            className="stack-avatar" 
+                                            style={{ zIndex: 10 - idx }} 
+                                        />
+                                    ))}
+                                    {remainingRoomOnline > 0 && (
+                                        <div className="stack-avatar stack-remaining" style={{ zIndex: 1, width: 18, height: 18, fontSize: 8 }}>
+                                            +{remainingRoomOnline}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* DIRECT Section */}
+            <div className="sidebar-section-label direct-label">Direct</div>
+
+            <div className="dm-list-container">
+                {otherUsers.length === 0 ? (
+                    <div className="room-empty">No users online</div>
+                ) : (
+                    otherUsers.map(user => {
+                        const privateChatId = [currentUser, user.username].sort().join("_");
+                        const isLocked = isGuest;
+                        const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
+                        
+                        return (
+                            <div 
+                                key={user.username}
+                                className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
+                                title={isLocked ? "Login required" : undefined}
+                            >
+                                <div className="dm-row-left">
+                                    <div 
+                                        className="dm-avatar-wrapper"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onUserProfileClick(user.username);
+                                        }}
+                                        title="View Profile"
+                                    >
+                                        <Avatar 
+                                            username={user.username} 
+                                            avatarSrc={user.avatar} 
+                                            size={32} 
+                                            className="dm-row-avatar" 
+                                        />
+                                        <span className={`dm-status-dot ${
+                                            user.role === "guest" ? "guest-dot" :
+                                            user.status === "Online" ? "" :
+                                            user.status === "Away" ? "away" :
+                                            user.status === "Busy" ? "busy" : "offline"
+                                        }`} />
+                                    </div>
+                                    <span className="dm-row-name">
+                                        {user.displayName || user.username}
+                                        {user.role === "guest" && <span className="guest-badge-pill">GUEST</span>}
+                                    </span>
+                                </div>
+                                <div className="dm-row-right">
+                                    {isLocked ? (
+                                        <FiLock className="dm-lock-icon" />
+                                    ) : unread > 0 ? (
+                                        <span className="dm-unread-badge">{unread}</span>
+                                    ) : (
+                                        <span className="dm-pill">DM</span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
         </div>
     );
 }
