@@ -12,7 +12,7 @@ const messageSchema = new mongoose.Schema({
     },
     text: {
         type: String,
-        required: true
+        default: ""
     },
     room: {
         type: String,
@@ -55,6 +55,27 @@ const messageSchema = new mongoose.Schema({
     deletedFor: {
         type: [String],
         default: []
+    },
+    // Attachment details
+    fileUrl: {
+        type: String,
+        default: null
+    },
+    fileName: {
+        type: String,
+        default: null
+    },
+    fileSize: {
+        type: Number,
+        default: null
+    },
+    fileType: {
+        type: String,
+        default: null
+    },
+    fileQuality: {
+        type: String, // "HD" or "Normal"
+        default: null
     },
     createdAt: {
         type: Date,

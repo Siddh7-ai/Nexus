@@ -14,11 +14,55 @@ const { canAccessRoom } = require("./permissions");
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
 const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Multer Storage Configuration
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname);
+        cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+});
 
 app.use(express.json({ limit: "10mb" }));
 app.use(cors());
+app.use("/uploads", express.static(uploadsDir));
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
+
+// Upload endpoint
+app.post("/api/upload", upload.single("file"), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+        const fileUrl = `/uploads/${req.file.filename}`;
+        res.json({
+            fileUrl,
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            fileType: req.file.mimetype
+        });
+    } catch (err) {
+        console.error("Upload error:", err);
+        res.status(500).json({ error: "Failed to upload file" });
+    }
+});
 
 // Serve frontend built assets
 app.use(express.static(path.join(__dirname, "../frontend/dist")));
@@ -64,7 +108,7 @@ const connectedUsers = new Map();
 function getUniqueOnlineUsers() {
     return Array.from(connectedUsers.values())
         .filter(u => u.username)
-        .filter((u, i, arr) => arr.findIndex(x => x.username === u.username) === i);
+        .filter((u, i, arr) => arr.findIndex(x => x.username?.toLowerCase() === u.username?.toLowerCase()) === i);
 }
 
 function emitPresence() {
@@ -160,7 +204,7 @@ io.on("connection", async (socket) => {
 
     // Join personal room for private notifications
     if (socket.username) {
-        socket.join(`user_${socket.username}`);
+        socket.join(`user_${socket.username.toLowerCase()}`);
     }
 
     // Calculate and emit initial unread counts
@@ -189,26 +233,7 @@ io.on("connection", async (socket) => {
         }
     })();
 
-    // Send old messages for General chat room on connect
-    const clearedAt = await getChatClearedAt(socket.username, "General chat");
-    const messagesQuery = {
-        room: "General chat",
-        privateChatId: null,
-        deletedFor: { $ne: socket.username }
-    };
-    if (clearedAt) {
-        messagesQuery.createdAt = { $gt: clearedAt };
-    }
-    const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
-    socket.emit("oldMessages", messages);
 
-    if (socket.username) {
-        io.to("General chat").emit("reply", {
-            username: "System",
-            text: `${socket.username} joined the chat`,
-            room: "General chat"
-        });
-    }
 
     // Join a chat room
     socket.on("joinRoom", async (room) => {
@@ -246,7 +271,7 @@ io.on("connection", async (socket) => {
             messagesQuery.createdAt = { $gt: clearedAt };
         }
         const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
-        socket.emit("oldMessages", messages);
+        socket.emit("oldMessages", { room, messages });
 
         io.to(room).emit("reply", {
             username: "System",
@@ -262,7 +287,7 @@ io.on("connection", async (socket) => {
             return;
         }
 
-        const users = [socket.username, otherUsername].sort();
+        const users = [socket.username.toLowerCase(), otherUsername.toLowerCase()].sort();
         const privateChatId = users.join("_");
 
         socket.join(`private_${privateChatId}`);
@@ -276,7 +301,7 @@ io.on("connection", async (socket) => {
             messagesQuery.createdAt = { $gt: clearedAt };
         }
         const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
-        socket.emit("oldMessages", messages);
+        socket.emit("oldMessages", { privateChatId, messages });
 
         // Mark messages as seen
         await Message.updateMany(
@@ -374,7 +399,12 @@ io.on("connection", async (socket) => {
                 isGuest: socket.role === "guest",
                 seenBy: activeUsernames,
                 avatar: socket.avatar || "",
-                displayName: socket.displayName || socket.username
+                displayName: socket.displayName || socket.username,
+                fileUrl: data.fileUrl || null,
+                fileName: data.fileName || null,
+                fileSize: data.fileSize || null,
+                fileType: data.fileType || null,
+                fileQuality: data.fileQuality || null
             };
 
             if (data.privateChatId) {
@@ -392,9 +422,9 @@ io.on("connection", async (socket) => {
 
                 // Also notify the recipient if they are online (so their sidebar gets updated with unread count)
                 const parts = data.privateChatId.split("_");
-                const recipient = parts.find(u => u !== socket.username);
+                const recipient = parts.find(u => u !== socket.username.toLowerCase());
                 if (recipient) {
-                    io.to(`user_${recipient}`).emit("reply", savedMessage);
+                    io.to(`user_${recipient.toLowerCase()}`).emit("reply", savedMessage);
                 }
             } else {
                 io.to(msgData.room).emit("reply", savedMessage);
@@ -430,7 +460,7 @@ io.on("connection", async (socket) => {
 
             // Toggle: remove if same emoji from same user, else add/replace
             const existingIdx = msg.reactions.findIndex(
-                r => r.username === socket.username
+                r => r.username?.toLowerCase() === socket.username?.toLowerCase()
             );
 
             if (existingIdx !== -1) {
@@ -491,7 +521,7 @@ io.on("connection", async (socket) => {
                 return;
             }
 
-            if (deleteFor === "everyone" && msg.username === socket.username) {
+            if (deleteFor === "everyone" && msg.username?.toLowerCase() === socket.username?.toLowerCase()) {
                 msg.isDeleted = true;
                 msg.text = "This message was deleted";
                 await msg.save();
@@ -501,7 +531,9 @@ io.on("connection", async (socket) => {
                 io.to(room).emit("messageUpdated", msg);
             } else {
                 // Delete for me only
-                if (!msg.deletedFor.includes(socket.username)) {
+                const lowercaseUsername = socket.username?.toLowerCase();
+                const isAlreadyDeleted = msg.deletedFor.some(u => u?.toLowerCase() === lowercaseUsername);
+                if (!isAlreadyDeleted) {
                     msg.deletedFor.push(socket.username);
                     await msg.save();
                 }
@@ -524,7 +556,12 @@ io.on("connection", async (socket) => {
                 { upsert: true, new: true }
             );
 
-            socket.emit("oldMessages", []);
+            const isPrivate = chatId.includes("_");
+            if (isPrivate) {
+                socket.emit("oldMessages", { privateChatId: chatId, messages: [] });
+            } else {
+                socket.emit("oldMessages", { room: chatId, messages: [] });
+            }
         } catch (err) {
             console.log("Error clearing chat:", err);
             socket.emit("error", { message: "Failed to clear chat." });
@@ -536,7 +573,13 @@ io.on("connection", async (socket) => {
         try {
             if (!socket.username || !newUsername) return;
 
+            const oldUsername = socket.username;
             socket.username = newUsername;
+
+            if (oldUsername) {
+                socket.leave(`user_${oldUsername.toLowerCase()}`);
+            }
+            socket.join(`user_${newUsername.toLowerCase()}`);
 
             // Update connectedUsers entry
             connectedUsers.set(socket.id, {

@@ -62,7 +62,7 @@ function RoomList({
     onUserProfileClick, 
     unreadCounts 
 }) {
-    const otherUsers = onlineUserList.filter(u => u.username !== currentUser);
+    const otherUsers = onlineUserList.filter(u => u.username?.toLowerCase() !== currentUser?.toLowerCase());
     
     // Determine the active room at the top (default to "General chat" if none or if viewing direct messages)
     const activeRoomName = activeRoom && !activePrivate ? activeRoom : null;
@@ -207,7 +207,7 @@ function RoomList({
                     <div className="room-empty">No users online</div>
                 ) : (
                     otherUsers.map(user => {
-                        const privateChatId = [currentUser, user.username].sort().join("_");
+                        const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
                         const isLocked = isGuest;
                         const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
                         

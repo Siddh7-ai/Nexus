@@ -162,6 +162,7 @@ function Chat() {
     const typingTimeoutRef = useRef(null);
     const activeRoomRef = useRef(activeRoom);
     const activePrivateRef = useRef(activePrivate);
+    const activePrivateNameRef = useRef(activePrivateName);
 
     useEffect(() => {
         activeRoomRef.current = activeRoom;
@@ -172,6 +173,10 @@ function Chat() {
     }, [activePrivate]);
 
     useEffect(() => {
+        activePrivateNameRef.current = activePrivateName;
+    }, [activePrivateName]);
+
+    useEffect(() => {
         const token = getAuthToken();
         if (!token) {
             navigate("/login");
@@ -180,6 +185,15 @@ function Chat() {
 
         const newSocket = io(getBackendUrl(), { auth: { token } });
         socketRef.current = newSocket;
+
+        newSocket.on("connect", () => {
+            console.log("Socket connected/reconnected. Re-joining active chat room...");
+            if (activePrivateRef.current) {
+                newSocket.emit("joinPrivateChat", { otherUsername: activePrivateNameRef.current });
+            } else if (activeRoomRef.current) {
+                newSocket.emit("joinRoom", activeRoomRef.current);
+            }
+        });
 
         newSocket.on("connect_error", () => {
             sessionStorage.removeItem("token");
@@ -194,8 +208,22 @@ function Chat() {
             }
         });
 
-        newSocket.on("oldMessages", (oldMessages) => {
-            setMessages(oldMessages);
+        newSocket.on("oldMessages", (data) => {
+            const msgs = Array.isArray(data) ? data : (data.messages || []);
+            const room = data.room;
+            const privateChatId = data.privateChatId;
+
+            if (privateChatId) {
+                if (activePrivateRef.current?.toLowerCase() === privateChatId?.toLowerCase()) {
+                    setMessages(msgs);
+                }
+            } else if (room) {
+                if (activeRoomRef.current === room) {
+                    setMessages(msgs);
+                }
+            } else {
+                setMessages(msgs);
+            }
         });
 
         newSocket.on("unreadCounts", (counts) => {
@@ -204,7 +232,7 @@ function Chat() {
 
         newSocket.on("reply", (data) => {
             const isMatch = data.privateChatId
-                ? (activePrivateRef.current === data.privateChatId)
+                ? (activePrivateRef.current?.toLowerCase() === data.privateChatId?.toLowerCase())
                 : (activeRoomRef.current === data.room);
 
             if (isMatch) {
@@ -213,9 +241,9 @@ function Chat() {
                     return [...prev, data];
                 });
             } else {
-                if (data.username !== usernameRef.current) {
+                if (data.username?.toLowerCase() !== usernameRef.current?.toLowerCase()) {
                     setUnreadCounts((prev) => {
-                        const key = data.privateChatId || data.room;
+                        const key = data.privateChatId?.toLowerCase() || data.room;
                         if (!key) return prev;
                         return {
                             ...prev,
@@ -229,7 +257,7 @@ function Chat() {
         newSocket.on("typing", (typingData) => {
             if (!typingData || !typingData.username) return;
             const isMatch = typingData.privateChatId
-                ? (activePrivateRef.current === typingData.privateChatId)
+                ? (activePrivateRef.current?.toLowerCase() === typingData.privateChatId?.toLowerCase())
                 : (activeRoomRef.current === typingData.room);
             if (!isMatch) return;
 
@@ -239,16 +267,16 @@ function Chat() {
             }
             typingTimeoutRef.current = setTimeout(() => {
                 setTypingUser(null);
-            }, 1500);
+            }, 3000);
         });
 
         newSocket.on("stopTyping", (data) => {
             if (data && data.username) {
                 const isMatch = data.privateChatId
-                    ? (activePrivateRef.current === data.privateChatId)
+                    ? (activePrivateRef.current?.toLowerCase() === data.privateChatId?.toLowerCase())
                     : (activeRoomRef.current === data.room);
                 if (isMatch) {
-                    setTypingUser(prev => (prev && prev.username === data.username) ? null : prev);
+                    setTypingUser(prev => (prev && prev.username?.toLowerCase() === data.username?.toLowerCase()) ? null : prev);
                 }
             }
         });
@@ -279,26 +307,24 @@ function Chat() {
             if (roomUrl !== "General chat" || privateUrl) {
                 setShowLoginModal(true);
                 setSearchParams({ room: "General chat" });
-                newSocket.emit("joinRoom", "General chat");
                 setActiveRoom("General chat");
                 setActivePrivate(null);
             } else {
-                newSocket.emit("joinRoom", "General chat");
+                setActiveRoom("General chat");
+                setActivePrivate(null);
             }
         } else {
             // Normal user session restoration
             if (privateUrl) {
                 const currentU = parseJWT(token)?.username || "";
                 if (currentU) {
-                    const pChatId = [currentU, privateUrl].sort().join("_");
+                    const pChatId = [currentU.toLowerCase(), privateUrl.toLowerCase()].sort().join("_");
                     setActiveRoom(null);
                     setActivePrivate(pChatId);
                     setActivePrivateName(privateUrl);
-                    newSocket.emit("joinPrivateChat", { otherUsername: privateUrl });
                 }
             } else {
                 setSearchParams({ room: roomUrl });
-                newSocket.emit("joinRoom", roomUrl);
                 setActiveRoom(roomUrl);
                 setActivePrivate(null);
             }
@@ -363,9 +389,7 @@ function Chat() {
         }
     }, [searchParams, isGuest, setSearchParams]);
 
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, typingUser]);
+
 
     function selectRoom(room) {
         if (isGuest && room !== "General chat") {
@@ -400,10 +424,20 @@ function Chat() {
         socketRef.current?.emit("joinPrivateChat", { otherUsername });
     }
 
-    function sendMessage() {
-        if (!username || !message.trim() || !socketRef.current) return;
+    function sendMessage(attachment = null) {
+        if (!username || !socketRef.current) return;
 
-        const msgData = { text: message };
+        // Guard against event objects passed via event listeners (e.g. onClick)
+        const isEvent = attachment && (
+            attachment.nativeEvent || 
+            attachment instanceof Event || 
+            (typeof attachment === "object" && "target" in attachment && "preventDefault" in attachment)
+        );
+        const realAttachment = isEvent ? null : attachment;
+
+        if (!realAttachment && !message.trim()) return;
+
+        const msgData = realAttachment ? { ...realAttachment } : { text: message };
         if (activePrivate) {
             msgData.privateChatId = activePrivate;
         } else {
@@ -411,7 +445,9 @@ function Chat() {
         }
 
         socketRef.current.emit("message", msgData);
-        setMessage("");
+        if (!realAttachment) {
+            setMessage("");
+        }
         socketRef.current.emit("stopTyping", {
             room: activeRoom,
             privateChatId: activePrivate
@@ -713,7 +749,7 @@ function Chat() {
         const token = getAuthToken();
         const currentU = isGuest ? "" : (parseJWT(token)?.username || "");
         if (!currentU) return;
-        const pChatId = [currentU, targetUser].sort().join("_");
+        const pChatId = [currentU.toLowerCase(), targetUser.toLowerCase()].sort().join("_");
         selectPrivate(pChatId, targetUser);
         setSelectedProfileUsername(null);
     }
@@ -721,7 +757,11 @@ function Chat() {
     function logout() {
         sessionStorage.removeItem("token");
         localStorage.removeItem("token");
-        navigate("/");
+        if (isGuest) {
+            navigate("/login");
+        } else {
+            navigate("/");
+        }
     }
 
     async function handleGuestNameChange(e) {
@@ -846,7 +886,7 @@ function Chat() {
                         theme={theme}
                         onThemeToggle={handleThemeToggle}
                         isPrivate={!!activePrivate}
-                        privateUser={onlineUserList.find(u => u.username === activePrivateName)}
+                        privateUser={onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                     />
 
@@ -1666,7 +1706,7 @@ function Chat() {
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
                             {onlineUserList.map(user => {
-                                const isCurrentUser = user.username === username;
+                                const isCurrentUser = user.username?.toLowerCase() === username?.toLowerCase();
                                 return (
                                     <div 
                                         key={user.username} 
