@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 
 
@@ -176,15 +176,13 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                     ☺
                 </button>
 
-                {isOwn && (
-                    <button
-                        className="action-btn"
-                        title="More"
-                        onClick={() => { setShowMenu(v => !v); setShowReactions(false); }}
-                    >
-                        ...
-                    </button>
-                )}
+                <button
+                    className="action-btn"
+                    title="More"
+                    onClick={() => { setShowMenu(v => !v); setShowReactions(false); }}
+                >
+                    ...
+                </button>
             </div>
 
             {showReactions && (
@@ -213,17 +211,25 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                 </div>
             )}
 
-            {showMenu && isOwn && (
+            {showMenu && (
                 <div className="message-menu">
-                    <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
-                        Edit
-                    </button>
-                    <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
-                        Delete for me
-                    </button>
-                    <button className="menu-item danger" onClick={() => { onDelete("everyone"); setShowMenu(false); }}>
-                        Delete for everyone
-                    </button>
+                    {isOwn ? (
+                        <>
+                            <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
+                                Edit
+                            </button>
+                            <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
+                                Delete for me
+                            </button>
+                            <button className="menu-item danger" onClick={() => { onDelete("everyone"); setShowMenu(false); }}>
+                                Delete for everyone
+                            </button>
+                        </>
+                    ) : (
+                        <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
+                            Delete for me
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -232,7 +238,22 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
 
 function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
+    const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const scrollContainerRef = useRef(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === "Escape") {
+                setActiveLightbox(null);
+            }
+        };
+        if (activeLightbox) {
+            window.addEventListener("keydown", handleKeyDown);
+        }
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [activeLightbox]);
 
     const handleScroll = () => {
         const container = scrollContainerRef.current;
@@ -350,7 +371,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                                         src={`${getBackendUrl()}${msg.fileUrl}`} 
                                                         alt={msg.fileName || "Image"} 
                                                         className="attachment-img"
-                                                        onClick={() => window.open(`${getBackendUrl()}${msg.fileUrl}`, "_blank")}
+                                                        onClick={() => setActiveLightbox({ url: `${getBackendUrl()}${msg.fileUrl}`, name: msg.fileName })}
                                                     />
                                                     {msg.fileQuality === "HD" && (
                                                         <div className="hd-badge-corner" title="High Definition Quality">
@@ -453,6 +474,46 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                 >
                     <ArrowDown size={20} />
                 </button>
+            )}
+
+            {activeLightbox && (
+                <div 
+                    className="lightbox-overlay" 
+                    onClick={() => setActiveLightbox(null)}
+                >
+                    <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
+                        <div className="lightbox-header">
+                            <span className="lightbox-filename" title={activeLightbox.name}>
+                                {activeLightbox.name}
+                            </span>
+                            <div className="lightbox-actions">
+                                <a 
+                                    href={`${activeLightbox.url}?download=true`} 
+                                    download={activeLightbox.name}
+                                    className="lightbox-action-btn download-btn"
+                                    title="Download Image"
+                                >
+                                    <Download size={20} />
+                                    <span>Download</span>
+                                </a>
+                                <button 
+                                    onClick={() => setActiveLightbox(null)} 
+                                    className="lightbox-action-btn close-btn"
+                                    title="Close"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="lightbox-content">
+                            <img 
+                                src={activeLightbox.url} 
+                                alt={activeLightbox.name} 
+                                className="lightbox-image" 
+                            />
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

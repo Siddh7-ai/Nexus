@@ -177,6 +177,15 @@ function Chat() {
     }, [activePrivateName]);
 
     useEffect(() => {
+        if (!socketRef.current) return;
+        if (activePrivate) {
+            socketRef.current.emit("joinPrivateChat", { otherUsername: activePrivateName });
+        } else if (activeRoom) {
+            socketRef.current.emit("joinRoom", activeRoom);
+        }
+    }, [activeRoom, activePrivate, activePrivateName]);
+
+    useEffect(() => {
         const token = getAuthToken();
         if (!token) {
             navigate("/login");
@@ -188,10 +197,20 @@ function Chat() {
 
         newSocket.on("connect", () => {
             console.log("Socket connected/reconnected. Re-joining active chat room...");
-            if (activePrivateRef.current) {
+            const currentParams = new URLSearchParams(window.location.search);
+            const privateUrl = currentParams.get("private");
+            const roomUrl = currentParams.get("room");
+
+            if (privateUrl) {
+                newSocket.emit("joinPrivateChat", { otherUsername: privateUrl });
+            } else if (roomUrl) {
+                newSocket.emit("joinRoom", roomUrl);
+            } else if (activePrivateRef.current && activePrivateNameRef.current) {
                 newSocket.emit("joinPrivateChat", { otherUsername: activePrivateNameRef.current });
             } else if (activeRoomRef.current) {
                 newSocket.emit("joinRoom", activeRoomRef.current);
+            } else {
+                newSocket.emit("joinRoom", "General chat");
             }
         });
 
@@ -997,8 +1016,8 @@ function Chat() {
                             <button className="close-picker-btn" onClick={() => setShowProfileSettings(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', float: 'right' }}>×</button>
                         </div>
                         {ownProfileData ? (
-                            <form onSubmit={handleOwnProfileUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', maxHeight: '70vh', paddingRight: '4px' }}>
-                                <div className="modal-body-section" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            <form onSubmit={handleOwnProfileUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '70vh' }}>
+                                <div className="modal-body-section" style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', paddingRight: '6px' }}>
                                     {/* Avatar Upload */}
                                     <div className="profile-settings-avatar-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                                         <div 
@@ -1076,7 +1095,7 @@ function Chat() {
                                     </div>
 
                                     {/* Privacy Dropdowns */}
-                                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                    <div className="profile-privacy-card">
                                         <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Privacy Settings</h4>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1108,12 +1127,12 @@ function Chat() {
 
                                     {/* Blocked Users Management */}
                                     {ownProfileData.blockedUsers && ownProfileData.blockedUsers.length > 0 && (
-                                        <div style={{ background: '#fef2f2', padding: '12px', borderRadius: '10px', border: '1px solid #fecaca' }}>
-                                            <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: '800', color: '#b91c1c' }}>Blocked Users</h4>
+                                        <div className="profile-blocked-card">
+                                            <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: '800' }}>Blocked Users</h4>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '100px', overflowY: 'auto' }}>
                                                 {ownProfileData.blockedUsers.map(uname => (
                                                     <div key={uname} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '12px', color: '#1e293b' }}>@{uname}</span>
+                                                        <span className="blocked-user-name">@{uname}</span>
                                                         <button
                                                             type="button"
                                                             onClick={async () => {
@@ -1140,14 +1159,14 @@ function Chat() {
                                     )}
 
                                     {/* Account Stats */}
-                                    <div className="profile-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '10px', borderRadius: '10px' }}>
+                                    <div className="profile-stats-card">
                                         <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Messages Sent</div>
-                                            <div style={{ fontSize: '16px', fontWeight: '800' }}>{ownProfileData.totalMessagesSent.toLocaleString()}</div>
+                                            <div className="stat-label">Messages Sent</div>
+                                            <div className="stat-value" style={{ fontSize: '16px', fontWeight: '800' }}>{ownProfileData.totalMessagesSent.toLocaleString()}</div>
                                         </div>
                                         <div style={{ textAlign: 'center' }}>
-                                            <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Member Since</div>
-                                            <div style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px' }}>
+                                            <div className="stat-label">Member Since</div>
+                                            <div className="stat-value" style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px' }}>
                                                 {new Date(ownProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })}
                                             </div>
                                         </div>
