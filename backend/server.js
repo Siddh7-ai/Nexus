@@ -10,7 +10,7 @@ const User = require("./models/User");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const { canAccessRoom } = require("./permissions");
-    const app = express();
+const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
 const path = require("path");
 const fs = require("fs");
@@ -198,9 +198,74 @@ app.get("/api/users", async (req, res) => {
         }
 
         jwt.verify(token, JWT_SECRET);
-        const users = await User.find({}, { username: 1, _id: 1 });
+        const users = await User.find({}, { username: 1, displayName: 1, avatar: 1, status: 1, _id: 1 });
         res.json(users);
     } catch (err) {
+        res.status(401).json({ message: "Unauthorized" });
+    }
+});
+
+// REST: get users that have active conversation history with current user, sorted by latest activity
+app.get("/api/users/conversations", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ message: "No token" });
+        const token = authHeader.split(" ")[1];
+        
+        if (token.startsWith("guest:")) {
+            return res.status(403).json({ message: "Access denied. Guests cannot list conversations." });
+        }
+
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const currentU = decoded.username.toLowerCase();
+
+        // Find private chats containing the current user
+        const activeChats = await Message.aggregate([
+            {
+                $match: {
+                    privateChatId: { $regex: new RegExp(`(^|_)${currentU}(_|$)`, "i") }
+                }
+            },
+            {
+                $sort: { createdAt: -1 }
+            },
+            {
+                $group: {
+                    _id: "$privateChatId",
+                    latestMessageTime: { $first: "$createdAt" }
+                }
+            },
+            {
+                $sort: { latestMessageTime: -1 }
+            }
+        ]);
+
+        const partnerNames = activeChats.map(c => {
+            const parts = c._id.split("_");
+            const partner = parts.find(u => u.toLowerCase() !== currentU.toLowerCase());
+            return partner ? partner.toLowerCase() : null;
+        }).filter(Boolean);
+
+        const uniquePartnerNames = [...new Set(partnerNames)];
+
+        const dmUsers = await User.find(
+            { username: { $in: uniquePartnerNames.map(u => new RegExp(`^${u}$`, "i")) } },
+            { username: 1, displayName: 1, avatar: 1, status: 1, _id: 1 }
+        );
+
+        // Sort dmUsers according to uniquePartnerNames order
+        const userMap = {};
+        dmUsers.forEach(u => {
+            userMap[u.username.toLowerCase()] = u;
+        });
+
+        const sortedDmUsers = uniquePartnerNames
+            .map(name => userMap[name.toLowerCase()])
+            .filter(Boolean);
+
+        res.json(sortedDmUsers);
+    } catch (err) {
+        console.error("Error fetching DM conversations:", err);
         res.status(401).json({ message: "Unauthorized" });
     }
 });

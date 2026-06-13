@@ -132,28 +132,21 @@ function SeenStatus({ msg, currentUser, isPrivate }) {
     );
 }
 
-function ReactionBar({ reactions, onReact, currentUser }) {
+function ReactionBar({ reactions, onShowDetail, currentUser }) {
     if (!reactions || reactions.length === 0) return null;
 
-    const counts = {};
-    reactions.forEach(r => {
-        counts[r.emoji] = (counts[r.emoji] || 0) + 1;
-    });
+    const firstEmoji = reactions[0]?.emoji;
+    const totalCount = reactions.length;
+    const myReaction = reactions.find(r => r.username?.toLowerCase() === currentUser?.toLowerCase());
 
     return (
         <div className="reaction-bar">
-            {Object.entries(counts).map(([emoji, count]) => {
-                const myReaction = reactions.find(r => r.username?.toLowerCase() === currentUser?.toLowerCase() && r.emoji === emoji);
-                return (
-                    <button
-                        key={emoji}
-                        className={`reaction-chip ${myReaction ? "mine" : ""}`}
-                        onClick={() => onReact(emoji)}
-                    >
-                        {emoji} {count}
-                    </button>
-                );
-            })}
+            <button
+                className={`reaction-chip ${myReaction ? "mine" : ""}`}
+                onClick={onShowDetail}
+            >
+                {firstEmoji} {totalCount}
+            </button>
         </div>
     );
 }
@@ -236,24 +229,28 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     );
 }
 
-function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick }) {
+function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [] }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
+    const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
     const scrollContainerRef = useRef(null);
+
+    const activeReactionMsg = messages.find(m => m._id === selectedReactionMsgId);
 
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (e.key === "Escape") {
                 setActiveLightbox(null);
+                setSelectedReactionMsgId(null);
             }
         };
-        if (activeLightbox) {
+        if (activeLightbox || selectedReactionMsgId) {
             window.addEventListener("keydown", handleKeyDown);
         }
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
         };
-    }, [activeLightbox]);
+    }, [activeLightbox, selectedReactionMsgId]);
 
     const handleScroll = () => {
         const container = scrollContainerRef.current;
@@ -447,7 +444,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
 
                                 <ReactionBar
                                     reactions={msg.reactions}
-                                    onReact={(emoji) => onReact(msg._id, emoji)}
+                                    onShowDetail={() => setSelectedReactionMsgId(msg._id)}
                                     currentUser={currentUser}
                                 />
                             </div>
@@ -511,6 +508,80 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                 alt={activeLightbox.name} 
                                 className="lightbox-image" 
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedReactionMsgId && activeReactionMsg && (
+                <div 
+                    className="modal-overlay" 
+                    onClick={() => setSelectedReactionMsgId(null)}
+                >
+                    <div 
+                        className="modal-content reactions-detail-modal" 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ width: 'min(90%, 360px)', padding: '20px' }}
+                    >
+                        <div className="modal-header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Reactions</h3>
+                            <button className="close-picker-btn" onClick={() => setSelectedReactionMsgId(null)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
+                        </div>
+                        <div className="modal-body-section reactions-list-body" style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                            {(!activeReactionMsg.reactions || activeReactionMsg.reactions.length === 0) ? (
+                                <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '14px', padding: '16px' }}>
+                                    No reactions on this message.
+                                </div>
+                            ) : (
+                                activeReactionMsg.reactions.map((r, idx) => {
+                                    const isCurrentUser = r.username?.toLowerCase() === currentUser?.toLowerCase();
+                                    const userDetail = allUsers.find(u => u.username?.toLowerCase() === r.username?.toLowerCase());
+                                    const displayName = userDetail?.displayName || r.username;
+                                    const avatarSrc = userDetail?.avatar;
+
+                                    return (
+                                        <div 
+                                            key={idx} 
+                                            className={`reaction-detail-row ${isCurrentUser ? "interactive-mine" : ""}`}
+                                            onClick={isCurrentUser ? () => {
+                                                onReact(activeReactionMsg._id, r.emoji);
+                                                // If this is the last reaction, close the modal immediately
+                                                if (activeReactionMsg.reactions.length <= 1) {
+                                                    setSelectedReactionMsgId(null);
+                                                }
+                                            } : undefined}
+                                            title={isCurrentUser ? "Click to remove reaction" : undefined}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '8px 10px',
+                                                borderRadius: '8px',
+                                                background: 'var(--soft)',
+                                                border: '1px solid var(--border)',
+                                                cursor: isCurrentUser ? 'pointer' : 'default',
+                                                transition: 'background 0.2s, transform 0.2s'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                                <Avatar username={r.username} avatarSrc={avatarSrc} />
+                                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {displayName}
+                                                        {isCurrentUser && <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>(You)</span>}
+                                                    </span>
+                                                    {isCurrentUser && (
+                                                        <span style={{ fontSize: '10px', color: 'var(--danger)', fontWeight: '600', marginTop: '2px' }}>
+                                                            Tap to remove reaction
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <span style={{ fontSize: '18px' }}>{r.emoji}</span>
+                                        </div>
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
                 </div>

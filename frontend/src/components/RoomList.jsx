@@ -1,3 +1,4 @@
+import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import { FiLock, FiEdit2, FiMessageSquare } from "react-icons/fi";
 
@@ -60,9 +61,71 @@ function RoomList({
     isGuest, 
     onProfileClick, 
     onUserProfileClick, 
-    unreadCounts 
+    unreadCounts,
+    allUsers = [],
+    dmConversations = []
 }) {
     const otherUsers = onlineUserList.filter(u => u.username?.toLowerCase() !== currentUser?.toLowerCase());
+    
+    const [dmSearch, setDmSearch] = useState("");
+
+    // FUTURE SCALABILITY NOTE:
+    // Currently, search is performed client-side on the full list of users (allUsers) fetched on mount.
+    // This is optimal for small to medium user bases. If the user base grows significantly,
+    // replace this client-side filter with a debounced API call to a paginated search endpoint:
+    // GET /api/users/search?q=<query>
+    const filteredSearchUsers = useMemo(() => {
+        if (!dmSearch.trim()) return [];
+        const query = dmSearch.trim().toLowerCase();
+
+        // Filter out current user and match username/displayName
+        const matched = allUsers.filter(user => {
+            if (user.username?.toLowerCase() === currentUser?.toLowerCase()) return false;
+            const uName = (user.username || "").toLowerCase();
+            const dName = (user.displayName || "").toLowerCase();
+            return uName.includes(query) || dName.includes(query);
+        });
+
+        // Grouping matching users:
+        // Group 1: Existing conversation partners
+        // Group 2: Online users (not in Group 1)
+        // Group 3: Other registered users (offline, no chat history)
+        const existingUsernames = new Set(dmConversations.map(u => u.username?.toLowerCase()));
+        const onlineUsernames = new Set(onlineUserList.map(u => u.username?.toLowerCase()));
+
+        const group1 = [];
+        const group2 = [];
+        const group3 = [];
+
+        matched.forEach(user => {
+            const uLower = user.username?.toLowerCase();
+            if (existingUsernames.has(uLower)) {
+                const dmUser = dmConversations.find(u => u.username?.toLowerCase() === uLower);
+                group1.push({
+                    ...user,
+                    status: dmUser?.status || "Offline",
+                    isOnline: dmUser?.isOnline || false,
+                    role: dmUser?.role
+                });
+            } else if (onlineUsernames.has(uLower)) {
+                const onlineUser = onlineUserList.find(u => u.username?.toLowerCase() === uLower);
+                group2.push({
+                    ...user,
+                    status: onlineUser?.status || "Online",
+                    isOnline: true,
+                    role: onlineUser?.role
+                });
+            } else {
+                group3.push({
+                    ...user,
+                    status: "Offline",
+                    isOnline: false
+                });
+            }
+        });
+
+        return [...group1, ...group2, ...group3];
+    }, [dmSearch, allUsers, dmConversations, onlineUserList, currentUser]);
     
     // Determine the active room at the top (default to "General chat" if none or if viewing direct messages)
     const activeRoomName = activeRoom && !activePrivate ? activeRoom : null;
@@ -200,63 +263,137 @@ function RoomList({
             </div>
 
             {/* DIRECT Section */}
-            <div className="sidebar-section-label direct-label">Direct</div>
+            <div className="direct-header">
+                <div className="sidebar-section-label direct-label" style={{ margin: 0 }}>Direct</div>
+                {!isGuest && (
+                    <div className="dm-search-container">
+                        <input
+                            type="text"
+                            placeholder="Search your chat..."
+                            value={dmSearch}
+                            onChange={(e) => setDmSearch(e.target.value)}
+                            className="dm-search-input"
+                        />
+                        {dmSearch && (
+                            <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
+                        )}
+                    </div>
+                )}
+            </div>
 
             <div className="dm-list-container">
-                {otherUsers.length === 0 ? (
-                    <div className="room-empty">No users online</div>
-                ) : (
-                    otherUsers.map(user => {
-                        const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
-                        const isLocked = isGuest;
-                        const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
-                        
-                        return (
-                            <div 
-                                key={user.username}
-                                className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
-                                onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
-                                title={isLocked ? "Login required" : undefined}
-                            >
-                                <div className="dm-row-left">
-                                    <div 
-                                        className="dm-avatar-wrapper"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onUserProfileClick(user.username);
-                                        }}
-                                        title="View Profile"
-                                    >
-                                        <Avatar 
-                                            username={user.username} 
-                                            avatarSrc={user.avatar} 
-                                            size={32} 
-                                            className="dm-row-avatar" 
-                                        />
-                                        <span className={`dm-status-dot ${
-                                            user.role === "guest" ? "guest-dot" :
-                                            user.status === "Online" ? "" :
-                                            user.status === "Away" ? "away" :
-                                            user.status === "Busy" ? "busy" : "offline"
-                                        }`} />
+                {dmSearch.trim() ? (
+                    filteredSearchUsers.length === 0 ? (
+                        <div className="sidebar-empty-state">No users found. Try another search term.</div>
+                    ) : (
+                        filteredSearchUsers.map(user => {
+                            const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
+                            const isLocked = isGuest;
+                            const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
+                            
+                            return (
+                                <div 
+                                    key={user.username}
+                                    className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                    onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
+                                    title={isLocked ? "Login required" : undefined}
+                                >
+                                    <div className="dm-row-left">
+                                        <div 
+                                            className="dm-avatar-wrapper"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onUserProfileClick(user.username);
+                                            }}
+                                            title="View Profile"
+                                        >
+                                            <Avatar 
+                                                username={user.username} 
+                                                avatarSrc={user.avatar} 
+                                                size={32} 
+                                                className="dm-row-avatar" 
+                                            />
+                                            <span className={`dm-status-dot ${
+                                                user.role === "guest" ? "guest-dot" :
+                                                user.status === "Online" ? "" :
+                                                user.status === "Away" ? "away" :
+                                                user.status === "Busy" ? "busy" : "offline"
+                                            }`} />
+                                        </div>
+                                        <span className="dm-row-name">
+                                            {user.displayName || user.username}
+                                            {user.role === "guest" && <span className="guest-badge-pill">GUEST</span>}
+                                        </span>
                                     </div>
-                                    <span className="dm-row-name">
-                                        {user.displayName || user.username}
-                                        {user.role === "guest" && <span className="guest-badge-pill">GUEST</span>}
-                                    </span>
+                                    <div className="dm-row-right">
+                                        {isLocked ? (
+                                            <FiLock className="dm-lock-icon" />
+                                        ) : unread > 0 ? (
+                                            <span className="dm-unread-badge">{unread}</span>
+                                        ) : (
+                                            <span className="dm-pill">DM</span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="dm-row-right">
-                                    {isLocked ? (
-                                        <FiLock className="dm-lock-icon" />
-                                    ) : unread > 0 ? (
-                                        <span className="dm-unread-badge">{unread}</span>
-                                    ) : (
-                                        <span className="dm-pill">DM</span>
-                                    )}
+                            );
+                        })
+                    )
+                ) : (
+                    dmConversations.length === 0 ? (
+                        <div className="sidebar-empty-state">No direct messages yet. Search for a user to start chatting.</div>
+                    ) : (
+                        dmConversations.map(user => {
+                            const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
+                            const isLocked = isGuest;
+                            const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
+                            
+                            return (
+                                <div 
+                                    key={user.username}
+                                    className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                    onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
+                                    title={isLocked ? "Login required" : undefined}
+                                >
+                                    <div className="dm-row-left">
+                                        <div 
+                                            className="dm-avatar-wrapper"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onUserProfileClick(user.username);
+                                            }}
+                                            title="View Profile"
+                                        >
+                                            <Avatar 
+                                                username={user.username} 
+                                                avatarSrc={user.avatar} 
+                                                size={32} 
+                                                className="dm-row-avatar" 
+                                            />
+                                            <span className={`dm-status-dot ${
+                                                user.role === "guest" ? "guest-dot" :
+                                                user.status === "Online" ? "" :
+                                                user.status === "Away" ? "away" :
+                                                user.status === "Busy" ? "busy" : "offline"
+                                            }`} />
+                                        </div>
+                                        <span className="dm-row-name">
+                                            {user.displayName || user.username}
+                                            {user.role === "guest" && <span className="guest-badge-pill">GUEST</span>}
+                                        </span>
+                                    </div>
+                                    <div className="dm-row-right">
+                                        {isLocked ? (
+                                            <FiLock className="dm-lock-icon" />
+                                        ) : unread > 0 ? (
+                                            <span className="dm-unread-badge">{unread}</span>
+                                        ) : (
+                                            <span className="dm-pill">DM</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })
+                            );
+                        })
+                    )
                 )}
             </div>
         </div>

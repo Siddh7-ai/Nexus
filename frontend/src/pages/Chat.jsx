@@ -83,6 +83,8 @@ function Chat() {
     const [typingUser, setTypingUser] = useState("");
     const [onlineUsers, setOnlineUsers] = useState(0);
     const [onlineUserList, setOnlineUserList] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [conversationUsers, setConversationUsers] = useState([]);
 
     const [activeRoom, setActiveRoom] = useState("General chat");
     const [activePrivate, setActivePrivate] = useState(null); // privateChatId
@@ -176,6 +178,43 @@ function Chat() {
         activePrivateNameRef.current = activePrivateName;
     }, [activePrivateName]);
 
+    const allUsersRef = useRef(allUsers);
+    useEffect(() => {
+        allUsersRef.current = allUsers;
+    }, [allUsers]);
+
+    useEffect(() => {
+        if (isGuest || !username) return;
+        
+        async function fetchUserData() {
+            const token = getAuthToken();
+            if (!token) return;
+            try {
+                const [usersRes, convsRes] = await Promise.all([
+                    fetch(`${getBackendUrl()}/api/users`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    }),
+                    fetch(`${getBackendUrl()}/api/users/conversations`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    })
+                ]);
+                
+                if (usersRes.ok) {
+                    const usersData = await usersRes.json();
+                    setAllUsers(usersData);
+                }
+                if (convsRes.ok) {
+                    const convsData = await convsRes.json();
+                    setConversationUsers(convsData);
+                }
+            } catch (err) {
+                console.error("Error fetching user list or conversations:", err);
+            }
+        }
+        
+        fetchUserData();
+    }, [username, isGuest]);
+
     useEffect(() => {
         if (!socketRef.current) return;
         if (activePrivate) {
@@ -250,6 +289,29 @@ function Chat() {
         });
 
         newSocket.on("reply", (data) => {
+            if (data.privateChatId) {
+                const parts = data.privateChatId.split("_");
+                const partnerUsername = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
+                if (partnerUsername) {
+                    setConversationUsers((prev) => {
+                        const lowerPartner = partnerUsername.toLowerCase();
+                        const index = prev.findIndex(u => u.username?.toLowerCase() === lowerPartner);
+                        if (index !== -1) {
+                            const updated = [...prev];
+                            const [targetUser] = updated.splice(index, 1);
+                            return [targetUser, ...updated];
+                        } else {
+                            const userObj = allUsersRef.current.find(u => u.username?.toLowerCase() === lowerPartner);
+                            if (userObj) {
+                                return [userObj, ...prev];
+                            } else {
+                                return [{ username: partnerUsername, displayName: partnerUsername, status: "Offline" }, ...prev];
+                            }
+                        }
+                    });
+                }
+            }
+
             const isMatch = data.privateChatId
                 ? (activePrivateRef.current?.toLowerCase() === data.privateChatId?.toLowerCase())
                 : (activeRoomRef.current === data.room);
@@ -860,6 +922,78 @@ function Chat() {
         }
     }
 
+    const dmConversations = React.useMemo(() => {
+        let list = conversationUsers.map((cUser) => {
+            const onlineUser = onlineUserList.find(
+                (u) => u.username?.toLowerCase() === cUser.username?.toLowerCase()
+            );
+            if (onlineUser) {
+                return {
+                    ...cUser,
+                    displayName: onlineUser.displayName || cUser.displayName || cUser.username,
+                    avatar: onlineUser.avatar || cUser.avatar,
+                    status: onlineUser.status || "Online",
+                    isOnline: true,
+                    role: onlineUser.role
+                };
+            } else {
+                return {
+                    ...cUser,
+                    displayName: cUser.displayName || cUser.username,
+                    status: "Offline",
+                    isOnline: false
+                };
+            }
+        });
+
+        list = list.filter((u) => u.username?.toLowerCase() !== username?.toLowerCase());
+
+        if (activePrivateName && !list.some((u) => u.username?.toLowerCase() === activePrivateName.toLowerCase())) {
+            const activeUserObj = allUsers.find(
+                (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+            ) || onlineUserList.find(
+                (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+            );
+
+            if (activeUserObj) {
+                const isOnline = onlineUserList.some(
+                    (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+                );
+                const onlineUser = onlineUserList.find(
+                    (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+                );
+                list.unshift({
+                    ...activeUserObj,
+                    displayName: activeUserObj.displayName || activeUserObj.username,
+                    status: isOnline ? (onlineUser?.status || "Online") : "Offline",
+                    isOnline
+                });
+            } else {
+                const isOnline = onlineUserList.some(
+                    (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+                );
+                const onlineUser = onlineUserList.find(
+                    (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
+                );
+                list.unshift({
+                    username: activePrivateName,
+                    displayName: activePrivateName,
+                    status: isOnline ? (onlineUser?.status || "Online") : "Offline",
+                    isOnline
+                });
+            }
+        }
+        const seen = new Set();
+        list = list.filter((u) => {
+            const lowerUName = u.username?.toLowerCase();
+            if (!lowerUName || seen.has(lowerUName)) return false;
+            seen.add(lowerUName);
+            return true;
+        });
+
+        return list;
+    }, [conversationUsers, onlineUserList, username, activePrivateName, allUsers]);
+
     const chatTitle = activePrivate
         ? `${activePrivateName}`
         : `#${activeRoom}`;
@@ -888,6 +1022,8 @@ function Chat() {
                         onProfileClick={isGuest ? () => setShowProfileSettings(true) : openOwnProfileSettings}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                         unreadCounts={unreadCounts}
+                        allUsers={allUsers}
+                        dmConversations={dmConversations}
                     />
                 </div>
 
@@ -928,6 +1064,7 @@ function Chat() {
                         onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
                         typingUser={typingUser}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                        allUsers={allUsers}
                     />
 
                     <MessageInput
