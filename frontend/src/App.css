@@ -670,8 +670,26 @@ body.dark-theme .scroll-to-bottom-btn:hover {
   color: #111214;
 }
 
-.reaction-emoji-bar {
-  margin-top: 6px;
+.reaction-emoji-bar,
+.message-menu {
+  position: absolute;
+  top: 100%;
+  margin-top: 4px;
+  z-index: 30;
+}
+
+.message-actions.own .reaction-emoji-bar,
+.message-actions.own .message-menu {
+  right: 0;
+}
+
+.message-actions.other .reaction-emoji-bar,
+.message-actions.other .message-menu {
+  left: 0;
+}
+
+.action-btn-group {
+  width: fit-content;
 }
 
 .emoji-option {
@@ -680,7 +698,6 @@ body.dark-theme .scroll-to-bottom-btn:hover {
 
 .message-menu {
   min-width: 168px;
-  margin-top: 6px;
   border-radius: 8px;
   overflow: hidden;
 }
