@@ -681,7 +681,7 @@ io.on("connection", async (socket) => {
     });
 
     // Delete message
-    socket.on("deleteMessage", async ({ messageId, deleteFor }) => {
+    socket.on("deleteMessage", async ({ messageId, deleteFor, deleteFileFromServer }) => {
         try {
             const msg = await Message.findById(messageId);
             if (!msg) return;
@@ -691,9 +691,31 @@ io.on("connection", async (socket) => {
                 return;
             }
 
+            if (deleteFileFromServer && msg.fileUrl) {
+                // Extract fileId from fileUrl (typically ends with fileId)
+                const parts = msg.fileUrl.split("/");
+                const fileIdStr = parts[parts.length - 1];
+                if (fileIdStr && mongoose.Types.ObjectId.isValid(fileIdStr)) {
+                    const db = mongoose.connection.db;
+                    const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+                    try {
+                        await bucket.delete(new ObjectId(fileIdStr));
+                    } catch (fileErr) {
+                        console.error("Error deleting file from GridFS:", fileErr);
+                    }
+                }
+            }
+
             if (deleteFor === "everyone" && msg.username?.toLowerCase() === socket.username?.toLowerCase()) {
                 msg.isDeleted = true;
                 msg.text = "This message was deleted";
+                if (deleteFileFromServer) {
+                    msg.fileUrl = null;
+                    msg.fileName = null;
+                    msg.fileSize = null;
+                    msg.fileType = null;
+                    msg.fileQuality = null;
+                }
                 await msg.save();
                 const room = msg.privateChatId
                     ? `private_${msg.privateChatId}`

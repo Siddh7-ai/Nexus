@@ -159,6 +159,17 @@ function Chat() {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [cropImgRatio, setCropImgRatio] = useState(1.0);
 
+    // Message Delete and Undo states
+    const [deleteConfirmModal, setDeleteConfirmModal] = useState({
+        isOpen: false,
+        messageId: null,
+        deleteFor: 'me',
+        hasFile: false,
+        deleteFileFromServer: true
+    });
+    const [undoDeleteInfo, setUndoDeleteInfo] = useState(null);
+    const deleteTimeoutRef = useRef(null);
+
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -588,11 +599,93 @@ function Chat() {
     }
 
     function handleDelete(messageId, deleteFor) {
-        socketRef.current?.emit("deleteMessage", {
+        // Intercept delete and trigger warning modal
+        const msg = messages.find(m => m._id === messageId);
+        setDeleteConfirmModal({
+            isOpen: true,
             messageId,
-            deleteFor: deleteFor === "everyone" ? "everyone" : "me"
+            deleteFor,
+            hasFile: !!(msg && msg.fileUrl),
+            deleteFileFromServer: true
         });
     }
+
+    const cancelDeleteRequest = () => {
+        setDeleteConfirmModal({
+            isOpen: false,
+            messageId: null,
+            deleteFor: 'me',
+            hasFile: false,
+            deleteFileFromServer: true
+        });
+    };
+
+    const confirmDelete = () => {
+        const { messageId, deleteFor, deleteFileFromServer } = deleteConfirmModal;
+        const originalMsg = messages.find(m => m._id === messageId);
+
+        // Close modal
+        setDeleteConfirmModal({
+            isOpen: false,
+            messageId: null,
+            deleteFor: 'me',
+            hasFile: false,
+            deleteFileFromServer: true
+        });
+
+        if (!originalMsg) return;
+
+        // If there's an active undo timer, commit it immediately before starting the next one
+        if (deleteTimeoutRef.current) {
+            clearTimeout(deleteTimeoutRef.current);
+            if (undoDeleteInfo) {
+                socketRef.current?.emit("deleteMessage", {
+                    messageId: undoDeleteInfo.messageId,
+                    deleteFor: undoDeleteInfo.deleteFor,
+                    deleteFileFromServer: undoDeleteInfo.deleteFileFromServer
+                });
+            }
+        }
+
+        // Hide message locally
+        setMessages(prev => prev.filter(m => m._id !== messageId));
+
+        // Set undo state details
+        setUndoDeleteInfo({
+            messageId,
+            deleteFor,
+            originalMsg,
+            deleteFileFromServer
+        });
+
+        // Start 3 second commit timer
+        deleteTimeoutRef.current = setTimeout(() => {
+            socketRef.current?.emit("deleteMessage", {
+                messageId,
+                deleteFor,
+                deleteFileFromServer
+            });
+            setUndoDeleteInfo(null);
+            deleteTimeoutRef.current = null;
+        }, 3000);
+    };
+
+    const executeUndoDelete = () => {
+        if (deleteTimeoutRef.current) {
+            clearTimeout(deleteTimeoutRef.current);
+            deleteTimeoutRef.current = null;
+        }
+
+        if (undoDeleteInfo) {
+            // Restore message locally
+            setMessages(prev => {
+                if (prev.some(m => m._id === undoDeleteInfo.messageId)) return prev;
+                const list = [...prev, undoDeleteInfo.originalMsg];
+                return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            });
+            setUndoDeleteInfo(null);
+        }
+    };
 
     async function openOwnProfileSettings() {
         setShowProfileSettings(true);
@@ -1927,6 +2020,67 @@ function Chat() {
                             })}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* DELETE CONFIRMATION MODAL */}
+            {deleteConfirmModal.isOpen && (
+                <div className="delete-confirm-overlay" onClick={cancelDeleteRequest}>
+                    <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="delete-confirm-title">Delete message?</h3>
+                        
+                        {deleteConfirmModal.hasFile && (
+                            <label className="delete-confirm-checkbox-label">
+                                <input 
+                                    type="checkbox" 
+                                    className="delete-confirm-checkbox"
+                                    checked={deleteConfirmModal.deleteFileFromServer}
+                                    onChange={(e) => setDeleteConfirmModal(prev => ({ ...prev, deleteFileFromServer: e.target.checked }))}
+                                />
+                                <span className="delete-confirm-checkbox-custom">
+                                    {deleteConfirmModal.deleteFileFromServer && (
+                                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="#111214" strokeWidth="4" fill="none">
+                                            <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                    )}
+                                </span>
+                                <span className="delete-confirm-checkbox-text">Delete file from server</span>
+                            </label>
+                        )}
+
+                        <div className="delete-confirm-actions">
+                            <button 
+                                type="button" 
+                                className="delete-confirm-btn cancel" 
+                                onClick={cancelDeleteRequest}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="button" 
+                                className="delete-confirm-btn delete" 
+                                onClick={confirmDelete}
+                            >
+                                {deleteConfirmModal.deleteFor === "everyone" ? "Delete for everyone" : "Delete for me"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* UNDO DELETE TOAST BANNER */}
+            {undoDeleteInfo && (
+                <div className="undo-delete-toast">
+                    <span className="undo-delete-toast-text">
+                        &bull; Message deleted {undoDeleteInfo.deleteFor === "everyone" ? "for everyone" : "for me"}
+                    </span>
+                    <button 
+                        type="button" 
+                        className="undo-delete-toast-btn" 
+                        onClick={executeUndoDelete}
+                    >
+                        Undo
+                    </button>
                 </div>
             )}
         </div>
