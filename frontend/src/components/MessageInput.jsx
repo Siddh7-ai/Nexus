@@ -19,7 +19,9 @@ import {
     BarChart2,
     Calendar,
     Smile,
-    X
+    X,
+    RefreshCw,
+    Crop
 } from "lucide-react";
 
 // Lazy load the full emoji picker for performance
@@ -294,6 +296,307 @@ function MessageInput({
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [errorBanner, setErrorBanner] = useState(null);
+
+    const [cameraOpen, setCameraOpen] = useState(false);
+    const [capturedImage, setCapturedImage] = useState(null); // base64 string
+    const [facingMode, setFacingMode] = useState("user"); // "user" or "environment"
+    const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+    const videoRef = useRef(null);
+    const streamRef = useRef(null);
+
+    // Enumerate devices to check if front/back or multiple cameras are available
+    useEffect(() => {
+        if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+            navigator.mediaDevices.enumerateDevices()
+                .then(devices => {
+                    const videoDevices = devices.filter(d => d.kind === "videoinput");
+                    setHasMultipleCameras(videoDevices.length > 1);
+                })
+                .catch(err => {
+                    console.error("Error enumerating devices:", err);
+                });
+        }
+    }, [cameraOpen]);
+
+    useEffect(() => {
+        if (cameraOpen && !capturedImage) {
+            let activeStream = null;
+            const initCamera = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            width: { ideal: 1920 }, 
+                            height: { ideal: 1080 },
+                            facingMode: facingMode 
+                        } 
+                    });
+                    activeStream = stream;
+                    streamRef.current = stream;
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                    }
+                } catch (err) {
+                    console.error("Error accessing camera:", err);
+                    setErrorBanner("Could not access camera. Please check permissions.");
+                    setTimeout(() => setErrorBanner(null), 5000);
+                    setCameraOpen(false);
+                }
+            };
+            const timeoutId = setTimeout(initCamera, 100);
+            return () => {
+                clearTimeout(timeoutId);
+                if (activeStream) {
+                    activeStream.getTracks().forEach(t => t.stop());
+                }
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(t => t.stop());
+                    streamRef.current = null;
+                }
+            };
+        }
+    }, [cameraOpen, capturedImage, facingMode]);
+
+    const capturePhoto = () => {
+        if (!videoRef.current) return;
+        const video = videoRef.current;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+        setCapturedImage(dataUrl);
+    };
+
+    const useCapturedPhoto = () => {
+        if (!capturedImage) return;
+        
+        const arr = capturedImage.split(',');
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while(n--){
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const file = new File([blob], `camera_${Date.now()}.jpg`, { type: mime });
+
+        const fileObj = {
+            file,
+            previewUrl: URL.createObjectURL(file),
+            name: file.name,
+            size: file.size,
+            type: file.type
+        };
+
+        setSelectedFiles([fileObj]);
+        setActivePreviewIndex(0);
+        setPreviewModalOpen(true);
+        setHdQuality(false);
+        setCaptionText("");
+        
+        setCameraOpen(false);
+        setCapturedImage(null);
+    };
+
+    const closeCamera = () => {
+        setCameraOpen(false);
+        setCapturedImage(null);
+        setFacingMode("user");
+    };
+
+    const [isEditingImage, setIsEditingImage] = useState(false);
+    const [editorImageSrc, setEditorImageSrc] = useState("");
+    const [cropBox, setCropBox] = useState({ x: 0, y: 0, w: 100, h: 100 });
+    const [isDraggingHandle, setIsDraggingHandle] = useState(null);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0, crop: null });
+    const imageRef = useRef(null);
+
+    const startImageEditor = () => {
+        const activeFile = selectedFiles[activePreviewIndex];
+        if (activeFile && activeFile.type.startsWith("image/")) {
+            setEditorImageSrc(activeFile.previewUrl);
+            setCropBox({ x: 0, y: 0, w: 100, h: 100 }); // Start with full image crop box
+            setIsEditingImage(true);
+        }
+    };
+
+    const handleCancelEditor = () => {
+        setIsEditingImage(false);
+    };
+
+    const rotateImage90Degrees = (srcUrl) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = srcUrl;
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = img.height;
+                canvas.height = img.width;
+                
+                const ctx = canvas.getContext("2d");
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(90 * Math.PI / 180);
+                ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const newUrl = URL.createObjectURL(blob);
+                        resolve({ blob, url: newUrl });
+                    } else {
+                        resolve(null);
+                    }
+                }, "image/jpeg", 0.95);
+            };
+        });
+    };
+
+    const handleRotate = async () => {
+        const result = await rotateImage90Degrees(editorImageSrc);
+        if (result) {
+            setEditorImageSrc(result.url);
+            setCropBox({ x: 0, y: 0, w: 100, h: 100 }); // Reset crop box to full image on rotation
+        }
+    };
+
+    const handleDragStart = (handle, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        setIsDraggingHandle(handle);
+        setDragStart({
+            x: clientX,
+            y: clientY,
+            crop: { ...cropBox }
+        });
+    };
+
+    useEffect(() => {
+        if (!isDraggingHandle) return;
+
+        const onMove = (e) => {
+            if (!imageRef.current) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const deltaX = clientX - dragStart.x;
+            const deltaY = clientY - dragStart.y;
+
+            const rect = imageRef.current.getBoundingClientRect();
+            const pctDeltaX = (deltaX / rect.width) * 100;
+            const pctDeltaY = (deltaY / rect.height) * 100;
+
+            let newX = dragStart.crop.x;
+            let newY = dragStart.crop.y;
+            let newW = dragStart.crop.w;
+            let newH = dragStart.crop.h;
+
+            const minSize = 15; // Minimum size 15%
+
+            if (isDraggingHandle === "move") {
+                newX = Math.max(0, Math.min(100 - dragStart.crop.w, dragStart.crop.x + pctDeltaX));
+                newY = Math.max(0, Math.min(100 - dragStart.crop.h, dragStart.crop.y + pctDeltaY));
+            } else {
+                if (isDraggingHandle.includes("w")) {
+                    const proposedX = dragStart.crop.x + pctDeltaX;
+                    const proposedW = dragStart.crop.w - pctDeltaX;
+                    if (proposedX >= 0 && proposedW >= minSize) {
+                        newX = proposedX;
+                        newW = proposedW;
+                    }
+                }
+                if (isDraggingHandle.includes("e")) {
+                    const proposedW = dragStart.crop.w + pctDeltaX;
+                    if (proposedW >= minSize && dragStart.crop.x + proposedW <= 100) {
+                        newW = proposedW;
+                    }
+                }
+                if (isDraggingHandle.includes("n")) {
+                    const proposedY = dragStart.crop.y + pctDeltaY;
+                    const proposedH = dragStart.crop.h - pctDeltaY;
+                    if (proposedY >= 0 && proposedH >= minSize) {
+                        newY = proposedY;
+                        newH = proposedH;
+                    }
+                }
+                if (isDraggingHandle.includes("s")) {
+                    const proposedH = dragStart.crop.h + pctDeltaY;
+                    if (proposedH >= minSize && dragStart.crop.y + proposedH <= 100) {
+                        newH = proposedH;
+                    }
+                }
+            }
+
+            setCropBox({ x: newX, y: newY, w: newW, h: newH });
+        };
+
+        const onUp = () => {
+            setIsDraggingHandle(null);
+        };
+
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        window.addEventListener("touchmove", onMove, { passive: false });
+        window.addEventListener("touchend", onUp);
+
+        return () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            window.removeEventListener("touchmove", onMove);
+            window.removeEventListener("touchend", onUp);
+        };
+    }, [isDraggingHandle, dragStart]);
+
+    const applyCrop = () => {
+        if (!imageRef.current) return;
+        
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = editorImageSrc;
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const cropX = (cropBox.x / 100) * img.width;
+            const cropY = (cropBox.y / 100) * img.height;
+            const cropW = (cropBox.w / 100) * img.width;
+            const cropH = (cropBox.h / 100) * img.height;
+            
+            canvas.width = cropW;
+            canvas.height = cropH;
+            
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const newFile = new File([blob], `edited_${Date.now()}.jpg`, { type: "image/jpeg" });
+                    
+                    // Update selectedFiles at activePreviewIndex
+                    setSelectedFiles(prev => {
+                        const updated = [...prev];
+                        const oldObj = updated[activePreviewIndex];
+                        if (oldObj.previewUrl && !oldObj.previewUrl.startsWith("data:")) {
+                            URL.revokeObjectURL(oldObj.previewUrl);
+                        }
+                        updated[activePreviewIndex] = {
+                            file: newFile,
+                            previewUrl: URL.createObjectURL(newFile),
+                            name: newFile.name,
+                            size: newFile.size,
+                            type: newFile.type
+                        };
+                        return updated;
+                    });
+                    
+                    setIsEditingImage(false);
+                }
+            }, "image/jpeg", 0.95);
+        };
+    };
 
     const compressImage = (file) => {
         return new Promise((resolve) => {
@@ -953,12 +1256,11 @@ function MessageInput({
                             </div>
                             <span>Photos & videos</span>
                         </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
+                        <button type="button" className="popover-item" onClick={() => { setCameraOpen(true); setAttachmentMenuOpen(false); }}>
                             <div className="popover-icon-wrapper pink-bg">
                                 <Camera size={18} />
                             </div>
                             <span>Camera</span>
-                            <span className="coming-soon-badge">Soon</span>
                         </button>
                         <button type="button" className="popover-item disabled-item" onClick={() => {}}>
                             <div className="popover-icon-wrapper orange-bg">
@@ -1287,114 +1589,327 @@ function MessageInput({
             {previewModalOpen && selectedFiles.length > 0 && (
                 <div className="attachment-preview-overlay">
                     <div className="attachment-preview-modal">
-                        {/* Header */}
-                        <div className="preview-header">
+                        {isEditingImage ? (
+                            <>
+                                {/* Editor Header */}
+                                <div className="preview-header">
+                                    <span className="editor-mode-title">Adjust Image</span>
+                                    <div className="editor-mode-header-spacer" />
+                                </div>
+
+                                {/* Editor Body */}
+                                <div className="preview-body editor-mode">
+                                    <div className="editor-media-wrapper" style={{ position: "relative", display: "inline-block", maxWidth: "100%", margin: "0 auto" }}>
+                                        <img 
+                                            ref={imageRef} 
+                                            src={editorImageSrc} 
+                                            alt="Editor viewport" 
+                                            className="preview-img-element"
+                                            style={{ display: "block", maxWidth: "100%", maxHeight: "calc(100vh - 280px)", objectFit: "contain" }}
+                                            draggable={false}
+                                        />
+                                        
+                                        {/* Crop Box Overlay */}
+                                        <div className="crop-overlay-container" style={{ position: "absolute", inset: 0, userSelect: "none" }}>
+                                            {/* Semi-transparent shades */}
+                                            <div className="crop-shade top" style={{ position: "absolute", left: 0, top: 0, width: "100%", height: `${cropBox.y}%`, background: "rgba(0, 0, 0, 0.65)" }} />
+                                            <div className="crop-shade bottom" style={{ position: "absolute", left: 0, top: `${cropBox.y + cropBox.h}%`, width: "100%", height: `${100 - cropBox.y - cropBox.h}%`, background: "rgba(0, 0, 0, 0.65)" }} />
+                                            <div className="crop-shade left" style={{ position: "absolute", left: 0, top: `${cropBox.y}%`, height: `${cropBox.h}%`, width: `${cropBox.x}%`, background: "rgba(0, 0, 0, 0.65)" }} />
+                                            <div className="crop-shade right" style={{ position: "absolute", left: `${cropBox.x + cropBox.w}%`, top: `${cropBox.y}%`, height: `${cropBox.h}%`, width: `${100 - cropBox.x - cropBox.w}%`, background: "rgba(0, 0, 0, 0.65)" }} />
+
+                                            {/* The Crop Area */}
+                                            <div 
+                                                className="crop-box" 
+                                                style={{
+                                                    position: "absolute",
+                                                    left: `${cropBox.x}%`,
+                                                    top: `${cropBox.y}%`,
+                                                    width: `${cropBox.w}%`,
+                                                    height: `${cropBox.h}%`,
+                                                    border: "2px solid #ffffff",
+                                                    cursor: "move"
+                                                }}
+                                                onMouseDown={(e) => handleDragStart("move", e)}
+                                                onTouchStart={(e) => handleDragStart("move", e)}
+                                            >
+                                                {/* Corner Drag Handles */}
+                                                <div className="crop-handle nw" style={{ position: "absolute", width: "12px", height: "12px", background: "#ffffff", border: "2px solid var(--accent)", borderRadius: "50%", zIndex: 10, top: "-7px", left: "-7px", cursor: "nwse-resize" }} onMouseDown={(e) => handleDragStart("nw", e)} onTouchStart={(e) => handleDragStart("nw", e)} />
+                                                <div className="crop-handle ne" style={{ position: "absolute", width: "12px", height: "12px", background: "#ffffff", border: "2px solid var(--accent)", borderRadius: "50%", zIndex: 10, top: "-7px", right: "-7px", cursor: "nesw-resize" }} onMouseDown={(e) => handleDragStart("ne", e)} onTouchStart={(e) => handleDragStart("ne", e)} />
+                                                <div className="crop-handle sw" style={{ position: "absolute", width: "12px", height: "12px", background: "#ffffff", border: "2px solid var(--accent)", borderRadius: "50%", zIndex: 10, bottom: "-7px", left: "-7px", cursor: "nesw-resize" }} onMouseDown={(e) => handleDragStart("sw", e)} onTouchStart={(e) => handleDragStart("sw", e)} />
+                                                <div className="crop-handle se" style={{ position: "absolute", width: "12px", height: "12px", background: "#ffffff", border: "2px solid var(--accent)", borderRadius: "50%", zIndex: 10, bottom: "-7px", right: "-7px", cursor: "nwse-resize" }} onMouseDown={(e) => handleDragStart("se", e)} onTouchStart={(e) => handleDragStart("se", e)} />
+                                                
+                                                {/* Internal Grid Lines */}
+                                                <div className="crop-grid-line h1" style={{ position: "absolute", left: 0, right: 0, top: "33.33%", height: "1px", background: "rgba(255, 255, 255, 0.35)", pointerEvents: "none" }} />
+                                                <div className="crop-grid-line h2" style={{ position: "absolute", left: 0, right: 0, top: "66.66%", height: "1px", background: "rgba(255, 255, 255, 0.35)", pointerEvents: "none" }} />
+                                                <div className="crop-grid-line v1" style={{ position: "absolute", top: 0, bottom: 0, left: "33.33%", width: "1px", background: "rgba(255, 255, 255, 0.35)", pointerEvents: "none" }} />
+                                                <div className="crop-grid-line v2" style={{ position: "absolute", top: 0, bottom: 0, left: "66.66%", width: "1px", background: "rgba(255, 255, 255, 0.35)", pointerEvents: "none" }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Editor Footer */}
+                                <div className="preview-footer">
+                                    <div className="editor-controls-row">
+                                        <button 
+                                            type="button" 
+                                            className="editor-btn secondary" 
+                                            onClick={handleCancelEditor}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            className="editor-btn secondary"
+                                            onClick={() => setCropBox({ x: 0, y: 0, w: 100, h: 100 })}
+                                        >
+                                            Reset
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            className="editor-btn rotate-btn" 
+                                            onClick={handleRotate}
+                                            title="Rotate 90 degrees"
+                                        >
+                                            <RefreshCw size={14} />
+                                            Rotate
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            className="editor-btn primary" 
+                                            onClick={applyCrop}
+                                        >
+                                            Done
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                {/* Normal Header */}
+                                <div className="preview-header">
+                                    <button 
+                                        type="button" 
+                                        className="preview-close-btn" 
+                                        onClick={() => {
+                                            setSelectedFiles([]);
+                                            setPreviewModalOpen(false);
+                                        }}
+                                    >
+                                        <X size={20} />
+                                    </button>
+
+                                    <div className="preview-header-actions-tray" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                        {/* Edit image button */}
+                                        {selectedFiles[activePreviewIndex]?.type.startsWith("image/") && (
+                                            <button
+                                                type="button"
+                                                className="preview-edit-btn"
+                                                onClick={startImageEditor}
+                                                title="Crop / Rotate Image"
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "6px",
+                                                    background: "rgba(255,255,255,0.06)",
+                                                    border: "1px solid rgba(255,255,255,0.15)",
+                                                    borderRadius: "20px",
+                                                    padding: "4px 12px",
+                                                    cursor: "pointer",
+                                                    color: "#cbd5e1",
+                                                    fontWeight: "700",
+                                                    fontSize: "11px",
+                                                    transition: "all 0.2s ease"
+                                                }}
+                                            >
+                                                <Crop size={14} />
+                                                <span>Adjust</span>
+                                            </button>
+                                        )}
+
+                                        {/* HD quality toggle (only visible if there are photos) */}
+                                        {selectedFiles.some(f => f.type.startsWith("image/")) && (
+                                            <div className="preview-hd-toggle-container">
+                                                <button 
+                                                    type="button" 
+                                                    className={`hd-quality-btn ${hdQuality ? "active" : ""}`}
+                                                    onClick={() => setHdQuality(!hdQuality)}
+                                                    title={hdQuality ? "HD Quality enabled (Original size)" : "Standard Quality enabled (Compressed)"}
+                                                >
+                                                    <span className="hd-badge-text">HD</span>
+                                                    <span className="hd-status-text">{hdQuality ? "HD" : "Standard"}</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Normal Body */}
+                                <div className="preview-body">
+                                    {selectedFiles[activePreviewIndex].type.startsWith("image/") ? (
+                                        <div className="preview-media-container">
+                                            <img 
+                                                src={selectedFiles[activePreviewIndex].previewUrl} 
+                                                alt="Preview" 
+                                                className="preview-img-element"
+                                            />
+                                        </div>
+                                    ) : selectedFiles[activePreviewIndex].type.startsWith("video/") ? (
+                                        <div className="preview-media-container">
+                                            <video 
+                                                src={selectedFiles[activePreviewIndex].previewUrl} 
+                                                controls 
+                                                className="preview-video-element"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="preview-doc-container">
+                                            <FileText size={64} className="doc-icon" />
+                                            <span className="doc-name">{selectedFiles[activePreviewIndex].name}</span>
+                                            <span className="doc-size">
+                                                {(selectedFiles[activePreviewIndex].size / 1024 / 1024).toFixed(2)} MB
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Normal Footer */}
+                                <div className="preview-footer">
+                                    {/* Horizontal grid of selected files at bottom if more than 1 file */}
+                                    {selectedFiles.length > 1 && (
+                                        <div className="preview-thumbnails-tray">
+                                            {selectedFiles.map((f, idx) => (
+                                                <div 
+                                                    key={idx}
+                                                    className={`thumbnail-item ${idx === activePreviewIndex ? "active" : ""}`}
+                                                    onClick={() => setActivePreviewIndex(idx)}
+                                                >
+                                                    {f.type.startsWith("image/") ? (
+                                                        <img src={f.previewUrl} alt="Thumb" />
+                                                    ) : f.type.startsWith("video/") ? (
+                                                        <div className="video-thumb-placeholder">Video</div>
+                                                    ) : (
+                                                        <div className="doc-thumb-placeholder">Doc</div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {uploading ? (
+                                        <div className="preview-uploading-progress">
+                                            <div className="progress-bar-container">
+                                                <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }} />
+                                            </div>
+                                            <span className="progress-text">Sending files... {uploadProgress}%</span>
+                                        </div>
+                                    ) : (
+                                        <div className="preview-caption-row">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Add a caption..." 
+                                                value={captionText} 
+                                                onChange={(e) => setCaptionText(e.target.value)} 
+                                                className="preview-caption-input"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        handleSendAttachments();
+                                                    }
+                                                }}
+                                            />
+                                            <button 
+                                                type="button" 
+                                                className="preview-send-btn" 
+                                                onClick={handleSendAttachments}
+                                            >
+                                                <SendHorizontal size={20} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* CAMERA MODAL */}
+            {cameraOpen && (
+                <div className="camera-modal-overlay">
+                    <div className="camera-modal-content">
+                        {/* Camera Header */}
+                        <div className="camera-header">
+                            <span className="camera-title">Capture Photo</span>
                             <button 
                                 type="button" 
-                                className="preview-close-btn" 
-                                onClick={() => {
-                                    setSelectedFiles([]);
-                                    setPreviewModalOpen(false);
-                                }}
+                                className="camera-close-btn" 
+                                onClick={closeCamera}
                             >
                                 <X size={20} />
                             </button>
-
-                            {/* HD quality toggle (only visible if there are photos) */}
-                            {selectedFiles.some(f => f.type.startsWith("image/")) && (
-                                <div className="preview-hd-toggle-container">
-                                    <button 
-                                        type="button" 
-                                        className={`hd-quality-btn ${hdQuality ? "active" : ""}`}
-                                        onClick={() => setHdQuality(!hdQuality)}
-                                        title={hdQuality ? "HD Quality enabled (Original size)" : "Standard Quality enabled (Compressed)"}
-                                    >
-                                        <span className="hd-badge-text">HD</span>
-                                        <span className="hd-status-text">{hdQuality ? "HD" : "Standard"}</span>
-                                    </button>
-                                </div>
-                            )}
                         </div>
 
-                        {/* Central Preview Area */}
-                        <div className="preview-body">
-                            {selectedFiles[activePreviewIndex].type.startsWith("image/") ? (
-                                <div className="preview-media-container">
-                                    <img 
-                                        src={selectedFiles[activePreviewIndex].previewUrl} 
-                                        alt="Preview" 
-                                        className="preview-img-element"
-                                    />
-                                </div>
-                            ) : selectedFiles[activePreviewIndex].type.startsWith("video/") ? (
-                                <div className="preview-media-container">
+                        {/* Viewport Area */}
+                        <div className="camera-viewport-container">
+                            {!capturedImage ? (
+                                <div className="camera-video-wrapper">
                                     <video 
-                                        src={selectedFiles[activePreviewIndex].previewUrl} 
-                                        controls 
-                                        className="preview-video-element"
+                                        ref={videoRef} 
+                                        autoPlay 
+                                        playsInline 
+                                        className="camera-video-element"
                                     />
                                 </div>
                             ) : (
-                                <div className="preview-doc-container">
-                                    <FileText size={64} className="doc-icon" />
-                                    <span className="doc-name">{selectedFiles[activePreviewIndex].name}</span>
-                                    <span className="doc-size">
-                                        {(selectedFiles[activePreviewIndex].size / 1024 / 1024).toFixed(2)} MB
-                                    </span>
+                                <div className="camera-preview-wrapper">
+                                    <img 
+                                        src={capturedImage} 
+                                        alt="Captured preview" 
+                                        className="camera-preview-image"
+                                    />
                                 </div>
                             )}
                         </div>
 
-                        {/* Footer input and send row */}
-                        <div className="preview-footer">
-                            {/* Horizontal grid of selected files at bottom if more than 1 file */}
-                            {selectedFiles.length > 1 && (
-                                <div className="preview-thumbnails-tray">
-                                    {selectedFiles.map((f, idx) => (
-                                        <div 
-                                            key={idx}
-                                            className={`thumbnail-item ${idx === activePreviewIndex ? "active" : ""}`}
-                                            onClick={() => setActivePreviewIndex(idx)}
+                        {/* Actions Area */}
+                        <div className="camera-actions-container">
+                            {!capturedImage ? (
+                                <div className="camera-capture-controls">
+                                    {hasMultipleCameras && (
+                                        <button 
+                                            type="button" 
+                                            className="camera-control-btn flip-btn"
+                                            onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")}
+                                            title="Switch Camera"
                                         >
-                                            {f.type.startsWith("image/") ? (
-                                                <img src={f.previewUrl} alt="Thumb" />
-                                            ) : f.type.startsWith("video/") ? (
-                                                <div className="video-thumb-placeholder">Video</div>
-                                            ) : (
-                                                <div className="doc-thumb-placeholder">Doc</div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {uploading ? (
-                                <div className="preview-uploading-progress">
-                                    <div className="progress-bar-container">
-                                        <div className="progress-bar-fill" style={{ width: `${uploadProgress}%` }} />
-                                    </div>
-                                    <span className="progress-text">Sending files... {uploadProgress}%</span>
-                                </div>
-                            ) : (
-                                <div className="preview-caption-row">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Add a caption..." 
-                                        value={captionText} 
-                                        onChange={(e) => setCaptionText(e.target.value)} 
-                                        className="preview-caption-input"
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                handleSendAttachments();
-                                            }
-                                        }}
-                                    />
+                                            <RefreshCw size={20} />
+                                        </button>
+                                    )}
                                     <button 
                                         type="button" 
-                                        className="preview-send-btn" 
-                                        onClick={handleSendAttachments}
+                                        className="camera-shutter-btn" 
+                                        onClick={capturePhoto}
+                                        title="Capture Photo"
                                     >
-                                        <SendHorizontal size={20} />
+                                        <div className="camera-shutter-inner" />
+                                    </button>
+                                    {hasMultipleCameras && <div className="camera-spacer" />}
+                                </div>
+                            ) : (
+                                <div className="camera-confirm-controls">
+                                    <button 
+                                        type="button" 
+                                        className="camera-action-btn retake" 
+                                        onClick={() => setCapturedImage(null)}
+                                    >
+                                        Retake
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className="camera-action-btn accept" 
+                                        onClick={useCapturedPhoto}
+                                    >
+                                        Use Photo
                                     </button>
                                 </div>
                             )}
