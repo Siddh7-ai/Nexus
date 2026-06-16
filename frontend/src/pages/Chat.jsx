@@ -201,11 +201,14 @@ function Chat() {
             const token = getAuthToken();
             if (!token) return;
             try {
-                const [usersRes, convsRes] = await Promise.all([
+                const [usersRes, convsRes, profileRes] = await Promise.all([
                     fetch(`${getBackendUrl()}/api/users`, {
                         headers: { "Authorization": `Bearer ${token}` }
                     }),
                     fetch(`${getBackendUrl()}/api/users/conversations`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    }),
+                    fetch(`${getBackendUrl()}/api/user/profile/${username}`, {
                         headers: { "Authorization": `Bearer ${token}` }
                     })
                 ]);
@@ -217,6 +220,10 @@ function Chat() {
                 if (convsRes.ok) {
                     const convsData = await convsRes.json();
                     setConversationUsers(convsData);
+                }
+                if (profileRes.ok) {
+                    const profileData = await profileRes.json();
+                    setOwnProfileData(profileData);
                 }
             } catch (err) {
                 console.error("Error fetching user list or conversations:", err);
@@ -840,7 +847,9 @@ function Chat() {
     // Other user actions
     async function handleBlockToggle() {
         if (!selectedProfileData) return;
-        const endpoint = selectedProfileData.isBlocked ? "unblock" : "block";
+        const targetUsername = selectedProfileData.username;
+        const isCurrentlyBlocked = selectedProfileData.isBlocked;
+        const endpoint = isCurrentlyBlocked ? "unblock" : "block";
         try {
             const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
                 method: "POST",
@@ -848,7 +857,7 @@ function Chat() {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${getAuthToken()}`
                 },
-                body: JSON.stringify({ targetUsername: selectedProfileData.username })
+                body: JSON.stringify({ targetUsername })
             });
             if (response.ok) {
                 setSelectedProfileData(prev => ({
@@ -856,9 +865,56 @@ function Chat() {
                     isBlocked: !prev.isBlocked,
                     canDM: prev.isBlocked ? true : false
                 }));
+                setOwnProfileData(prev => {
+                    if (!prev) return prev;
+                    const blocked = prev.blockedUsers || [];
+                    return {
+                        ...prev,
+                        blockedUsers: isCurrentlyBlocked
+                            ? blocked.filter(u => u !== targetUsername)
+                            : [...blocked, targetUsername]
+                    };
+                });
             }
         } catch (err) {
             console.error(err);
+        }
+    }
+
+    async function handleHeaderBlockToggle() {
+        if (isGuest || !activePrivateName) return;
+        const isCurrentlyBlocked = ownProfileData?.blockedUsers?.includes(activePrivateName);
+        const endpoint = isCurrentlyBlocked ? "unblock" : "block";
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getAuthToken()}`
+                },
+                body: JSON.stringify({ targetUsername: activePrivateName })
+            });
+            if (response.ok) {
+                setOwnProfileData(prev => {
+                    if (!prev) return prev;
+                    const blocked = prev.blockedUsers || [];
+                    return {
+                        ...prev,
+                        blockedUsers: isCurrentlyBlocked
+                            ? blocked.filter(u => u !== activePrivateName)
+                            : [...blocked, activePrivateName]
+                    };
+                });
+                if (selectedProfileData && selectedProfileData.username?.toLowerCase() === activePrivateName.toLowerCase()) {
+                    setSelectedProfileData(prev => ({
+                        ...prev,
+                        isBlocked: !isCurrentlyBlocked,
+                        canDM: isCurrentlyBlocked ? true : false
+                    }));
+                }
+            }
+        } catch (err) {
+            console.error("Error toggling block in header:", err);
         }
     }
 
@@ -1136,6 +1192,9 @@ function Chat() {
                         isPrivate={!!activePrivate}
                         privateUser={onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                        onViewOwnProfile={isGuest ? () => setShowProfileSettings(true) : openOwnProfileSettings}
+                        isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
+                        onToggleBlock={handleHeaderBlockToggle}
                     />
 
                     <OnlineUsers

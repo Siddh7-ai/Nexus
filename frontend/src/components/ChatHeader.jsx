@@ -1,4 +1,5 @@
-import { FiSun, FiMoon } from "react-icons/fi";
+import { useState, useEffect, useRef } from "react";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn } from "react-icons/fi";
 
 function Avatar({ username, avatarSrc, size = 32, className = "" }) {
     if (avatarSrc) {
@@ -25,7 +26,39 @@ function Avatar({ username, avatarSrc, size = 32, className = "" }) {
     );
 }
 
-function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, isGuest, onClearChatClick, theme, onThemeToggle, isPrivate, privateUser, onUserProfileClick }) {
+function ChatHeader({ 
+    username, 
+    onLogout, 
+    chatTitle, 
+    onMenuToggle, 
+    onlineUsers, 
+    isGuest, 
+    onClearChatClick, 
+    theme, 
+    onThemeToggle, 
+    isPrivate, 
+    privateUser, 
+    onUserProfileClick,
+    onViewOwnProfile,
+    isBlocked,
+    onToggleBlock
+}) {
+    const [showDropdown, setShowDropdown] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (!showDropdown) return;
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [showDropdown]);
+
     return (
         <div className="chat-header">
             <div className="chat-header-left">
@@ -51,20 +84,91 @@ function ChatHeader({ username, onLogout, chatTitle, onMenuToggle, onlineUsers, 
             </div>
 
             <div className="chat-header-right">
-                <button className="theme-toggle-btn" onClick={onThemeToggle} aria-label="Toggle theme" style={{ marginRight: '8px' }}>
-                    {theme === "dark" ? <FiSun /> : <FiMoon />}
-                </button>
-                {isGuest && <span className="guest-badge-header">Guest Mode</span>}
-                {username && <span className="active-room-label">{username}{isGuest && <span className="guest-badge">[Guest]</span>}</span>}
-                <button className="clear-chat-btn" onClick={onClearChatClick} title="Clear conversation for you">
-                    Clear Chat
-                </button>
-                <button className="logout-btn" onClick={onLogout}>
-                    {isGuest ? "Sign In" : "Logout"}
-                </button>
+                <div className="header-dropdown-container" ref={dropdownRef}>
+                    <button 
+                        className={`header-menu-trigger ${showDropdown ? 'active' : ''}`} 
+                        onClick={() => setShowDropdown(prev => !prev)}
+                        aria-label="More options"
+                        title="Options"
+                    >
+                        <FiMoreVertical />
+                    </button>
+
+                    {showDropdown && (
+                        <div className="header-dropdown-menu">
+                            {/* 1. Username display (clean, no button box) */}
+                            <div className="header-dropdown-user">
+                                <span className="header-dropdown-username">
+                                    {username}
+                                    {isGuest && <span className="guest-badge" style={{ marginLeft: '6px' }}>[Guest]</span>}
+                                </span>
+                            </div>
+
+                            {/* 2. View Profile */}
+                            <button 
+                                className="header-dropdown-item" 
+                                onClick={() => {
+                                    setShowDropdown(false);
+                                    if (onViewOwnProfile) onViewOwnProfile();
+                                }}
+                            >
+                                <FiUser /> View Profile
+                            </button>
+
+                            {/* 3. Block/Unblock (only in private chat and if not guest) */}
+                            {isPrivate && !isGuest && (
+                                <button 
+                                    className="header-dropdown-item" 
+                                    onClick={() => {
+                                        setShowDropdown(false);
+                                        if (onToggleBlock) onToggleBlock();
+                                    }}
+                                >
+                                    <FiSlash /> {isBlocked ? "Unblock User" : "Block User"}
+                                </button>
+                            )}
+
+                            {/* 4. Theme Toggle */}
+                            <button 
+                                className="header-dropdown-item" 
+                                onClick={() => {
+                                    setShowDropdown(false);
+                                    if (onThemeToggle) onThemeToggle();
+                                }}
+                            >
+                                {theme === "dark" ? <FiSun /> : <FiMoon />}
+                                {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                            </button>
+
+                            {/* 5. Clear Chat */}
+                            <button 
+                                className="header-dropdown-item" 
+                                onClick={() => {
+                                    setShowDropdown(false);
+                                    if (onClearChatClick) onClearChatClick();
+                                }}
+                            >
+                                <FiTrash2 /> Clear Chat
+                            </button>
+
+                            {/* 6. Logout / Sign In */}
+                            <button 
+                                className="header-dropdown-item logout" 
+                                onClick={() => {
+                                    setShowDropdown(false);
+                                    if (onLogout) onLogout();
+                                }}
+                            >
+                                {isGuest ? <FiLogIn /> : <FiLogOut />}
+                                {isGuest ? "Sign In" : "Logout"}
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
 }
 
 export default ChatHeader;
+
