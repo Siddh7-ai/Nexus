@@ -94,6 +94,8 @@ function Chat() {
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [activeReactionMsgId, setActiveReactionMsgId] = useState(null); // Msg ID for custom reaction picker
     const [showClearConfirm, setShowClearConfirm] = useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [blockTargetConfirm, setBlockTargetConfirm] = useState(null); // { username, source }
     const [showProfileSettings, setShowProfileSettings] = useState(false);
     const [newGuestName, setNewGuestName] = useState("");
     const [profileError, setProfileError] = useState("");
@@ -844,14 +846,10 @@ function Chat() {
         };
     }
 
-    // Other user actions
-    async function handleBlockToggle() {
-        if (!selectedProfileData) return;
-        const targetUsername = selectedProfileData.username;
-        const isCurrentlyBlocked = selectedProfileData.isBlocked;
-        const endpoint = isCurrentlyBlocked ? "unblock" : "block";
+    // Helper to perform block/unblock API calls
+    async function performBlockAction(targetUsername, action) {
         try {
-            const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
+            const response = await fetch(`${getBackendUrl()}/api/user/${action}`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -860,61 +858,51 @@ function Chat() {
                 body: JSON.stringify({ targetUsername })
             });
             if (response.ok) {
-                setSelectedProfileData(prev => ({
-                    ...prev,
-                    isBlocked: !prev.isBlocked,
-                    canDM: prev.isBlocked ? true : false
-                }));
+                const isBlockedNow = (action === "block");
+                // Update selectedProfileData if it's currently open for this user
+                if (selectedProfileData && selectedProfileData.username?.toLowerCase() === targetUsername.toLowerCase()) {
+                    setSelectedProfileData(prev => ({
+                        ...prev,
+                        isBlocked: isBlockedNow,
+                        canDM: isBlockedNow ? false : true
+                    }));
+                }
+                // Update ownProfileData
                 setOwnProfileData(prev => {
                     if (!prev) return prev;
                     const blocked = prev.blockedUsers || [];
                     return {
                         ...prev,
-                        blockedUsers: isCurrentlyBlocked
-                            ? blocked.filter(u => u !== targetUsername)
-                            : [...blocked, targetUsername]
+                        blockedUsers: isBlockedNow
+                            ? [...blocked, targetUsername]
+                            : blocked.filter(u => u !== targetUsername)
                     };
                 });
             }
         } catch (err) {
-            console.error(err);
+            console.error(`Error performing ${action} action:`, err);
+        }
+    }
+
+    // Other user actions
+    async function handleBlockToggle() {
+        if (!selectedProfileData) return;
+        const targetUsername = selectedProfileData.username;
+        const isCurrentlyBlocked = selectedProfileData.isBlocked;
+        if (!isCurrentlyBlocked) {
+            setBlockTargetConfirm({ username: targetUsername, source: "profile" });
+        } else {
+            await performBlockAction(targetUsername, "unblock");
         }
     }
 
     async function handleHeaderBlockToggle() {
         if (isGuest || !activePrivateName) return;
         const isCurrentlyBlocked = ownProfileData?.blockedUsers?.includes(activePrivateName);
-        const endpoint = isCurrentlyBlocked ? "unblock" : "block";
-        try {
-            const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${getAuthToken()}`
-                },
-                body: JSON.stringify({ targetUsername: activePrivateName })
-            });
-            if (response.ok) {
-                setOwnProfileData(prev => {
-                    if (!prev) return prev;
-                    const blocked = prev.blockedUsers || [];
-                    return {
-                        ...prev,
-                        blockedUsers: isCurrentlyBlocked
-                            ? blocked.filter(u => u !== activePrivateName)
-                            : [...blocked, activePrivateName]
-                    };
-                });
-                if (selectedProfileData && selectedProfileData.username?.toLowerCase() === activePrivateName.toLowerCase()) {
-                    setSelectedProfileData(prev => ({
-                        ...prev,
-                        isBlocked: !isCurrentlyBlocked,
-                        canDM: isCurrentlyBlocked ? true : false
-                    }));
-                }
-            }
-        } catch (err) {
-            console.error("Error toggling block in header:", err);
+        if (!isCurrentlyBlocked) {
+            setBlockTargetConfirm({ username: activePrivateName, source: "header" });
+        } else {
+            await performBlockAction(activePrivateName, "unblock");
         }
     }
 
@@ -1181,7 +1169,7 @@ function Chat() {
 
                     <ChatHeader
                         username={username}
-                        onLogout={logout}
+                        onLogout={() => setShowLogoutConfirm(true)}
                         chatTitle={chatTitle}
                         onlineUsers={onlineUsers}
                         onMenuToggle={() => setSidebarOpen(v => !v)}
@@ -1192,7 +1180,7 @@ function Chat() {
                         isPrivate={!!activePrivate}
                         privateUser={onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                        onViewOwnProfile={isGuest ? () => setShowProfileSettings(true) : openOwnProfileSettings}
+                        onShowOnlineListClick={() => setShowOnlineList(true)}
                         isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
                         onToggleBlock={handleHeaderBlockToggle}
                     />
@@ -1291,6 +1279,51 @@ function Chat() {
                         <div className="modal-footer-buttons">
                             <button className="modal-btn danger" onClick={handleClearChat}>Clear Chat</button>
                             <button className="modal-btn cancel" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Block Target Confirmation Modal */}
+            {blockTargetConfirm && (
+                <div className="modal-overlay" onClick={() => setBlockTargetConfirm(null)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 360px)' }}>
+                        <div className="modal-header-section">
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Block User?</h3>
+                        </div>
+                        <div className="modal-body-section" style={{ margin: '16px 0', fontSize: '14px', color: 'var(--text)' }}>
+                            <p>Are you sure you want to block <strong>@{blockTargetConfirm.username}</strong>? You will no longer receive direct messages from them.</p>
+                        </div>
+                        <div className="modal-footer-buttons" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button className="modal-btn cancel" onClick={() => setBlockTargetConfirm(null)}>Cancel</button>
+                            <button 
+                                className="modal-btn danger" 
+                                onClick={async () => {
+                                    const target = blockTargetConfirm.username;
+                                    setBlockTargetConfirm(null);
+                                    await performBlockAction(target, "block");
+                                }}
+                            >
+                                Block
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Logout Confirmation Modal */}
+            {showLogoutConfirm && (
+                <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 360px)' }}>
+                        <div className="modal-header-section">
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Confirm Logout</h3>
+                        </div>
+                        <div className="modal-body-section" style={{ margin: '16px 0', fontSize: '14px', color: 'var(--text)' }}>
+                            <p>Are you sure you want to log out? You will need to enter your credentials again to sign in.</p>
+                        </div>
+                        <div className="modal-footer-buttons" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button className="modal-btn cancel" onClick={() => setShowLogoutConfirm(false)}>Cancel</button>
+                            <button className="modal-btn danger" onClick={() => { setShowLogoutConfirm(false); logout(); }}>Log Out</button>
                         </div>
                     </div>
                 </div>

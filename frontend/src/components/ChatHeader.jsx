@@ -39,7 +39,7 @@ function ChatHeader({
     isPrivate, 
     privateUser, 
     onUserProfileClick,
-    onViewOwnProfile,
+    onShowOnlineListClick,
     isBlocked,
     onToggleBlock
 }) {
@@ -109,7 +109,11 @@ function ChatHeader({
                                 className="header-dropdown-item" 
                                 onClick={() => {
                                     setShowDropdown(false);
-                                    if (onViewOwnProfile) onViewOwnProfile();
+                                    if (isPrivate) {
+                                        if (onUserProfileClick) onUserProfileClick(privateUser?.username || chatTitle);
+                                    } else {
+                                        if (onShowOnlineListClick) onShowOnlineListClick();
+                                    }
                                 }}
                             >
                                 <FiUser /> View Profile
