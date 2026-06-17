@@ -43,7 +43,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: url('/light-wallpaper.jpeg') no-repeat center center;
+  background: url('/forest.png') no-repeat center center;
   background-size: cover;
   overflow: hidden;
 }
@@ -3205,7 +3205,7 @@ body.dark-theme .chat-header {
 }
 
 body.dark-theme .chat-container {
-  background: url('/dark-wallpaper.jpeg') no-repeat center center;
+  background: url('/forest_night.png') no-repeat center center;
   background-size: cover;
 }
 

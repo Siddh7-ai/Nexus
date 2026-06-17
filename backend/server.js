@@ -442,12 +442,6 @@ io.on("connection", async (socket) => {
         }
         const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
         socket.emit("oldMessages", { room, messages });
-
-        io.to(room).emit("reply", {
-            username: "System",
-            text: `${socket.username} joined #${room}`,
-            room
-        });
     });
 
     // Join private chat
@@ -838,14 +832,6 @@ io.on("connection", async (socket) => {
                     console.error("Error setting user offline status on disconnect:", err);
                 }
             }
-        }
-
-        if (socket.username) {
-            io.emit("reply", {
-                username: "System",
-                text: `${socket.username} left the chat`,
-                room: "General chat"
-            });
         }
 
         console.log("Disconnected:", socket.id);

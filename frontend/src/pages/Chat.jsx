@@ -1075,9 +1075,13 @@ function Chat() {
                     role: onlineUser.role
                 };
             } else {
+                const dbUser = allUsers.find(
+                    (u) => u.username?.toLowerCase() === cUser.username?.toLowerCase()
+                );
                 return {
                     ...cUser,
-                    displayName: cUser.displayName || cUser.username,
+                    displayName: dbUser?.displayName || cUser.displayName || cUser.username,
+                    avatar: dbUser?.avatar || cUser.avatar,
                     status: "Offline",
                     isOnline: false
                 };
@@ -1170,7 +1174,7 @@ function Chat() {
 
                     <ChatHeader
                         username={username}
-                        onLogout={() => setShowLogoutConfirm(true)}
+                        onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
                         chatTitle={chatTitle}
                         onlineUsers={onlineUsers}
                         onMenuToggle={() => setSidebarOpen(v => !v)}
@@ -1179,7 +1183,10 @@ function Chat() {
                         theme={theme}
                         onThemeToggle={handleThemeToggle}
                         isPrivate={!!activePrivate}
-                        privateUser={onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())}
+                        privateUser={
+                            onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase()) ||
+                            allUsers.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())
+                        }
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                         onShowOnlineListClick={() => setShowOnlineList(true)}
                         isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
