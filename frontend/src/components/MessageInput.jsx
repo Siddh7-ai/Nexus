@@ -29,6 +29,39 @@ const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
 
 import { getBackendUrl } from "../utils/config";
 
+function isElementUnderlined(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    const tagName = node.tagName.toLowerCase();
+    if (tagName === "u" || tagName === "ins") return true;
+    
+    // Check style attribute
+    const styleAttr = node.getAttribute("style") || "";
+    const cleanStyle = styleAttr.replace(/\s+/g, "").toLowerCase();
+    if (cleanStyle.includes("text-decoration:underline") || 
+        cleanStyle.includes("text-decoration-line:underline")) {
+        return true;
+    }
+    
+    // Check inline style properties
+    try {
+        const textDec = node.style?.textDecoration || "";
+        const textDecLine = node.style?.textDecorationLine || "";
+        if (textDec.includes("underline") || textDecLine.includes("underline")) {
+            return true;
+        }
+    } catch (e) {}
+    
+    // Check class names
+    try {
+        if (node.classList?.contains("underline") || 
+            (node.className && typeof node.className === "string" && node.className.includes("underline"))) {
+            return true;
+        }
+    } catch (e) {}
+    
+    return false;
+}
+
 function htmlToMarkdown(node) {
     if (!node) return "";
     
@@ -55,6 +88,11 @@ function htmlToMarkdown(node) {
         node.childNodes.forEach(child => {
             childrenContent += htmlToMarkdown(child);
         });
+
+        // Wrap with u tag if the element has underline styling (excluding u/ins to avoid wrapping twice)
+        if (isElementUnderlined(node) && tagName !== "u" && tagName !== "ins") {
+            childrenContent = childrenContent ? `<u>${childrenContent}</u>` : "";
+        }
         
         switch (tagName) {
             case "strong":
@@ -64,7 +102,10 @@ function htmlToMarkdown(node) {
             case "i":
                 return childrenContent ? `*${childrenContent}*` : "";
             case "u":
+            case "ins":
                 return childrenContent ? `<u>${childrenContent}</u>` : "";
+            case "span":
+                return childrenContent;
             case "del":
             case "s":
             case "strike":
@@ -867,6 +908,7 @@ function MessageInput({
         const input = inputRef.current;
         if (!input) return;
         
+        console.log("DEBUG EDITOR HTML:", input.innerHTML);
         const nextMarkdown = getMarkdownFromHtml(input.innerHTML);
         handleTyping(nextMarkdown);
     }

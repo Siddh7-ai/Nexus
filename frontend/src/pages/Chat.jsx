@@ -538,6 +538,7 @@ function Chat() {
 
         if (!realAttachment && !message.trim()) return;
 
+        console.log("DEBUG SENDING MESSAGE:", message);
         const msgData = realAttachment ? { ...realAttachment } : { text: message };
         if (activePrivate) {
             msgData.privateChatId = activePrivate;

@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { ArrowDown, FileText, Download, Film, X } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 
+const customSchema = {
+    ...defaultSchema,
+    tagNames: [...(defaultSchema.tagNames || []), "u"]
+};
 
 function formatTimestamp(dateStr) {
     if (!dateStr) return "";
@@ -418,9 +423,10 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                         <>
                                             {msg.text && (
                                                 <div className="message-text markdown-content">
+                                                    {console.log("DEBUG RENDERING MESSAGE TEXT:", msg.text)}
                                                     <ReactMarkdown 
                                                         remarkPlugins={[remarkGfm]} 
-                                                        rehypePlugins={[rehypeSanitize]}
+                                                        rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
                                                         components={{
                                                             a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
                                                             p: ({ node, ...props }) => <span {...props} />
