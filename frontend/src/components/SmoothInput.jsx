@@ -1,4 +1,4 @@
-import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
+import { motion, useMotionValue, useReducedMotion, animate } from "framer-motion";
 import React, { useEffect, useRef, useState } from "react";
 
 const PASSWORD_CHAR = navigator.userAgent.match(/firefox|fxios/i) ? "\u25CF" : "\u2022";
@@ -29,12 +29,13 @@ export const SmoothInput = ({
   const isControlled = value !== undefined;
   const inputValue = isControlled ? String(value) : internalValue;
 
-  const springCaretX = useSpring(
-    caretX,
-    prefersReducedMotion
-      ? { stiffness: 10000, damping: 100, mass: 0.1 }
-      : { stiffness: 500, damping: 30, mass: 0.5 },
-  );
+  const prevValueRef = useRef("");
+  const prevCaretIndexRef = useRef(0);
+  const [isFocused, setIsFocused] = useState(false);
+  const [isCaretActive, setIsCaretActive] = useState(false);
+  const caretIdleTimeoutRef = useRef(null);
+  const activeAnimationRef = useRef(null);
+  const prevTargetXRef = useRef(0);
 
   const cachedStylesRef = useRef(null);
   const updateScheduledRef = useRef(false);
@@ -190,7 +191,43 @@ export const SmoothInput = ({
     const isCaretVisible =
       caretPosition >= minX && caretPosition <= maxX + 1;
 
-    caretX.set(Math.min(caretPosition, maxX));
+    const targetX = Math.min(caretPosition, maxX);
+
+    const currentValue = target.value;
+    const prevValue = prevValueRef.current || "";
+    const prevCaretIndex = prevCaretIndexRef.current || 0;
+    const prevTargetX = prevTargetXRef.current || 0;
+
+    if (currentValue === prevValue && caretIndex === prevCaretIndex && targetX === prevTargetX) {
+      return;
+    }
+
+    prevValueRef.current = currentValue;
+    prevCaretIndexRef.current = caretIndex;
+    prevTargetXRef.current = targetX;
+
+    const isTyping =
+      currentValue.length === prevValue.length + 1 &&
+      caretIndex === prevCaretIndex + 1;
+
+    activeAnimationRef.current?.stop();
+
+    if (isTyping && !prefersReducedMotion) {
+      activeAnimationRef.current = animate(caretX, targetX, {
+        type: "spring",
+        stiffness: 500,
+        damping: 30,
+        mass: 0.5
+      });
+    } else {
+      caretX.set(targetX);
+    }
+
+    setIsCaretActive(true);
+    if (caretIdleTimeoutRef.current) clearTimeout(caretIdleTimeoutRef.current);
+    caretIdleTimeoutRef.current = setTimeout(() => {
+      setIsCaretActive(false);
+    }, 500);
 
     if (!isCaretVisible || hasSelection) {
       caretOpacity.set(0);
@@ -284,11 +321,15 @@ export const SmoothInput = ({
           scheduleUpdateCaret(e.target);
         }}
         onFocus={(e) => {
+          setIsFocused(true);
+          setIsCaretActive(false);
           cachedStylesRef.current = null;
           updateCaretRef.current(e.target);
           onFocus?.(e);
         }}
         onBlur={(e) => {
+          setIsFocused(false);
+          if (caretIdleTimeoutRef.current) clearTimeout(caretIdleTimeoutRef.current);
           caretOpacityRef.current.set(0);
           onBlur?.(e);
         }}
@@ -308,8 +349,9 @@ export const SmoothInput = ({
         }}
       />
       <motion.div
+        className={isFocused && !isCaretActive ? "caret-blink" : ""}
         style={{
-          x: springCaretX,
+          x: caretX,
           opacity: caretOpacity,
           position: "absolute",
           pointerEvents: "none",

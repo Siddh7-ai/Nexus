@@ -24,7 +24,7 @@ import {
     Crop
 } from "lucide-react";
 import { SmoothInput } from "./SmoothInput";
-import { motion, useMotionValue, useSpring } from "framer-motion";
+import { motion, useMotionValue, animate } from "framer-motion";
 
 // Lazy load the full emoji picker for performance
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -341,8 +341,14 @@ function MessageInput({
     const editorCaretOpacity = useMotionValue(0);
     const editorCaretHeight = useMotionValue(20);
 
-    const springEditorCaretX = useSpring(editorCaretX, { stiffness: 600, damping: 35, mass: 0.4 });
-    const springEditorCaretY = useSpring(editorCaretY, { stiffness: 600, damping: 35, mass: 0.4 });
+    const prevTextRef = useRef("");
+    const [isFocused, setIsFocused] = useState(false);
+    const [isCaretActive, setIsCaretActive] = useState(false);
+    const caretIdleTimeoutRef = useRef(null);
+    const activeAnimXRef = useRef(null);
+    const activeAnimYRef = useRef(null);
+    const prevXRef = useRef(0);
+    const prevYRef = useRef(0);
 
     const updateEditorCaret = () => {
         const editor = inputRef.current;
@@ -388,8 +394,48 @@ function MessageInput({
             const y = caretRect.top - editorRect.top;
             const h = caretRect.height || 20;
 
-            editorCaretX.set(x);
-            editorCaretY.set(y);
+            const currentText = editor.textContent || "";
+            const prevText = prevTextRef.current || "";
+            const prevX = prevXRef.current || 0;
+            const prevY = prevYRef.current || 0;
+
+            if (currentText === prevText && x === prevX && y === prevY) {
+                return;
+            }
+
+            prevTextRef.current = currentText;
+            prevXRef.current = x;
+            prevYRef.current = y;
+
+            const isTyping = currentText.length === prevText.length + 1;
+
+            activeAnimXRef.current?.stop();
+            activeAnimYRef.current?.stop();
+
+            if (isTyping) {
+                activeAnimXRef.current = animate(editorCaretX, x, {
+                    type: "spring",
+                    stiffness: 600,
+                    damping: 35,
+                    mass: 0.4
+                });
+                activeAnimYRef.current = animate(editorCaretY, y, {
+                    type: "spring",
+                    stiffness: 600,
+                    damping: 35,
+                    mass: 0.4
+                });
+            } else {
+                editorCaretX.set(x);
+                editorCaretY.set(y);
+            }
+
+            setIsCaretActive(true);
+            if (caretIdleTimeoutRef.current) clearTimeout(caretIdleTimeoutRef.current);
+            caretIdleTimeoutRef.current = setTimeout(() => {
+                setIsCaretActive(false);
+            }, 500);
+
             editorCaretHeight.set(h);
             editorCaretOpacity.set(1);
         } else {
@@ -1155,12 +1201,29 @@ function MessageInput({
         if (!input) return;
         
         const currentMarkdown = getMarkdownFromHtml(input.innerHTML);
-        if (currentMarkdown !== message) {
-            if (!message) {
+        let updated = false;
+        if (!message) {
+            if (input.innerHTML !== "") {
                 input.innerHTML = "";
-            } else {
-                input.innerHTML = markdownToHtml(message);
+                updated = true;
             }
+        } else if (currentMarkdown !== message) {
+            input.innerHTML = markdownToHtml(message);
+            updated = true;
+        }
+
+        if (updated) {
+            setTimeout(() => {
+                if (document.activeElement === input) {
+                    const range = document.createRange();
+                    const sel = window.getSelection();
+                    range.selectNodeContents(input);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+                updateEditorCaret();
+            }, 0);
         }
     }, [message]);
 
@@ -1472,10 +1535,14 @@ function MessageInput({
                             updateEditorCaret();
                         }}
                         onFocus={(e) => {
+                            setIsFocused(true);
+                            setIsCaretActive(false);
                             updateActiveStyles(e);
                             updateEditorCaret();
                         }}
                         onBlur={() => {
+                            setIsFocused(false);
+                            if (caretIdleTimeoutRef.current) clearTimeout(caretIdleTimeoutRef.current);
                             setActiveStyles([]);
                             editorCaretOpacity.set(0);
                         }}
@@ -1532,9 +1599,10 @@ function MessageInput({
                         }}
                     />
                     <motion.div
+                        className={isFocused && !isCaretActive ? "caret-blink" : ""}
                         style={{
-                            x: springEditorCaretX,
-                            y: springEditorCaretY,
+                            x: editorCaretX,
+                            y: editorCaretY,
                             opacity: editorCaretOpacity,
                             height: editorCaretHeight,
                             position: "absolute",

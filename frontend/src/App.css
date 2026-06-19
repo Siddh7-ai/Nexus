@@ -1186,6 +1186,15 @@ body.dark-theme .composer-textarea-editable:focus {
   pointer-events: none;
 }
 
+@keyframes caret-blink {
+  0%, 100% { opacity: 1 !important; }
+  50% { opacity: 0 !important; }
+}
+
+.caret-blink {
+  animation: caret-blink 1s step-end infinite;
+}
+
 /* WYSIWYG Editor Inner HTML Elements */
 .composer-textarea-editable strong {
   font-weight: 800;

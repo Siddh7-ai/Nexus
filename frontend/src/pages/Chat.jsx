@@ -91,6 +91,43 @@ function Chat() {
     const [activeRoom, setActiveRoom] = useState("General chat");
     const [activePrivate, setActivePrivate] = useState(null); // privateChatId
     const [activePrivateName, setActivePrivateName] = useState(""); // other username
+
+    const [drafts, setDrafts] = useState({});
+
+    const messageRef = useRef(message);
+    useEffect(() => {
+        messageRef.current = message;
+    }, [message]);
+
+    const draftsRef = useRef(drafts);
+    useEffect(() => {
+        draftsRef.current = drafts;
+    }, [drafts]);
+
+    const prevChatKeyRef = useRef(null);
+    useEffect(() => {
+        const currentChatKey = activePrivate ? `dm:${activePrivate}` : (activeRoom ? `room:${activeRoom}` : null);
+        const prevChatKey = prevChatKeyRef.current;
+
+        if (prevChatKey !== currentChatKey) {
+            // Save draft of the previous chat if it existed
+            if (prevChatKey) {
+                const latestMsg = messageRef.current;
+                setDrafts(prev => {
+                    const next = { ...prev, [prevChatKey]: latestMsg };
+                    draftsRef.current = next;
+                    return next;
+                });
+            }
+
+            // Load draft for the new chat
+            const newDraft = currentChatKey ? (draftsRef.current[currentChatKey] || "") : "";
+            setMessage(newDraft);
+
+            // Update ref
+            prevChatKeyRef.current = currentChatKey;
+        }
+    }, [activeRoom, activePrivate]);
     const [editingMsg, setEditingMsg] = useState(null); // { _id, text }
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
@@ -617,6 +654,11 @@ function Chat() {
             setJoinError(err);
         });
 
+        newSocket.on("error", (err) => {
+            console.error("Socket error event received:", err);
+            alert(err.message || "An error occurred on the socket connection.");
+        });
+
         newSocket.on("roomDeleted", ({ roomName }) => {
             if (activeRoomRef.current === roomName) {
                 alert(`The private room #${roomName} has been deleted by the admin.`);
@@ -928,6 +970,15 @@ function Chat() {
         socketRef.current.emit("message", msgData);
         if (!realAttachment) {
             setMessage("");
+            const currentKey = activePrivate ? `dm:${activePrivate}` : (activeRoom ? `room:${activeRoom}` : null);
+            if (currentKey) {
+                setDrafts(prev => {
+                    const next = { ...prev };
+                    delete next[currentKey];
+                    draftsRef.current = next;
+                    return next;
+                });
+            }
         }
         socketRef.current.emit("stopTyping", {
             room: activeRoom,
@@ -1187,7 +1238,7 @@ function Chat() {
     function saveCroppedImage() {
         if (!cropImageSrc) return;
         const canvas = document.createElement("canvas");
-        const canvasSize = 1600; // Output ultra high-quality resolution (1600x1600 pixels)
+        const canvasSize = 500; // Output optimized resolution (500x500 pixels)
         canvas.width = canvasSize;
         canvas.height = canvasSize;
         

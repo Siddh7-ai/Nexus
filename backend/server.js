@@ -176,6 +176,7 @@ app.use(express.static(path.join(__dirname, "../frontend/dist")));
 const server = http.createServer(app);
 
 const io = new Server(server, {
+    maxHttpBufferSize: 1e7,
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -404,7 +405,7 @@ io.on("connection", async (socket) => {
             try {
                 const customRooms = await Room.find({ members: socket.userId });
                 customRooms.forEach(room => {
-                    socket.join(room.name);
+                    socket.join(room._id.toString());
                 });
                 const populatedRooms = await Room.find({ members: socket.userId })
                     .sort({ createdAt: -1 })
@@ -423,10 +424,14 @@ io.on("connection", async (socket) => {
             const unreadCounts = {};
             
             // Build list of accessible rooms for the user
-            const accessibleRooms = ["General chat", "Project chat", "Study chat"];
+            const accessibleRoomIds = ["General chat", "Project chat", "Study chat"];
+            const customRoomMap = {};
             if (socket.userId && !socket.userId.startsWith("guest_")) {
                 const userRooms = await Room.find({ members: socket.userId });
-                userRooms.forEach(r => accessibleRooms.push(r.name));
+                userRooms.forEach(r => {
+                    accessibleRoomIds.push(r._id.toString());
+                    customRoomMap[r._id.toString()] = r.name;
+                });
             }
 
             const unreadMessages = await Message.find({
@@ -434,7 +439,7 @@ io.on("connection", async (socket) => {
                 seenBy: { $ne: socket.username },
                 deletedFor: { $ne: socket.username },
                 $or: [
-                    { room: { $in: accessibleRooms } },
+                    { room: { $in: accessibleRoomIds } },
                     { privateChatId: { $regex: new RegExp(`(^|_)${socket.username}(_|$)`, "i") } }
                 ]
             });
@@ -446,7 +451,9 @@ io.on("connection", async (socket) => {
                 if (clearedAt && msg.createdAt <= clearedAt) {
                     continue;
                 }
-                unreadCounts[chatKey] = (unreadCounts[chatKey] || 0) + 1;
+                const isCustom = mongoose.Types.ObjectId.isValid(chatKey);
+                const clientKey = isCustom ? (customRoomMap[chatKey] || chatKey) : chatKey;
+                unreadCounts[clientKey] = (unreadCounts[clientKey] || 0) + 1;
             }
             socket.emit("unreadCounts", unreadCounts);
         } catch (err) {
@@ -459,68 +466,113 @@ io.on("connection", async (socket) => {
     // Join a chat room
     socket.on("joinRoom", async (room) => {
         try {
-            const roomDoc = await Room.findOne({ name: room });
+            const userId = socket.request.user?.id;
+            let roomDoc = null;
+            if (socket.role !== "guest" && userId) {
+                if (mongoose.Types.ObjectId.isValid(room)) {
+                    roomDoc = await Room.findById(room);
+                } else {
+                    roomDoc = await Room.findOne({ name: room, members: userId });
+                }
+            }
+
             if (roomDoc) {
                 if (!socket.request || !socket.request.user) {
                     socket.emit("error", { message: "Access denied. Login required." });
                     return;
                 }
-                const userId = socket.request.user.id;
-                const isMember = roomDoc.members.includes(userId);
+                const isMember = roomDoc.members.some(m => m.toString() === userId.toString());
                 if (!isMember) {
                     socket.emit("joinError", "You are not a member of this private room.");
                     socket.emit("error", { message: "Access denied. You are not a member of this private room." });
                     return;
                 }
                 
-                const populated = await Room.findOne({ name: room })
+                const populated = await Room.findById(roomDoc._id)
                     .populate("admin", "username displayName avatar")
                     .populate("members", "username displayName avatar _id status");
                     
                 socket.emit("activeRoomDetails", populated);
+
+                const uniqueRoomId = roomDoc._id.toString();
+                socket.join(uniqueRoomId);
+
+                // Mark room messages as seen on join
+                if (socket.username) {
+                    try {
+                        await Message.updateMany(
+                            {
+                                room: uniqueRoomId,
+                                privateChatId: null,
+                                username: { $ne: socket.username },
+                                seenBy: { $ne: socket.username }
+                            },
+                            { $push: { seenBy: socket.username } }
+                        );
+                    } catch (err) {
+                        console.error("Error marking room messages as seen:", err);
+                    }
+                }
+
+                const clearedAt = await getChatClearedAt(socket.username, uniqueRoomId);
+                const messagesQuery = {
+                    room: uniqueRoomId,
+                    privateChatId: null,
+                    deletedFor: { $ne: socket.username }
+                };
+                if (clearedAt) {
+                    messagesQuery.createdAt = { $gt: clearedAt };
+                }
+                const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
+                const mappedMessages = messages.map(msg => {
+                    const mObj = msg.toObject();
+                    mObj.room = roomDoc.name;
+                    return mObj;
+                });
+                socket.emit("oldMessages", { room: roomDoc.name, messages: mappedMessages });
             } else {
                 if (!canAccessRoom(socket.role, room)) {
                     socket.emit("error", { message: "Access denied. Login required." });
                     return;
                 }
                 socket.emit("activeRoomDetails", { name: room, isPrivate: false });
+
+                socket.join(room);
+
+                // Mark room messages as seen on join
+                if (socket.username) {
+                    try {
+                        await Message.updateMany(
+                            {
+                                room,
+                                privateChatId: null,
+                                username: { $ne: socket.username },
+                                seenBy: { $ne: socket.username }
+                            },
+                            { $push: { seenBy: socket.username } }
+                        );
+                    } catch (err) {
+                        console.error("Error marking room messages as seen:", err);
+                    }
+                }
+
+                const clearedAt = await getChatClearedAt(socket.username, room);
+                const messagesQuery = {
+                    room,
+                    privateChatId: null,
+                    deletedFor: { $ne: socket.username }
+                };
+                if (clearedAt) {
+                    messagesQuery.createdAt = { $gt: clearedAt };
+                }
+                const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
+                socket.emit("oldMessages", { room, messages });
             }
         } catch (err) {
             console.error("Error checking private room permission:", err);
             socket.emit("error", { message: "Server error joining room." });
             return;
         }
-
-        socket.join(room);
-
-        // Mark room messages as seen on join
-        if (socket.username) {
-            try {
-                await Message.updateMany(
-                    {
-                        room,
-                        privateChatId: null,
-                        username: { $ne: socket.username },
-                        seenBy: { $ne: socket.username }
-                    },
-                    { $push: { seenBy: socket.username } }
-                );
-            } catch (err) {
-                console.error("Error marking room messages as seen:", err);
-            }
-        }
-
-        const clearedAt = await getChatClearedAt(socket.username, room);
-        const messagesQuery = {
-            room,
-            privateChatId: null,
-            deletedFor: { $ne: socket.username }
-        };
-        if (clearedAt) {
-            messagesQuery.createdAt = { $gt: clearedAt };
-        }
-        const messages = await Message.find(messagesQuery).sort({ createdAt: 1 });
-        socket.emit("oldMessages", { room, messages });
     });
 
     // Join private chat
@@ -560,8 +612,7 @@ io.on("connection", async (socket) => {
         io.to(`private_${privateChatId}`).emit("messagesSeenUpdate", updatedMsgs);
     });
 
-    // Typing
-    socket.on("typing", ({ room, privateChatId }) => {
+    socket.on("typing", async ({ room, privateChatId }) => {
         if (privateChatId) {
             if (socket.role === "guest") return;
             socket.to(`private_${privateChatId}`).emit("typing", {
@@ -574,20 +625,46 @@ io.on("connection", async (socket) => {
             });
         } else {
             const targetRoom = room || "General chat";
-            if (!canAccessRoom(socket.role, targetRoom)) return;
-            socket.to(targetRoom).emit("typing", {
+            const userId = socket.request.user?.id;
+            let roomDoc = null;
+            if (socket.role !== "guest" && userId) {
+                if (mongoose.Types.ObjectId.isValid(targetRoom)) {
+                    roomDoc = await Room.findById(targetRoom);
+                } else {
+                    roomDoc = await Room.findOne({ name: targetRoom, members: userId });
+                }
+            }
+
+            let targetChannel = targetRoom;
+            let roomNameValue = targetRoom;
+
+            try {
+                if (roomDoc) {
+                    if (!socket.request || !socket.request.user) return;
+                    const isMember = roomDoc.members.some(m => m.toString() === userId.toString());
+                    if (!isMember) return;
+                    targetChannel = roomDoc._id.toString();
+                    roomNameValue = roomDoc.name;
+                } else {
+                    if (!canAccessRoom(socket.role, targetRoom)) return;
+                }
+            } catch (err) {
+                console.error("Error verifying typing room permissions:", err);
+                return;
+            }
+            socket.to(targetChannel).emit("typing", {
                 username: socket.username,
                 role: socket.role,
                 displayName: socket.displayName || socket.username,
                 avatar: socket.avatar || "",
-                room: targetRoom,
+                room: roomNameValue,
                 privateChatId: null
             });
         }
     });
 
     // Stop Typing
-    socket.on("stopTyping", ({ room, privateChatId }) => {
+    socket.on("stopTyping", async ({ room, privateChatId }) => {
         if (privateChatId) {
             if (socket.role === "guest") return;
             socket.to(`private_${privateChatId}`).emit("stopTyping", {
@@ -597,9 +674,25 @@ io.on("connection", async (socket) => {
             });
         } else {
             const targetRoom = room || "General chat";
-            socket.to(targetRoom).emit("stopTyping", {
+            const userId = socket.request.user?.id;
+            let roomDoc = null;
+            if (socket.role !== "guest" && userId) {
+                if (mongoose.Types.ObjectId.isValid(targetRoom)) {
+                    roomDoc = await Room.findById(targetRoom);
+                } else {
+                    roomDoc = await Room.findOne({ name: targetRoom, members: userId });
+                }
+            }
+
+            let targetChannel = targetRoom;
+            let roomNameValue = targetRoom;
+            if (roomDoc) {
+                targetChannel = roomDoc._id.toString();
+                roomNameValue = roomDoc.name;
+            }
+            socket.to(targetChannel).emit("stopTyping", {
                 username: socket.username,
-                room: targetRoom,
+                room: roomNameValue,
                 privateChatId: null
             });
         }
@@ -608,6 +701,12 @@ io.on("connection", async (socket) => {
     // Send message (room or private)
     socket.on("message", async (data) => {
         try {
+            let targetRoomName = data.privateChatId
+                ? `private_${data.privateChatId}`
+                : (data.room || "General chat");
+            let dbRoomValue = data.room || "General chat";
+            let roomNameValue = data.room || "General chat";
+
             if (data.privateChatId) {
                 if (socket.role === "guest") {
                     socket.emit("error", { message: "Access denied. Login required." });
@@ -615,15 +714,36 @@ io.on("connection", async (socket) => {
                 }
             } else {
                 const room = data.room || "General chat";
-                if (!canAccessRoom(socket.role, room)) {
-                    socket.emit("error", { message: "Access denied. Login required." });
-                    return;
+                const userId = socket.request.user?.id;
+                let roomDoc = null;
+                if (socket.role !== "guest" && userId) {
+                    if (mongoose.Types.ObjectId.isValid(room)) {
+                        roomDoc = await Room.findById(room);
+                    } else {
+                        roomDoc = await Room.findOne({ name: room, members: userId });
+                    }
+                }
+
+                if (roomDoc) {
+                    if (!socket.request || !socket.request.user) {
+                        socket.emit("error", { message: "Access denied. Login required." });
+                        return;
+                    }
+                    const isMember = roomDoc.members.some(m => m.toString() === userId.toString());
+                    if (!isMember) {
+                        socket.emit("error", { message: "Access denied. You are not a member of this private room." });
+                        return;
+                    }
+                    targetRoomName = roomDoc._id.toString();
+                    dbRoomValue = roomDoc._id.toString();
+                    roomNameValue = roomDoc.name;
+                } else {
+                    if (!canAccessRoom(socket.role, room)) {
+                        socket.emit("error", { message: "Access denied. Login required." });
+                        return;
+                    }
                 }
             }
-
-            const targetRoomName = data.privateChatId
-                ? `private_${data.privateChatId}`
-                : (data.room || "General chat");
 
             const activeUsernames = [socket.username];
             const socketIds = io.sockets.adapter.rooms.get(targetRoomName);
@@ -654,7 +774,7 @@ io.on("connection", async (socket) => {
                 msgData.privateChatId = data.privateChatId;
                 msgData.room = null;
             } else {
-                msgData.room = data.room || "General chat";
+                msgData.room = dbRoomValue;
                 msgData.privateChatId = null;
             }
 
@@ -670,7 +790,9 @@ io.on("connection", async (socket) => {
                     io.to(`user_${recipient.toLowerCase()}`).emit("reply", savedMessage);
                 }
             } else {
-                io.to(msgData.room).emit("reply", savedMessage);
+                const clientMsg = savedMessage.toObject();
+                clientMsg.room = roomNameValue;
+                io.to(targetRoomName).emit("reply", clientMsg);
             }
         } catch (error) {
             console.log(error);
@@ -815,13 +937,30 @@ io.on("connection", async (socket) => {
         try {
             if (!socket.username || !chatId) return;
 
+            let targetChatId = chatId;
+            const isPrivate = chatId.includes("_");
+            
+            if (!isPrivate) {
+                const userId = socket.request.user?.id;
+                let roomDoc = null;
+                if (socket.role !== "guest" && userId) {
+                    if (mongoose.Types.ObjectId.isValid(chatId)) {
+                        roomDoc = await Room.findById(chatId);
+                    } else {
+                        roomDoc = await Room.findOne({ name: chatId, members: userId });
+                    }
+                }
+                if (roomDoc) {
+                    targetChatId = roomDoc._id.toString();
+                }
+            }
+
             await ClearedChat.findOneAndUpdate(
-                { username: socket.username, chatId },
+                { username: socket.username, chatId: targetChatId },
                 { clearedAt: new Date() },
                 { upsert: true, new: true }
             );
 
-            const isPrivate = chatId.includes("_");
             if (isPrivate) {
                 socket.emit("oldMessages", { privateChatId: chatId, messages: [] });
             } else {
@@ -1095,7 +1234,7 @@ io.on("connection", async (socket) => {
                 return;
             }
             
-            if (room.members.includes(userId)) {
+            if (room.members.some(m => m.toString() === userId.toString())) {
                 socket.emit("joinError", "Already a member");
                 return;
             }
@@ -1127,29 +1266,38 @@ io.on("connection", async (socket) => {
             const userId = socket.request.user.id;
             const username = socket.request.user.username;
             
-            const room = await Room.findOne({ name: roomName });
+            let room = null;
+            if (mongoose.Types.ObjectId.isValid(roomName)) {
+                room = await Room.findById(roomName);
+            } else {
+                room = await Room.findOne({ name: roomName, members: userId });
+            }
+
             if (!room) {
                 socket.emit("error", { message: "Room not found." });
                 return;
             }
             
+            const uniqueRoomId = room._id.toString();
+            const realRoomName = room.name;
+
             if (room.admin.toString() === userId.toString()) {
-                io.to(roomName).emit("roomDeleted", { roomName });
+                io.to(uniqueRoomId).emit("roomDeleted", { roomName: realRoomName });
                 
-                const socketsInRoom = await io.in(roomName).fetchSockets();
-                socketsInRoom.forEach(s => s.leave(roomName));
+                const socketsInRoom = await io.in(uniqueRoomId).fetchSockets();
+                socketsInRoom.forEach(s => s.leave(uniqueRoomId));
                 
                 await Room.findByIdAndDelete(room._id);
-                console.log(`Room ${roomName} deleted by admin: ${username}`);
+                console.log(`Room ${realRoomName} deleted by admin: ${username}`);
             } else {
                 await Room.findByIdAndUpdate(room._id, { $pull: { members: userId } });
-                socket.leave(roomName);
-                console.log(`User ${username} left room: ${roomName}`);
+                socket.leave(uniqueRoomId);
+                console.log(`User ${username} left room: ${realRoomName}`);
                 
                 const updatedRoom = await Room.findById(room._id)
                     .populate("admin", "username displayName avatar")
                     .populate("members", "username displayName avatar _id status");
-                io.to(roomName).emit("roomMemberUpdate", updatedRoom);
+                io.to(uniqueRoomId).emit("roomMemberUpdate", updatedRoom);
             }
             
             const rooms = await Room.find({ members: userId })
@@ -1168,7 +1316,13 @@ io.on("connection", async (socket) => {
             const userId = socket.request.user.id;
             const username = socket.request.user.username;
             
-            const room = await Room.findOne({ name: roomName });
+            let room = null;
+            if (mongoose.Types.ObjectId.isValid(roomName)) {
+                room = await Room.findById(roomName);
+            } else {
+                room = await Room.findOne({ name: roomName, admin: userId });
+            }
+
             if (!room) {
                 socket.emit("error", { message: "Room not found." });
                 return;
@@ -1179,13 +1333,16 @@ io.on("connection", async (socket) => {
                 return;
             }
             
-            io.to(roomName).emit("roomDeleted", { roomName });
+            const uniqueRoomId = room._id.toString();
+            const realRoomName = room.name;
+
+            io.to(uniqueRoomId).emit("roomDeleted", { roomName: realRoomName });
             
-            const socketsInRoom = await io.in(roomName).fetchSockets();
-            socketsInRoom.forEach(s => s.leave(roomName));
+            const socketsInRoom = await io.in(uniqueRoomId).fetchSockets();
+            socketsInRoom.forEach(s => s.leave(uniqueRoomId));
             
             await Room.findByIdAndDelete(room._id);
-            console.log(`Room ${roomName} deleted by admin: ${username}`);
+            console.log(`Room ${realRoomName} deleted by admin: ${username}`);
             
             const rooms = await Room.find({ members: userId })
                 .sort({ createdAt: -1 })
@@ -1221,7 +1378,7 @@ io.on("connection", async (socket) => {
             try {
                 const customRooms = await Room.find({ members: socket.userId });
                 customRooms.forEach(room => {
-                    socket.leave(room.name);
+                    socket.leave(room._id.toString());
                 });
             } catch (err) {
                 console.error("Error leaving custom rooms on disconnect:", err);
