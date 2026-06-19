@@ -482,13 +482,13 @@ body.dark-theme .features-page {
   background:
     radial-gradient(circle at 80% 10%, rgba(86, 72, 199, 0.2), transparent 26%),
     radial-gradient(circle at 16% 72%, rgba(20, 184, 166, 0.2), transparent 28%),
-    #0f1013;
+    #000000;
   color: #f3f4f6;
 }
 
 body.dark-theme .features-hero {
-  border-color: #2a2d35;
-  background: rgba(21, 23, 28, 0.86);
+  border-color: #161616;
+  background: rgba(0, 0, 0, 0.86);
 }
 
 body.dark-theme .features-brand {
@@ -497,16 +497,16 @@ body.dark-theme .features-brand {
 
 body.dark-theme .features-nav-link {
   color: #f3f4f6;
-  border-color: #2a2d35;
+  border-color: #161616;
 }
 
 body.dark-theme .reveal-header {
-  border-bottom-color: #2a2d35;
+  border-bottom-color: #161616;
 }
 
 body.dark-theme .reveal-header h2 span {
   background: #f3f4f6;
-  color: #0f1013;
+  color: #000000;
 }
 
 body.dark-theme .reveal-progress span {
@@ -514,23 +514,23 @@ body.dark-theme .reveal-progress span {
 }
 
 body.dark-theme .feature-grid-container {
-  border-color: #2a2d35;
-  background: #15171c;
+  border-color: #161616;
+  background: #000000;
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
 }
 
 body.dark-theme .feature-flip-card {
-  border-right-color: #2a2d35;
-  border-bottom-color: #2a2d35;
+  border-right-color: #161616;
+  border-bottom-color: #161616;
 }
 
 body.dark-theme .feature-card-back {
-  background: #15171c;
-  color: #2a2d35;
+  background: #000000;
+  color: #161616;
 }
 
 body.dark-theme .feature-card-front {
-  background: #15171c;
+  background: #000000;
   color: #f3f4f6;
 }
 
@@ -548,18 +548,18 @@ body.dark-theme .feature-card-front strong {
 
 body.dark-theme .feature-status.green {
   background: #f3f4f6;
-  color: #15171c;
+  color: #000000;
 }
 
 body.dark-theme .feature-status.blue {
-  background: #1f2229;
+  background: #121212;
   color: #8b9099;
 }
 
 /* Hover styles in dark mode */
 body.dark-theme .feature-flip-card:hover .feature-card-face {
   background: #f3f4f6;
-  color: #0f1013;
+  color: #000000;
 }
 
 body.dark-theme .feature-flip-card:hover .feature-card-front svg,
@@ -576,7 +576,7 @@ body.dark-theme .feature-flip-card:hover .feature-card-back {
 }
 
 body.dark-theme .feature-flip-card:hover .feature-status.green {
-  background: #15171c;
+  background: #000000;
   color: #f3f4f6;
 }
 
@@ -586,15 +586,15 @@ body.dark-theme .feature-flip-card:hover .feature-status.blue {
 }
 
 body.dark-theme .reveal-actions button {
-  border-color: #2a2d35;
-  background: #15171c;
-  color: #f3f4f6;
+  border-color: #e5e7eb;
+  background: #f3f4f6;
+  color: #0f1013;
 }
 
 body.dark-theme .reveal-actions button:hover {
-  border-color: #f3f4f6;
-  background: #f3f4f6;
-  color: #0f1013;
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #000000;
 }
 
 body.dark-theme .features-count strong {

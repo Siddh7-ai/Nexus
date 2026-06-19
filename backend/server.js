@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Message = require("./models/Message");
 const ClearedChat = require("./models/ClearedChat");
+const Room = require("./models/Room");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -293,6 +294,24 @@ async function getChatClearedAt(username, chatId) {
     return record ? record.clearedAt : null;
 }
 
+// Rate Limiting for Room Join Code: max 10 attempts per minute per user
+const rateLimitMap = new Map();
+
+function checkRateLimit(userId) {
+    const now = Date.now();
+    if (!rateLimitMap.has(userId)) {
+        rateLimitMap.set(userId, [now]);
+        return true;
+    }
+    const attempts = rateLimitMap.get(userId).filter(t => now - t < 60000);
+    if (attempts.length >= 10) {
+        return false;
+    }
+    attempts.push(now);
+    rateLimitMap.set(userId, attempts);
+    return true;
+}
+
 io.use((socket, next) => {
     try {
         const token = socket.handshake.auth.token;
@@ -306,6 +325,7 @@ io.use((socket, next) => {
             socket.username = username;
             socket.userId = "guest_" + username;
             socket.role = "guest";
+            socket.request.user = { id: socket.userId, username: socket.username, role: socket.role };
             return next();
         }
 
@@ -313,6 +333,7 @@ io.use((socket, next) => {
         socket.username = decoded.username;
         socket.userId = decoded.userId;
         socket.role = "user";
+        socket.request.user = { id: socket.userId, username: socket.username, role: socket.role };
         next();
     } catch (err) {
         next(new Error("Invalid token"));
@@ -377,15 +398,45 @@ io.on("connection", async (socket) => {
         socket.join(`user_${socket.username.toLowerCase()}`);
     }
 
+    // Auto-join all custom private rooms where the user is a member on connect
+    if (socket.userId && socket.role === "user") {
+        (async () => {
+            try {
+                const customRooms = await Room.find({ members: socket.userId });
+                customRooms.forEach(room => {
+                    socket.join(room.name);
+                });
+                const populatedRooms = await Room.find({ members: socket.userId })
+                    .sort({ createdAt: -1 })
+                    .populate("admin", "username");
+                socket.emit("customRoomsList", populatedRooms);
+            } catch (err) {
+                console.error("Error auto-joining custom rooms on connect:", err);
+            }
+        })();
+    }
+
     // Calculate and emit initial unread counts
     (async () => {
         if (!socket.username) return;
         try {
             const unreadCounts = {};
+            
+            // Build list of accessible rooms for the user
+            const accessibleRooms = ["General chat", "Project chat", "Study chat"];
+            if (socket.userId && !socket.userId.startsWith("guest_")) {
+                const userRooms = await Room.find({ members: socket.userId });
+                userRooms.forEach(r => accessibleRooms.push(r.name));
+            }
+
             const unreadMessages = await Message.find({
                 username: { $ne: socket.username },
                 seenBy: { $ne: socket.username },
-                deletedFor: { $ne: socket.username }
+                deletedFor: { $ne: socket.username },
+                $or: [
+                    { room: { $in: accessibleRooms } },
+                    { privateChatId: { $regex: new RegExp(`(^|_)${socket.username}(_|$)`, "i") } }
+                ]
             });
 
             for (const msg of unreadMessages) {
@@ -407,8 +458,36 @@ io.on("connection", async (socket) => {
 
     // Join a chat room
     socket.on("joinRoom", async (room) => {
-        if (!canAccessRoom(socket.role, room)) {
-            socket.emit("error", { message: "Access denied. Login required." });
+        try {
+            const roomDoc = await Room.findOne({ name: room });
+            if (roomDoc) {
+                if (!socket.request || !socket.request.user) {
+                    socket.emit("error", { message: "Access denied. Login required." });
+                    return;
+                }
+                const userId = socket.request.user.id;
+                const isMember = roomDoc.members.includes(userId);
+                if (!isMember) {
+                    socket.emit("joinError", "You are not a member of this private room.");
+                    socket.emit("error", { message: "Access denied. You are not a member of this private room." });
+                    return;
+                }
+                
+                const populated = await Room.findOne({ name: room })
+                    .populate("admin", "username displayName avatar")
+                    .populate("members", "username displayName avatar _id status");
+                    
+                socket.emit("activeRoomDetails", populated);
+            } else {
+                if (!canAccessRoom(socket.role, room)) {
+                    socket.emit("error", { message: "Access denied. Login required." });
+                    return;
+                }
+                socket.emit("activeRoomDetails", { name: room, isPrivate: false });
+            }
+        } catch (err) {
+            console.error("Error checking private room permission:", err);
+            socket.emit("error", { message: "Server error joining room." });
             return;
         }
 
@@ -815,6 +894,309 @@ io.on("connection", async (socket) => {
         }
     });
 
+    // Auth guard checker helper
+    const userGuard = (socket) => {
+        if (!socket.request || !socket.request.user) {
+            socket.emit("error", { message: "Unauthorized. Authentication required." });
+            return false;
+        }
+        return true;
+    };
+
+    // Socket Custom Private Rooms Events
+    socket.on("fetchCustomRooms", async () => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const rooms = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            socket.emit("customRoomsList", rooms);
+        } catch (err) {
+            console.error("Error fetching custom rooms:", err);
+            socket.emit("error", { message: "Error fetching rooms." });
+        }
+    });
+
+    socket.on("createRoom", async (payload) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            let roomName = "";
+            let roomAvatar = "";
+            
+            if (typeof payload === "string") {
+                roomName = payload;
+            } else if (payload && typeof payload === "object") {
+                roomName = payload.name || "";
+                roomAvatar = payload.avatar || "";
+            }
+            
+            if (!roomName || roomName.trim().length < 2 || roomName.trim().length > 40) {
+                socket.emit("error", { message: "Room name must be between 2 and 40 characters." });
+                return;
+            }
+            
+            const count = await Room.countDocuments({ admin: userId });
+            if (count >= 20) {
+                socket.emit("error", { message: "You have reached the maximum limit of 20 rooms." });
+                return;
+            }
+            
+            let code = "";
+            let retries = 0;
+            let exists = true;
+            while (exists && retries < 5) {
+                code = Math.floor(100000 + Math.random() * 900000).toString();
+                const countCode = await Room.countDocuments({ code });
+                if (countCode === 0) {
+                    exists = false;
+                }
+                retries++;
+            }
+            
+            if (exists) {
+                socket.emit("error", { message: "Failed to generate a unique room code. Please try again." });
+                return;
+            }
+            
+            const newRoom = new Room({
+                name: roomName.trim(),
+                code,
+                admin: userId,
+                members: [userId],
+                avatar: roomAvatar
+            });
+            await newRoom.save();
+            
+            socket.join(newRoom.name);
+            console.log(`User ${username} created custom room: ${newRoom.name} (${code})`);
+            
+            const rooms = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            socket.emit("customRoomsList", rooms);
+            
+            const populated = await Room.findById(newRoom._id)
+                .populate("admin", "username displayName avatar")
+                .populate("members", "username displayName avatar _id status");
+            socket.emit("roomCreatedSuccess", populated);
+        } catch (err) {
+            console.error("Error creating room:", err);
+            socket.emit("error", { message: "Failed to create room." });
+        }
+    });
+
+    socket.on("editRoom", async ({ roomId, name: newName, avatar: newAvatar }) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            const room = await Room.findById(roomId);
+            if (!room) {
+                socket.emit("error", { message: "Room not found." });
+                return;
+            }
+            
+            if (room.admin.toString() !== userId.toString()) {
+                socket.emit("error", { message: "Unauthorized. Admin privileges required." });
+                return;
+            }
+            
+            const oldName = room.name;
+            let nameChanged = false;
+            
+            if (newName && newName.trim() !== oldName) {
+                const cleanedName = newName.trim();
+                if (cleanedName.length < 2 || cleanedName.length > 40) {
+                    socket.emit("error", { message: "Room name must be between 2 and 40 characters." });
+                    return;
+                }
+                room.name = cleanedName;
+                nameChanged = true;
+            }
+            
+            if (newAvatar !== undefined) {
+                room.avatar = newAvatar;
+            }
+            
+            await room.save();
+            
+            const populated = await Room.findById(room._id)
+                .populate("admin", "username displayName avatar")
+                .populate("members", "username displayName avatar _id status");
+                
+            if (nameChanged) {
+                // Update room name in all Messages database documents
+                await Message.updateMany({ room: oldName }, { room: room.name });
+                
+                // Notify all clients in the old room of rename & details update
+                io.to(oldName).emit("roomRenamed", { 
+                    oldName, 
+                    newName: room.name, 
+                    room: populated 
+                });
+                
+                // Instruct sockets connected to the old room to join the new room name in socket.io
+                const socketsInRoom = await io.in(oldName).fetchSockets();
+                socketsInRoom.forEach(s => {
+                    s.join(room.name);
+                    s.leave(oldName);
+                });
+            } else {
+                // Just emit a details update
+                io.to(room.name).emit("roomMemberUpdate", populated);
+            }
+            
+            // Send updated customRoomsList to all members of the room
+            const memberIds = populated.members.map(m => m._id);
+            for (const memberId of memberIds) {
+                const memberRooms = await Room.find({ members: memberId })
+                    .sort({ createdAt: -1 })
+                    .populate("admin", "username");
+                const memberDoc = populated.members.find(m => m._id.toString() === memberId.toString());
+                if (memberDoc) {
+                    io.to(`user_${memberDoc.username.toLowerCase()}`).emit("customRoomsList", memberRooms);
+                }
+            }
+        } catch (err) {
+            console.error("Error editing room:", err);
+            socket.emit("error", { message: "Failed to edit room details." });
+        }
+    });
+
+    socket.on("joinRoomByCode", async (code) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            if (!checkRateLimit(userId)) {
+                socket.emit("joinError", "Too many attempts. Please try again later.");
+                return;
+            }
+            
+            if (!code || code.trim().length !== 6 || isNaN(code)) {
+                socket.emit("joinError", "Invalid code format. Must be 6 digits.");
+                return;
+            }
+            
+            const room = await Room.findOne({ code: code.trim() });
+            if (!room) {
+                socket.emit("joinError", "Room not found");
+                return;
+            }
+            
+            if (room.members.length >= room.maxMembers) {
+                socket.emit("joinError", "Room is full");
+                return;
+            }
+            
+            if (room.members.includes(userId)) {
+                socket.emit("joinError", "Already a member");
+                return;
+            }
+            
+            await Room.findByIdAndUpdate(room._id, { $addToSet: { members: userId } });
+            
+            socket.join(room.name);
+            console.log(`User ${username} joined custom room: ${room.name}`);
+            
+            const rooms = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            
+            const populated = await Room.findById(room._id)
+                .populate("admin", "username displayName avatar")
+                .populate("members", "username displayName avatar _id status");
+            
+            socket.emit("joinSuccess", { room: populated, customRoomsList: rooms });
+            io.to(room.name).emit("roomMemberUpdate", populated);
+        } catch (err) {
+            console.error("Error joining room by code:", err);
+            socket.emit("joinError", "Failed to join room.");
+        }
+    });
+
+    socket.on("leaveRoom", async (roomName) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            const room = await Room.findOne({ name: roomName });
+            if (!room) {
+                socket.emit("error", { message: "Room not found." });
+                return;
+            }
+            
+            if (room.admin.toString() === userId.toString()) {
+                io.to(roomName).emit("roomDeleted", { roomName });
+                
+                const socketsInRoom = await io.in(roomName).fetchSockets();
+                socketsInRoom.forEach(s => s.leave(roomName));
+                
+                await Room.findByIdAndDelete(room._id);
+                console.log(`Room ${roomName} deleted by admin: ${username}`);
+            } else {
+                await Room.findByIdAndUpdate(room._id, { $pull: { members: userId } });
+                socket.leave(roomName);
+                console.log(`User ${username} left room: ${roomName}`);
+                
+                const updatedRoom = await Room.findById(room._id)
+                    .populate("admin", "username displayName avatar")
+                    .populate("members", "username displayName avatar _id status");
+                io.to(roomName).emit("roomMemberUpdate", updatedRoom);
+            }
+            
+            const rooms = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            socket.emit("customRoomsList", rooms);
+        } catch (err) {
+            console.error("Error leaving room:", err);
+            socket.emit("error", { message: "Failed to leave room." });
+        }
+    });
+
+    socket.on("deleteRoom", async (roomName) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            const room = await Room.findOne({ name: roomName });
+            if (!room) {
+                socket.emit("error", { message: "Room not found." });
+                return;
+            }
+            
+            if (room.admin.toString() !== userId.toString()) {
+                socket.emit("error", { message: "Unauthorized. Admin privileges required." });
+                return;
+            }
+            
+            io.to(roomName).emit("roomDeleted", { roomName });
+            
+            const socketsInRoom = await io.in(roomName).fetchSockets();
+            socketsInRoom.forEach(s => s.leave(roomName));
+            
+            await Room.findByIdAndDelete(room._id);
+            console.log(`Room ${roomName} deleted by admin: ${username}`);
+            
+            const rooms = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            socket.emit("customRoomsList", rooms);
+        } catch (err) {
+            console.error("Error deleting room:", err);
+            socket.emit("error", { message: "Failed to delete room." });
+        }
+    });
+
     socket.on("disconnect", async () => {
         const userObj = connectedUsers.get(socket.id);
         connectedUsers.delete(socket.id);
@@ -831,6 +1213,18 @@ io.on("connection", async (socket) => {
                 } catch (err) {
                     console.error("Error setting user offline status on disconnect:", err);
                 }
+            }
+        }
+
+        // Explicitly leave all private rooms the user belongs to on disconnect
+        if (socket.userId && socket.role === "user") {
+            try {
+                const customRooms = await Room.find({ members: socket.userId });
+                customRooms.forEach(room => {
+                    socket.leave(room.name);
+                });
+            } catch (err) {
+                console.error("Error leaving custom rooms on disconnect:", err);
             }
         }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn } from "react-icons/fi";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings } from "react-icons/fi";
+import OnlineUsers from "./OnlineUsers";
 
 function Avatar({ username, avatarSrc, size = 32, className = "" }) {
     if (avatarSrc) {
@@ -32,6 +33,7 @@ function ChatHeader({
     chatTitle, 
     onMenuToggle, 
     onlineUsers, 
+    onlineUserList = [],
     isGuest, 
     onClearChatClick, 
     theme, 
@@ -41,10 +43,32 @@ function ChatHeader({
     onUserProfileClick,
     onShowOnlineListClick,
     isBlocked,
-    onToggleBlock
+    onToggleBlock,
+    roomDetails,
+    onLeaveRoom,
+    onEditRoomClick
 }) {
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
+    const [copiedCode, setCopiedCode] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
+
+    const handleCopyCode = (e) => {
+        e.stopPropagation();
+        if (!roomDetails?.code) return;
+        navigator.clipboard.writeText(roomDetails.code);
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 1500);
+    };
+
+    const handleCopyLink = (e) => {
+        e.stopPropagation();
+        if (!roomDetails?.code) return;
+        const inviteUrl = `${window.location.origin}?joinRoomCode=${roomDetails.code}`;
+        navigator.clipboard.writeText(inviteUrl);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 1500);
+    };
 
     useEffect(() => {
         if (!showDropdown) return;
@@ -58,6 +82,10 @@ function ChatHeader({
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [showDropdown]);
+
+    const isRoomAdmin = roomDetails?.admin?._id === username || 
+                        roomDetails?.admin?.username === username || 
+                        roomDetails?.admin === username;
 
     return (
         <div className="chat-header">
@@ -78,12 +106,90 @@ function ChatHeader({
                             <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
                         </div>
                     ) : (
-                        <div className="chat-title">{chatTitle || "# General chat"}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            {roomDetails && roomDetails.isPrivate && (
+                                <Avatar 
+                                    username={roomDetails.name} 
+                                    avatarSrc={roomDetails.avatar} 
+                                    size={36} 
+                                    className="header-avatar" 
+                                />
+                            )}
+                            <div className="chat-title">{chatTitle || "# General chat"}</div>
+                            {roomDetails && roomDetails.isPrivate && (
+                                <div className="header-private-room-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span 
+                                        className="room-code-badge" 
+                                        style={{ 
+                                            fontFamily: 'monospace', 
+                                            background: 'var(--card-bg, rgba(255, 255, 255, 0.05))', 
+                                            padding: '4px 8px', 
+                                            borderRadius: '6px', 
+                                            fontSize: '12px', 
+                                            fontWeight: '700', 
+                                            letterSpacing: '1px',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            color: 'var(--accent)'
+                                        }}
+                                        title="Room Invite Code"
+                                    >
+                                        Code: {roomDetails.code}
+                                    </span>
+                                    <button 
+                                        onClick={handleCopyCode} 
+                                        style={{
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '11px',
+                                            color: 'var(--text)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Copy Room Code"
+                                    >
+                                        <FiCopy size={12} />
+                                        {copiedCode ? "Copied!" : "Copy Code"}
+                                    </button>
+                                    <button 
+                                        onClick={handleCopyLink} 
+                                        style={{
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            fontSize: '11px',
+                                            color: 'var(--text)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Copy Invite Link"
+                                    >
+                                        <FiShare2 size={12} />
+                                        {copiedLink ? "Copied Link!" : "Copy Link"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
 
             <div className="chat-header-right">
+                <OnlineUsers
+                    onlineUsers={onlineUsers}
+                    onlineUserList={onlineUserList}
+                    currentUser={username}
+                    onUserProfileClick={onUserProfileClick}
+                    onShowOnlineListClick={onShowOnlineListClick}
+                />
                 <div className="header-dropdown-container" ref={dropdownRef}>
                     <button 
                         className={`header-menu-trigger ${showDropdown ? 'active' : ''}`} 
@@ -132,7 +238,33 @@ function ChatHeader({
                                 </button>
                             )}
 
-                            {/* 4. Theme Toggle */}
+                            {/* Edit Room Details (only for admin) */}
+                            {roomDetails && roomDetails.isPrivate && isRoomAdmin && (
+                                <button 
+                                    className="header-dropdown-item" 
+                                    onClick={() => {
+                                        setShowDropdown(false);
+                                        if (onEditRoomClick) onEditRoomClick();
+                                    }}
+                                >
+                                    <FiSettings /> Edit Room
+                                </button>
+                            )}
+
+                            {/* 4. Leave / Delete Custom Private Room */}
+                            {roomDetails && roomDetails.isPrivate && (
+                                <button 
+                                    className="header-dropdown-item logout" 
+                                    onClick={() => {
+                                        setShowDropdown(false);
+                                        if (onLeaveRoom) onLeaveRoom();
+                                    }}
+                                >
+                                    <FiTrash2 /> {isRoomAdmin ? "Delete Room" : "Leave Room"}
+                                </button>
+                            )}
+
+                            {/* 5. Theme Toggle */}
                             <button 
                                 className="header-dropdown-item" 
                                 onClick={() => {
@@ -144,7 +276,7 @@ function ChatHeader({
                                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
                             </button>
 
-                            {/* 5. Clear Chat */}
+                            {/* 6. Clear Chat */}
                             <button 
                                 className="header-dropdown-item" 
                                 onClick={() => {
@@ -155,7 +287,7 @@ function ChatHeader({
                                 <FiTrash2 /> Clear Chat
                             </button>
 
-                            {/* 6. Logout / Sign In */}
+                            {/* 7. Logout / Sign In */}
                             <button 
                                 className="header-dropdown-item logout" 
                                 onClick={() => {

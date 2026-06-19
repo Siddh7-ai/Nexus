@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "../App.css";
 import { getBackendUrl } from "../utils/config";
+import { SmoothInput } from "../components/SmoothInput";
 import { FiSun, FiMoon } from "react-icons/fi";
 import { initTheme, toggleTheme } from "../utils/theme";
 
@@ -93,7 +94,7 @@ function Register() {
           <div className="auth-field">
             <label>Username</label>
             <div className="auth-input-wrap">
-              <input
+              <SmoothInput
                 type="text"
                 placeholder="Choose a username"
                 value={username}
@@ -105,7 +106,7 @@ function Register() {
           <div className="auth-field">
             <label>Email</label>
             <div className="auth-input-wrap">
-              <input
+              <SmoothInput
                 type="email"
                 placeholder="Enter your email"
                 value={email}
@@ -117,7 +118,7 @@ function Register() {
           <div className="auth-field">
             <label>Password</label>
             <div className="auth-password-wrap">
-              <input
+              <SmoothInput
                 type={showPassword ? "text" : "password"}
                 placeholder="Create a password"
                 value={password}

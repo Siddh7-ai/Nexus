@@ -280,7 +280,7 @@
 
 /* ─── Landing Dark Theme Overrides ────────────────────────── */
 body.dark-theme .landing-container {
-  background: #0f1013;
+  background: #000000;
 }
 body.dark-theme .nav-brand-name,
 body.dark-theme .landing-headline,
@@ -303,36 +303,38 @@ body.dark-theme .hero-chat-btn:hover {
   background: #e5e7eb;
 }
 body.dark-theme .hero-secondary-btn {
-  background: #15171c;
-  color: #f3f4f6;
-  border-color: #2a2d35;
+  background: #e5e7eb;
+  color: #0f1013;
+  border-color: #e5e7eb;
 }
 body.dark-theme .hero-secondary-btn:hover {
-  background: #1f2229;
+  background: #ffffff;
+  border-color: #ffffff;
 }
 body.dark-theme .landing-nav .theme-toggle-btn {
-  border-color: #2a2d35;
-  background: #15171c;
-  color: #f3f4f6;
+  border-color: #e5e7eb;
+  background: #f3f4f6;
+  color: #0f1013;
 }
 body.dark-theme .landing-nav .theme-toggle-btn:hover {
-  background: #1f2229;
+  background: #ffffff;
 }
 body.dark-theme .modal-content {
-  background: #15171c;
-  border-color: #2a2d35;
+  background: #000000;
+  border-color: #161616;
   color: #f3f4f6;
 }
 body.dark-theme .guest-username-input {
-  background: #1f2229;
+  background: #121212;
   color: #f3f4f6;
-  border-color: #2a2d35;
+  border-color: #161616;
 }
 body.dark-theme .modal-btn.cancel {
-  background: #1f2229;
-  color: #f3f4f6;
-  border-color: #2a2d35;
+  background: #121212 !important;
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
 }
 body.dark-theme .modal-btn.cancel:hover {
-  background: #2a2d35;
+  background: rgba(248, 113, 113, 0.1) !important;
+  border-color: rgba(248, 113, 113, 0.6) !important;
 }

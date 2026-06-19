@@ -13,6 +13,8 @@ import RoomList from "../components/RoomList";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
+import { SmoothInput } from "../components/SmoothInput";
+import { FiLock } from "react-icons/fi";
 
 // Lazy-load emoji picker library to optimize bundle load times
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -123,6 +125,18 @@ function Chat() {
     const [showOnlineList, setShowOnlineList] = useState(false);
     const [fullAvatarUrl, setFullAvatarUrl] = useState(null);
 
+    // Custom Private Rooms states
+    const [customRooms, setCustomRooms] = useState([]);
+    const [customRoomsLoading, setCustomRoomsLoading] = useState(true);
+    const [showCreateJoinModal, setShowCreateJoinModal] = useState(false);
+    const [activeSidebarTab, setActiveSidebarTab] = useState("rooms"); // "rooms" or "dms"
+    const [activeModalTab, setActiveModalTab] = useState("create"); // "create" or "join"
+    const [codeArray, setCodeArray] = useState(Array(6).fill(""));
+    const [activeRoomDetails, setActiveRoomDetails] = useState(null); // { name, code, admin, members, isPrivate }
+    const [createRoomName, setCreateRoomName] = useState("");
+    const [joinCode, setJoinCode] = useState("");
+    const [joinError, setJoinError] = useState("");
+
     // Framer Motion Values for interactive dragging and physical lanyard updates
     const cardX = useMotionValue(0);
     const cardY = useMotionValue(0);
@@ -160,6 +174,11 @@ function Chat() {
     const [isDraggingCrop, setIsDraggingCrop] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [cropImgRatio, setCropImgRatio] = useState(1.0);
+    const [cropTarget, setCropTarget] = useState("ownProfile"); // "ownProfile" | "createRoom" | "editRoom"
+    const [createRoomAvatar, setCreateRoomAvatar] = useState("");
+    const [editRoomAvatar, setEditRoomAvatar] = useState("");
+    const [editRoomName, setEditRoomName] = useState("");
+    const [showEditRoomModal, setShowEditRoomModal] = useState(false);
 
     // Message Delete and Undo states
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
@@ -171,6 +190,12 @@ function Chat() {
     });
     const [undoDeleteInfo, setUndoDeleteInfo] = useState(null);
     const deleteTimeoutRef = useRef(null);
+
+    // Notification states and refs
+    const [notificationActive, setNotificationActive] = useState(false);
+    const [activeToast, setActiveToast] = useState(null);
+    const glowTimeoutRef = useRef(null);
+    const toastTimeoutRef = useRef(null);
 
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -195,6 +220,92 @@ function Chat() {
     useEffect(() => {
         allUsersRef.current = allUsers;
     }, [allUsers]);
+
+    // Notification permission hook
+    useEffect(() => {
+        if (typeof window !== "undefined" && "Notification" in window) {
+            if (Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+        }
+    }, []);
+
+    // Helper to synthesize a premium dual-tone chime pluck
+    const playNotificationSound = () => {
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
+            
+            // Tone 1: C5 (523.25 Hz)
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = "sine";
+            osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+            
+            gain1.gain.setValueAtTime(0.12, ctx.currentTime);
+            gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            
+            // Tone 2: G5 (783.99 Hz) with a slight delay
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = "sine";
+            osc2.frequency.setValueAtTime(783.99, ctx.currentTime + 0.08);
+            
+            gain2.gain.setValueAtTime(0, ctx.currentTime);
+            gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.08);
+            gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+            
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            
+            osc1.start(ctx.currentTime);
+            osc1.stop(ctx.currentTime + 0.35);
+            
+            osc2.start(ctx.currentTime + 0.08);
+            osc2.stop(ctx.currentTime + 0.45);
+        } catch (err) {
+            console.warn("Chime generation failed", err);
+        }
+    };
+
+    const triggerPageGlow = () => {
+        setNotificationActive(true);
+        if (glowTimeoutRef.current) {
+            clearTimeout(glowTimeoutRef.current);
+        }
+        glowTimeoutRef.current = setTimeout(() => {
+            setNotificationActive(false);
+        }, 3600);
+    };
+
+    const triggerDesktopNotification = (data) => {
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            const bodyText = data.text || "Sent an attachment";
+            const senderName = data.displayName || data.username;
+            const title = data.room ? `New message in #${data.room}` : `New message from ${senderName}`;
+            const notification = new Notification(title, {
+                body: `${senderName}: ${bodyText}`,
+                icon: "/favicon.ico"
+            });
+            notification.onclick = () => {
+                window.focus();
+                if (data.privateChatId) {
+                    const parts = data.privateChatId.split("_");
+                    const partnerUsername = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
+                    if (partnerUsername) {
+                        selectPrivate(data.privateChatId, partnerUsername);
+                    }
+                } else if (data.room) {
+                    selectRoom(data.room);
+                }
+                notification.close();
+            };
+        }
+    };
 
     useEffect(() => {
         if (isGuest || !username) return;
@@ -247,6 +358,11 @@ function Chat() {
     useEffect(() => {
         const token = getAuthToken();
         if (!token) {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get("joinRoomCode");
+            if (code) {
+                sessionStorage.setItem("pendingJoinCode", code);
+            }
             navigate("/login");
             return;
         }
@@ -256,20 +372,35 @@ function Chat() {
 
         newSocket.on("connect", () => {
             console.log("Socket connected/reconnected. Re-joining active chat room...");
-            const currentParams = new URLSearchParams(window.location.search);
-            const privateUrl = currentParams.get("private");
-            const roomUrl = currentParams.get("room");
+            newSocket.emit("fetchCustomRooms");
 
-            if (privateUrl) {
-                newSocket.emit("joinPrivateChat", { otherUsername: privateUrl });
-            } else if (roomUrl) {
-                newSocket.emit("joinRoom", roomUrl);
-            } else if (activePrivateRef.current && activePrivateNameRef.current) {
-                newSocket.emit("joinPrivateChat", { otherUsername: activePrivateNameRef.current });
-            } else if (activeRoomRef.current) {
-                newSocket.emit("joinRoom", activeRoomRef.current);
+            const currentParams = new URLSearchParams(window.location.search);
+            const inviteCode = currentParams.get("joinRoomCode");
+            const pendingCode = sessionStorage.getItem("pendingJoinCode");
+
+            if (inviteCode) {
+                newSocket.emit("joinRoomByCode", inviteCode);
+                const url = new URL(window.location);
+                url.searchParams.delete("joinRoomCode");
+                window.history.replaceState({}, document.title, url.toString());
+            } else if (pendingCode) {
+                newSocket.emit("joinRoomByCode", pendingCode);
+                sessionStorage.removeItem("pendingJoinCode");
             } else {
-                newSocket.emit("joinRoom", "General chat");
+                const privateUrl = currentParams.get("private");
+                const roomUrl = currentParams.get("room");
+
+                if (privateUrl) {
+                    newSocket.emit("joinPrivateChat", { otherUsername: privateUrl });
+                } else if (roomUrl) {
+                    newSocket.emit("joinRoom", roomUrl);
+                } else if (activePrivateRef.current && activePrivateNameRef.current) {
+                    newSocket.emit("joinPrivateChat", { otherUsername: activePrivateNameRef.current });
+                } else if (activeRoomRef.current) {
+                    newSocket.emit("joinRoom", activeRoomRef.current);
+                } else {
+                    newSocket.emit("joinRoom", "General chat");
+                }
             }
         });
 
@@ -305,7 +436,14 @@ function Chat() {
         });
 
         newSocket.on("unreadCounts", (counts) => {
-            setUnreadCounts(counts || {});
+            const normalized = {};
+            if (counts) {
+                Object.keys(counts).forEach(k => {
+                    const normalizedKey = k.includes("_") ? k.toLowerCase() : k;
+                    normalized[normalizedKey] = counts[k];
+                });
+            }
+            setUnreadCounts(normalized);
         });
 
         newSocket.on("reply", (data) => {
@@ -353,6 +491,48 @@ function Chat() {
                     });
                 }
             }
+
+            // Trigger notification glow, chime sound, toast, and native push if from another user
+            if (data.username?.toLowerCase() !== usernameRef.current?.toLowerCase()) {
+                triggerPageGlow();
+                playNotificationSound();
+
+                if (!isMatch) {
+                    const displayName = data.displayName || data.username;
+                    const chatType = data.privateChatId ? "private" : "room";
+                    
+                    let partnerUsername = data.username;
+                    if (data.privateChatId) {
+                        const parts = data.privateChatId.split("_");
+                        const partner = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
+                        if (partner) {
+                            partnerUsername = partner;
+                        }
+                    }
+
+                    setActiveToast({
+                        id: data._id || Date.now(),
+                        sender: displayName,
+                        senderUsername: partnerUsername,
+                        text: data.text || "Sent an attachment",
+                        avatarUrl: data.avatarUrl || data.senderAvatar,
+                        room: data.room,
+                        privateChatId: data.privateChatId,
+                        chatType
+                    });
+
+                    if (toastTimeoutRef.current) {
+                        clearTimeout(toastTimeoutRef.current);
+                    }
+                    toastTimeoutRef.current = setTimeout(() => {
+                        setActiveToast(null);
+                    }, 5000);
+                }
+
+                if (document.hidden) {
+                    triggerDesktopNotification(data);
+                }
+            }
         });
 
         newSocket.on("typing", (typingData) => {
@@ -395,6 +575,84 @@ function Chat() {
             setMessages(prev => prev.filter(m => m._id !== msgId));
         });
 
+        newSocket.on("customRoomsList", (rooms) => {
+            setCustomRooms(rooms);
+            setCustomRoomsLoading(false);
+        });
+
+        newSocket.on("roomCreatedSuccess", (room) => {
+            setCustomRooms(prev => {
+                if (prev.some(r => r.code === room.code)) return prev;
+                return [room, ...prev];
+            });
+            setActiveRoom(room.name);
+            setActiveRoomDetails(room);
+            setActivePrivate(null);
+            setActivePrivateName("");
+            setMessages([]);
+            setCreateRoomName("");
+            setCreateRoomAvatar("");
+            setCodeArray(Array(6).fill(""));
+            setActiveModalTab("create");
+            setShowCreateJoinModal(false);
+            setSearchParams({ room: room.name });
+        });
+
+        newSocket.on("joinSuccess", ({ room, customRoomsList }) => {
+            setCustomRooms(customRoomsList);
+            setActiveRoom(room.name);
+            setActiveRoomDetails(room);
+            setActivePrivate(null);
+            setActivePrivateName("");
+            setMessages([]);
+            setJoinError("");
+            setJoinCode("");
+            setCodeArray(Array(6).fill(""));
+            setActiveModalTab("create");
+            setShowCreateJoinModal(false);
+            setSearchParams({ room: room.name });
+        });
+
+        newSocket.on("joinError", (err) => {
+            setJoinError(err);
+        });
+
+        newSocket.on("roomDeleted", ({ roomName }) => {
+            if (activeRoomRef.current === roomName) {
+                alert(`The private room #${roomName} has been deleted by the admin.`);
+                setSearchParams({ room: "General chat" });
+                setActiveRoom("General chat");
+                setActiveRoomDetails(null);
+                setActivePrivate(null);
+                setActivePrivateName("");
+                setMessages([]);
+            }
+        });
+
+        newSocket.on("roomMemberUpdate", (room) => {
+            if (activeRoomRef.current === room.name) {
+                setActiveRoomDetails(room);
+            }
+            setCustomRooms(prev => prev.map(r => r.code === room.code ? room : r));
+        });
+
+        newSocket.on("roomRenamed", ({ oldName, newName, room }) => {
+            setCustomRooms(prev => prev.map(r => r.code === room.code ? room : r));
+            if (activeRoomRef.current === oldName) {
+                alert(`The private room #${oldName} has been renamed to #${newName}.`);
+                setActiveRoom(newName);
+                setActiveRoomDetails(room);
+                setSearchParams({ room: newName });
+            }
+        });
+
+        newSocket.on("activeRoomDetails", (room) => {
+            setActiveRoomDetails(room);
+            if (room && room.isPrivate) {
+                setCustomRooms(prev => prev.map(r => r.code === room.code ? room : r));
+            }
+        });
+
         newSocket.on("messagesSeenUpdate", (updatedMsgs) => {
             setMessages(updatedMsgs);
         });
@@ -410,9 +668,11 @@ function Chat() {
                 setSearchParams({ room: "General chat" });
                 setActiveRoom("General chat");
                 setActivePrivate(null);
+                setActiveSidebarTab("rooms");
             } else {
                 setActiveRoom("General chat");
                 setActivePrivate(null);
+                setActiveSidebarTab("rooms");
             }
         } else {
             // Normal user session restoration
@@ -423,11 +683,13 @@ function Chat() {
                     setActiveRoom(null);
                     setActivePrivate(pChatId);
                     setActivePrivateName(privateUrl);
+                    setActiveSidebarTab("dms");
                 }
             } else {
                 setSearchParams({ room: roomUrl });
                 setActiveRoom(roomUrl);
                 setActivePrivate(null);
+                setActiveSidebarTab("rooms");
             }
         }
 
@@ -435,6 +697,12 @@ function Chat() {
             newSocket.disconnect();
             if (typingTimeoutRef.current) {
                 clearTimeout(typingTimeoutRef.current);
+            }
+            if (glowTimeoutRef.current) {
+                clearTimeout(glowTimeoutRef.current);
+            }
+            if (toastTimeoutRef.current) {
+                clearTimeout(toastTimeoutRef.current);
             }
         };
     }, [navigate, isGuest]); // Remove searchParams dependency to prevent reconnect loop
@@ -497,6 +765,7 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
+        setActiveSidebarTab("rooms");
         setSearchParams({ room });
         setActiveRoom(room);
         setActivePrivate(null);
@@ -514,6 +783,7 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
+        setActiveSidebarTab("dms");
         setSearchParams({ private: otherUsername });
         setActivePrivate(privateChatId);
         setActivePrivateName(otherUsername);
@@ -521,9 +791,118 @@ function Chat() {
         setMessages([]);
         setSidebarOpen(false);
         setTypingUser(null);
-        setUnreadCounts(prev => ({ ...prev, [privateChatId]: 0 }));
+        setUnreadCounts(prev => {
+            const next = { ...prev };
+            const lowerId = privateChatId.toLowerCase();
+            Object.keys(next).forEach(k => {
+                if (k.toLowerCase() === lowerId) {
+                    next[k] = 0;
+                }
+            });
+            next[privateChatId] = 0;
+            return next;
+        });
         socketRef.current?.emit("joinPrivateChat", { otherUsername });
     }
+
+    // Custom Private Rooms Submit Handlers
+    const handleCreateRoomSubmit = (e) => {
+        e.preventDefault();
+        if (!createRoomName.trim()) return;
+        socketRef.current?.emit("createRoom", {
+            name: createRoomName.trim(),
+            avatar: createRoomAvatar || ""
+        });
+    };
+
+    const handleEditRoomSubmit = (e) => {
+        e.preventDefault();
+        if (!activeRoomDetails) return;
+        socketRef.current?.emit("editRoom", {
+            roomId: activeRoomDetails._id,
+            name: editRoomName.trim(),
+            avatar: editRoomAvatar || ""
+        });
+        setShowEditRoomModal(false);
+    };
+
+    const handleJoinRoomSubmit = (e) => {
+        e.preventDefault();
+        if (joinCode.trim().length !== 6) return;
+        socketRef.current?.emit("joinRoomByCode", joinCode.trim());
+    };
+
+    const handleDigitChange = (index, value) => {
+        const cleanValue = value.replace(/[^0-9]/g, "");
+        if (!cleanValue && value !== "") return;
+
+        const newArray = [...codeArray];
+        newArray[index] = cleanValue;
+        setCodeArray(newArray);
+
+        if (cleanValue && index < 5) {
+            const nextInput = document.getElementById(`digit-input-${index + 1}`);
+            nextInput?.focus();
+        }
+
+        const fullCode = newArray.join("");
+        if (fullCode.length === 6) {
+            socketRef.current?.emit("joinRoomByCode", fullCode);
+        }
+    };
+
+    const handleDigitKeyDown = (index, e) => {
+        if (e.key === "Backspace") {
+            if (!codeArray[index] && index > 0) {
+                const prevInput = document.getElementById(`digit-input-${index - 1}`);
+                prevInput?.focus();
+                const newArray = [...codeArray];
+                newArray[index - 1] = "";
+                setCodeArray(newArray);
+                e.preventDefault();
+            } else if (codeArray[index]) {
+                const newArray = [...codeArray];
+                newArray[index] = "";
+                setCodeArray(newArray);
+                e.preventDefault();
+            }
+        } else if (e.key === "ArrowLeft" && index > 0) {
+            document.getElementById(`digit-input-${index - 1}`)?.focus();
+        } else if (e.key === "ArrowRight" && index < 5) {
+            document.getElementById(`digit-input-${index + 1}`)?.focus();
+        } else if (e.key === "Enter") {
+            const fullCode = codeArray.join("");
+            if (fullCode.length === 6) {
+                socketRef.current?.emit("joinRoomByCode", fullCode);
+            }
+        } else if (!/[0-9]/.test(e.key) && e.key !== "Tab" && e.key !== "Delete") {
+            e.preventDefault();
+        }
+    };
+
+    const handlePaste = (e) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData("text").trim();
+        if (/^\d{6}$/.test(pastedData)) {
+            const digits = pastedData.split("");
+            setCodeArray(digits);
+            socketRef.current?.emit("joinRoomByCode", pastedData);
+            document.getElementById("digit-input-5")?.focus();
+        }
+    };
+
+    const handleLeaveRoom = () => {
+        if (!activeRoom || !activeRoomDetails) return;
+        const isAdmin = activeRoomDetails.admin?._id === ownProfileData?._id || activeRoomDetails.admin?.username === username;
+        const confirmMsg = isAdmin 
+            ? `Are you sure you want to delete the private room "${activeRoom}"? This will delete the room and disconnect all members.`
+            : `Are you sure you want to leave the private room "${activeRoom}"?`;
+            
+        if (window.confirm(confirmMsg)) {
+            socketRef.current?.emit("leaveRoom", activeRoom);
+        }
+    };
+
 
     function sendMessage(attachment = null) {
         if (!username || !socketRef.current) return;
@@ -842,7 +1221,13 @@ function Chat() {
 
             // Export as JPEG with 92% quality (excellent balance of clarity and file size)
             const compressedBase64 = canvas.toDataURL("image/jpeg", 0.92);
-            setAvatarVal(compressedBase64);
+            if (cropTarget === "ownProfile") {
+                setAvatarVal(compressedBase64);
+            } else if (cropTarget === "createRoom") {
+                setCreateRoomAvatar(compressedBase64);
+            } else if (cropTarget === "editRoom") {
+                setEditRoomAvatar(compressedBase64);
+            }
             setCropImageSrc(null); // Close cropper
         };
     }
@@ -1166,6 +1551,18 @@ function Chat() {
                         unreadCounts={unreadCounts}
                         allUsers={allUsers}
                         dmConversations={dmConversations}
+                        customRooms={customRooms}
+                        customRoomsLoading={customRoomsLoading}
+                        onCreateRoomClick={() => {
+                            setJoinError("");
+                            setJoinCode("");
+                            setCodeArray(Array(6).fill(""));
+                            setCreateRoomName("");
+                            setActiveModalTab("create");
+                            setShowCreateJoinModal(true);
+                        }}
+                        activeSidebarTab={activeSidebarTab}
+                        setActiveSidebarTab={setActiveSidebarTab}
                     />
                 </div>
 
@@ -1177,6 +1574,7 @@ function Chat() {
                         onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
                         chatTitle={chatTitle}
                         onlineUsers={onlineUsers}
+                        onlineUserList={onlineUserList}
                         onMenuToggle={() => setSidebarOpen(v => !v)}
                         isGuest={isGuest}
                         onClearChatClick={() => setShowClearConfirm(true)}
@@ -1191,14 +1589,15 @@ function Chat() {
                         onShowOnlineListClick={() => setShowOnlineList(true)}
                         isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
                         onToggleBlock={handleHeaderBlockToggle}
-                    />
-
-                    <OnlineUsers
-                        onlineUsers={onlineUsers}
-                        onlineUserList={onlineUserList}
-                        currentUser={username}
-                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                        onShowOnlineListClick={() => setShowOnlineList(true)}
+                        roomDetails={activeRoomDetails}
+                        onLeaveRoom={handleLeaveRoom}
+                        onEditRoomClick={() => {
+                            if (activeRoomDetails) {
+                                setEditRoomName(activeRoomDetails.name);
+                                setEditRoomAvatar(activeRoomDetails.avatar || "");
+                                setShowEditRoomModal(true);
+                            }
+                        }}
                     />
 
                     <MessageList
@@ -1377,7 +1776,7 @@ function Chat() {
                                     <div className="form-group-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                         <div>
                                             <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Username</label>
-                                            <input
+                                            <SmoothInput
                                                 type="text"
                                                 value={editUsernameVal}
                                                 onChange={(e) => { setEditUsernameVal(e.target.value); setProfileError(""); }}
@@ -1387,7 +1786,7 @@ function Chat() {
                                         </div>
                                         <div>
                                             <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Display Name</label>
-                                            <input
+                                            <SmoothInput
                                                 type="text"
                                                 value={displayNameVal}
                                                 onChange={(e) => setDisplayNameVal(e.target.value)}
@@ -1537,7 +1936,7 @@ function Chat() {
                                     Modify your guest username. This change will be visible to all online users instantly.
                                 </p>
                                 <div className="guest-input-wrap">
-                                    <input
+                                    <SmoothInput
                                         type="text"
                                         placeholder="Enter new username"
                                         value={newGuestName}
@@ -1988,7 +2387,7 @@ function Chat() {
                                                 {showReportForm && (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(18, 199, 189, 0.05)', border: '1px solid rgba(18, 199, 189, 0.2)', padding: '10px', borderRadius: '8px', marginTop: '10px', width: '100%', boxSizing: 'border-box' }}>
                                                         <label style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--accent)', fontFamily: 'monospace' }}>REASON FOR REPORTING</label>
-                                                        <input 
+                                                        <SmoothInput 
                                                             type="text" 
                                                             placeholder="Enter security incident details..." 
                                                             value={reportReason} 
@@ -2050,12 +2449,24 @@ function Chat() {
                 <div className="modal-overlay" onClick={() => setShowOnlineList(false)}>
                     <div className="modal-content online-members-modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 360px)', padding: '20px' }}>
                         <div className="modal-header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Online Members</h3>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>
+                                {activeRoomDetails?.isPrivate ? "Room Members" : "Online Members"}
+                            </h3>
                             <button className="close-picker-btn" onClick={() => setShowOnlineList(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
                         </div>
                         <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
-                            {onlineUserList.map(user => {
+                            {(activeRoomDetails?.isPrivate ? (activeRoomDetails.members || []) : onlineUserList).map(user => {
                                 const isCurrentUser = user.username?.toLowerCase() === username?.toLowerCase();
+                                const isAdmin = activeRoomDetails?.isPrivate && (
+                                    user._id === activeRoomDetails.admin?._id ||
+                                    user.username === activeRoomDetails.admin?.username ||
+                                    user._id === activeRoomDetails.admin
+                                );
+                                const onlineUser = onlineUserList.find(
+                                    u => u.username?.toLowerCase() === user.username?.toLowerCase()
+                                );
+                                const isOnline = !!onlineUser || isCurrentUser;
+                                const userStatus = isOnline ? (onlineUser?.status || user.status || "Online") : "Offline";
                                 return (
                                     <div 
                                         key={user.username} 
@@ -2082,7 +2493,7 @@ function Chat() {
                                             transition: 'background 0.2s' 
                                         }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                                             <div style={{ position: 'relative', display: 'flex' }}>
                                                 {user.avatar ? (
                                                     <img src={user.avatar} alt={user.username} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
@@ -2092,33 +2503,113 @@ function Chat() {
                                                     </div>
                                                 )}
                                                 <span className={`sidebar-online-dot ${
-                                                    user.role === "guest" ? "guest-dot" :
-                                                    user.status === "Online" ? "" :
-                                                    user.status === "Away" ? "away" :
-                                                    user.status === "Busy" ? "busy" : "offline"
+                                                    user.role === "guest" && isOnline ? "guest-dot" :
+                                                    userStatus === "Online" ? "" :
+                                                    userStatus === "Away" ? "away" :
+                                                    userStatus === "Busy" ? "busy" : "offline"
                                                 }`} style={{ position: 'absolute', bottom: '-1px', right: '-1px', width: '9px', height: '9px', border: '1.5px solid #fff' }} />
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {user.displayName || user.username}
-                                                    {isCurrentUser && <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>(You)</span>}
-                                                </span>
+                                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {user.displayName || user.username}
+                                                        {isCurrentUser && <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--muted)', fontWeight: 'bold' }}>(You)</span>}
+                                                    </span>
+                                                    {isAdmin && (
+                                                        <span 
+                                                            style={{ 
+                                                                fontSize: '9px', 
+                                                                fontWeight: '800', 
+                                                                background: 'linear-gradient(135deg, #ff9800, #e65100)', 
+                                                                color: '#fff', 
+                                                                padding: '2px 6px', 
+                                                                borderRadius: '4px',
+                                                                textTransform: 'uppercase',
+                                                                letterSpacing: '0.5px',
+                                                                boxShadow: '0 0 6px rgba(230, 81, 0, 0.2)'
+                                                            }}
+                                                        >
+                                                            Admin
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span style={{ fontSize: '11px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                     @{user.username} {user.role === "guest" && "[Guest]"}
                                                 </span>
                                             </div>
                                         </div>
                                         <div style={{ fontSize: '11px', fontWeight: '700', color: 
-                                            user.status === "Online" ? '#17d67e' :
-                                            user.status === "Away" ? '#ffb020' :
-                                            user.status === "Busy" ? '#ef4444' : '#6b7280'
+                                            userStatus === "Online" ? '#17d67e' :
+                                            userStatus === "Away" ? '#ffb020' :
+                                            userStatus === "Busy" ? '#ef4444' : '#6b7280'
                                         }}>
-                                            {user.status || "Online"}
+                                            {userStatus}
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* EDIT ROOM DETAILS MODAL */}
+            {showEditRoomModal && activeRoomDetails && (
+                <div className="modal-overlay" onClick={() => setShowEditRoomModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 360px)', padding: '20px' }}>
+                        <div className="modal-header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Edit Room Details</h3>
+                            <button className="close-picker-btn" onClick={() => setShowEditRoomModal(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
+                        </div>
+                        <form onSubmit={handleEditRoomSubmit}>
+                            <div className="modal-body-section" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {/* Group Photo Upload */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ position: 'relative' }}>
+                                        {editRoomAvatar ? (
+                                            <img src={editRoomAvatar} alt="Group Avatar Preview" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover' }} />
+                                        ) : (
+                                            <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: 'linear-gradient(135deg, #c8eeff, #bff7f2)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '800' }}>
+                                                {editRoomName ? editRoomName.charAt(0).toUpperCase() : "G"}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <label className="change-avatar-btn" style={{ padding: '6px 12px', background: 'var(--soft)', border: '1px solid var(--border)', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', color: 'var(--text)' }}>
+                                        Change Photo
+                                        <input type="file" accept="image/*" onChange={(e) => {
+                                            setCropTarget("editRoom");
+                                            handleCropFileChange(e);
+                                        }} style={{ display: 'none' }} />
+                                    </label>
+                                </div>
+
+                                {/* Room Name field */}
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                                        Room Name
+                                    </label>
+                                    <SmoothInput
+                                        type="text"
+                                        value={editRoomName}
+                                        onChange={(e) => setEditRoomName(e.target.value)}
+                                        placeholder="Enter room name"
+                                        className="modal-premium-input"
+                                        required
+                                        minLength={2}
+                                        maxLength={40}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="modal-footer-buttons" style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
+                                <button type="submit" className="modal-btn primary" style={{ flex: 1 }}>
+                                    Save Changes
+                                </button>
+                                <button type="button" className="modal-btn cancel" onClick={() => setShowEditRoomModal(false)} style={{ flex: 1 }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
@@ -2183,6 +2674,518 @@ function Chat() {
                     </button>
                 </div>
             )}
+
+            {/* Apple AI border glow overlay */}
+            <div className={`notification-border-overlay ${notificationActive ? "active" : ""}`}>
+                <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
+                    <defs>
+                        <linearGradient id="appleGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#1d4ed8">
+                                <animate attributeName="stop-color" values="#1d4ed8;#c2410c;#be185d;#a21caf;#6d28d9;#1d4ed8" dur="4s" repeatCount="indefinite" />
+                            </stop>
+                            <stop offset="25%" stopColor="#6d28d9">
+                                <animate attributeName="stop-color" values="#6d28d9;#1d4ed8;#c2410c;#be185d;#a21caf;#6d28d9" dur="4s" repeatCount="indefinite" />
+                            </stop>
+                            <stop offset="50%" stopColor="#a21caf">
+                                <animate attributeName="stop-color" values="#a21caf;#6d28d9;#1d4ed8;#c2410c;#be185d;#a21caf" dur="4s" repeatCount="indefinite" />
+                            </stop>
+                            <stop offset="75%" stopColor="#be185d">
+                                <animate attributeName="stop-color" values="#be185d;#a21caf;#6d28d9;#1d4ed8;#c2410c;#be185d" dur="4s" repeatCount="indefinite" />
+                            </stop>
+                            <stop offset="100%" stopColor="#c2410c">
+                                <animate attributeName="stop-color" values="#c2410c;#be185d;#a21caf;#6d28d9;#1d4ed8;#c2410c" dur="4s" repeatCount="indefinite" />
+                            </stop>
+                        </linearGradient>
+                        <filter id="glowBlur" x="-10%" y="-10%" width="120%" height="120%">
+                            <feGaussianBlur stdDeviation="12" />
+                        </filter>
+                    </defs>
+                    {/* Glowing outer blur rect */}
+                    <rect 
+                        x="0" 
+                        y="0" 
+                        fill="none" 
+                        stroke="url(#appleGlow)" 
+                        strokeWidth="16" 
+                        filter="url(#glowBlur)" 
+                        opacity="0.9" 
+                        style={{ width: "100%", height: "100%" }}
+                    />
+                </svg>
+            </div>
+
+            {/* Glassmorphic notification toast banner */}
+            <div className="notification-toast-container">
+                <AnimatePresence>
+                    {activeToast && (
+                        <motion.div
+                            className="notification-toast"
+                            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                            onClick={() => {
+                                if (activeToast.chatType === "private") {
+                                    selectPrivate(activeToast.privateChatId, activeToast.senderUsername);
+                                } else {
+                                    selectRoom(activeToast.room);
+                                }
+                                setActiveToast(null);
+                            }}
+                        >
+                            <div className="notification-toast-avatar">
+                                {activeToast.avatarUrl ? (
+                                    <img
+                                        src={activeToast.avatarUrl}
+                                        alt={activeToast.sender}
+                                        className="notification-toast-avatar-img"
+                                    />
+                                ) : (
+                                    activeToast.sender.charAt(0).toUpperCase()
+                                )}
+                            </div>
+                            <div className="notification-toast-content">
+                                <div className="notification-toast-header">
+                                    <span className="notification-toast-sender">{activeToast.sender}</span>
+                                    <span className="notification-toast-tag">
+                                        {activeToast.chatType === "private" ? "DM" : `#${activeToast.room}`}
+                                    </span>
+                                </div>
+                                <p className="notification-toast-text">{activeToast.text}</p>
+                            </div>
+                            <button
+                                type="button"
+                                className="notification-toast-close"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveToast(null);
+                                }}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+            {/* Create / Join Room Modal */}
+            <AnimatePresence>
+                {showCreateJoinModal && (
+                    <motion.div 
+                        className="modal-overlay"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowCreateJoinModal(false)}
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0, 0, 0, 0.45)',
+                            backdropFilter: 'blur(8px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1100
+                        }}
+                    >
+                        <motion.div 
+                            className="modal-content"
+                            initial={{ y: 50, opacity: 0, scale: 0.95 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 50, opacity: 0, scale: 0.95 }}
+                            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: 'min(90%, 420px)',
+                                padding: '28px',
+                                background: 'var(--panel)',
+                                border: '1px solid var(--border)',
+                                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.12)',
+                                borderRadius: '16px',
+                                color: 'var(--text)',
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '20px'
+                            }}
+                        >
+                            <button 
+                                className="close-picker-btn" 
+                                onClick={() => setShowCreateJoinModal(false)} 
+                                style={{ 
+                                    position: 'absolute',
+                                    top: '16px',
+                                    right: '16px',
+                                    border: 'none', 
+                                    background: 'none', 
+                                    fontSize: '22px', 
+                                    color: 'var(--muted)',
+                                    cursor: 'pointer',
+                                    transition: 'color 0.2s',
+                                    zIndex: 10,
+                                    padding: '4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '50%'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text)'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted)'}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+
+                            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ 
+                                    width: '48px', 
+                                    height: '48px', 
+                                    borderRadius: '12px', 
+                                    background: 'var(--accent-soft)', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    color: 'var(--accent)',
+                                    fontSize: '22px',
+                                    marginBottom: '4px',
+                                    boxShadow: '0 4px 12px rgba(18, 199, 189, 0.15)'
+                                }}>
+                                    <FiLock />
+                                </div>
+                                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '800', letterSpacing: '-0.3px', color: 'var(--text)' }}>
+                                    Private Room
+                                </h3>
+                                <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)', fontWeight: '500' }}>
+                                    Create your private room with friends
+                                </p>
+                            </div>
+
+                            {/* Custom Tab Switcher */}
+                            <div style={{ 
+                                display: 'flex', 
+                                background: 'var(--soft)', 
+                                padding: '4px', 
+                                borderRadius: '12px', 
+                                border: '1px solid var(--border)',
+                                position: 'relative',
+                                height: '40px'
+                            }}>
+                                <button
+                                    onClick={() => { setActiveModalTab("create"); setJoinError(""); }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '0',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: activeModalTab === "create" ? 'var(--text)' : 'var(--muted)',
+                                        fontSize: '13px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        transition: 'color 0.2s',
+                                        height: '100%'
+                                    }}
+                                >
+                                    Create Room
+                                </button>
+                                <button
+                                    onClick={() => { setActiveModalTab("join"); setJoinError(""); }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '0',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: activeModalTab === "join" ? 'var(--text)' : 'var(--muted)',
+                                        fontSize: '13px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                        position: 'relative',
+                                        zIndex: 1,
+                                        transition: 'color 0.2s',
+                                        height: '100%'
+                                    }}
+                                >
+                                    Join Room
+                                </button>
+                                
+                                {/* Sliding background tab indicator */}
+                                <motion.div
+                                    style={{
+                                        position: 'absolute',
+                                        top: '4px',
+                                        bottom: '4px',
+                                        left: activeModalTab === "create" ? '4px' : '50%',
+                                        width: 'calc(50% - 4px)',
+                                        background: 'var(--panel)',
+                                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.02)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '8px',
+                                        zIndex: 0
+                                    }}
+                                    animate={{ left: activeModalTab === "create" ? '4px' : '50%' }}
+                                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                />
+                            </div>
+
+                            {joinError && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    style={{ 
+                                        background: 'rgba(239, 68, 68, 0.1)', 
+                                        border: '1px solid rgba(239, 68, 68, 0.2)', 
+                                        padding: '10px 12px', 
+                                        borderRadius: '8px', 
+                                        fontSize: '12px', 
+                                        color: '#ef4444', 
+                                        textAlign: 'center',
+                                        fontWeight: '600'
+                                    }}
+                                >
+                                    {joinError}
+                                </motion.div>
+                            )}
+
+                            {activeModalTab === "create" ? (
+                                 <form onSubmit={handleCreateRoomSubmit}>
+                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                         <div style={{ position: 'relative' }}>
+                                             {createRoomAvatar ? (
+                                                 <img 
+                                                     src={createRoomAvatar} 
+                                                     alt="Group Avatar Preview" 
+                                                     style={{ width: '72px', height: '72px', borderRadius: '12px', objectFit: 'cover' }} 
+                                                 />
+                                             ) : (
+                                                 <div 
+                                                     style={{ 
+                                                         width: '72px', 
+                                                         height: '72px', 
+                                                         borderRadius: '12px', 
+                                                         background: 'linear-gradient(135deg, #c8eeff, #bff7f2)', 
+                                                         color: 'var(--accent-deep)', 
+                                                         display: 'flex', 
+                                                         alignItems: 'center', 
+                                                         justifyContent: 'center', 
+                                                         fontSize: '28px', 
+                                                         fontWeight: '800' 
+                                                     }}
+                                                 >
+                                                     {createRoomName ? createRoomName.charAt(0).toUpperCase() : "G"}
+                                                 </div>
+                                             )}
+                                         </div>
+                                         <label 
+                                             className="change-avatar-btn" 
+                                             style={{ 
+                                                 padding: '5px 12px', 
+                                                 background: 'var(--soft)', 
+                                                 border: '1px solid var(--border)', 
+                                                 borderRadius: '20px', 
+                                                 fontSize: '11px', 
+                                                 fontWeight: 'bold', 
+                                                 cursor: 'pointer', 
+                                                 color: 'var(--text)' 
+                                             }}
+                                         >
+                                             Change Photo
+                                             <input 
+                                                 type="file" 
+                                                 accept="image/*" 
+                                                 onChange={(e) => {
+                                                     setCropTarget("createRoom");
+                                                     handleCropFileChange(e);
+                                                 }} 
+                                                 style={{ display: 'none' }} 
+                                             />
+                                         </label>
+                                     </div>
+
+                                     <div style={{ marginBottom: '20px' }}>
+                                         <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                                             Room Name
+                                         </label>
+                                        <SmoothInput
+                                            type="text"
+                                            value={createRoomName}
+                                            onChange={(e) => setCreateRoomName(e.target.value)}
+                                            placeholder="e.g. Secret Squad, Coders Club"
+                                            className="modal-premium-input"
+                                            required
+                                            minLength={2}
+                                            maxLength={40}
+                                        />
+                                    </div>
+
+                                    <div style={{ 
+                                        background: 'var(--soft)', 
+                                        border: '1px solid var(--border)', 
+                                        borderRadius: '12px', 
+                                        padding: '12px 16px', 
+                                        fontSize: '12px', 
+                                        color: 'var(--muted)',
+                                        marginBottom: '24px',
+                                        lineHeight: '1.5'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                            <span>Role:</span>
+                                            <span style={{ fontWeight: '700', color: '#ff9800' }}>Admin</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Admin Username:</span>
+                                            <span style={{ fontWeight: '700', color: 'var(--accent)' }}>@{username}</span>
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        type="submit" 
+                                        style={{ 
+                                            width: '100%', 
+                                            height: '44px', 
+                                            fontSize: '13px', 
+                                            fontWeight: '800', 
+                                            background: 'var(--accent)', 
+                                            color: '#ffffff',
+                                            border: 'none', 
+                                            borderRadius: '12px', 
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 12px rgba(18, 199, 189, 0.25)',
+                                            transition: 'all 0.2s ease',
+                                            letterSpacing: '0.5px'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = 'var(--accent-deep)';
+                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'var(--accent)';
+                                            e.currentTarget.style.transform = 'none';
+                                        }}
+                                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
+                                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                                    >
+                                        CREATE PRIVATE ROOM
+                                    </button>
+                                </form>
+                            ) : (
+                                <div>
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px', textAlign: 'center' }}>
+                                            Enter 6-Digit Room Code
+                                        </label>
+                                        <div 
+                                            style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                gap: '8px' 
+                                            }}
+                                            onPaste={handlePaste}
+                                        >
+                                            {codeArray.map((digit, index) => (
+                                                <input
+                                                    key={index}
+                                                    id={`digit-input-${index}`}
+                                                    type="text"
+                                                    maxLength={1}
+                                                    value={digit}
+                                                    onChange={(e) => handleDigitChange(index, e.target.value)}
+                                                    onKeyDown={(e) => handleDigitKeyDown(index, e)}
+                                                    style={{
+                                                        width: '46px',
+                                                        height: '52px',
+                                                        background: 'var(--soft)',
+                                                        border: '1px solid var(--border)',
+                                                        borderRadius: '10px',
+                                                        textAlign: 'center',
+                                                        fontSize: '20px',
+                                                        fontWeight: '700',
+                                                        color: 'var(--accent)',
+                                                        fontFamily: 'monospace',
+                                                        outline: 'none',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                    onFocus={(e) => {
+                                                        e.target.style.borderColor = 'var(--accent)';
+                                                        e.target.style.boxShadow = '0 0 8px rgba(18, 199, 189, 0.3)';
+                                                        e.target.style.background = 'var(--panel)';
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        e.target.style.borderColor = 'var(--border)';
+                                                        e.target.style.boxShadow = 'none';
+                                                        e.target.style.background = 'var(--soft)';
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => {
+                                            const fullCode = codeArray.join("");
+                                            if (fullCode.length === 6) {
+                                                socketRef.current?.emit("joinRoomByCode", fullCode);
+                                            } else {
+                                                setJoinError("Please enter all 6 digits.");
+                                            }
+                                        }}
+                                        style={{ 
+                                            width: '100%', 
+                                            height: '44px', 
+                                            fontSize: '13px', 
+                                            fontWeight: '800', 
+                                            background: 'var(--accent)', 
+                                            color: '#ffffff',
+                                            border: 'none', 
+                                            borderRadius: '12px', 
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 12px rgba(18, 199, 189, 0.25)',
+                                            transition: 'all 0.2s ease',
+                                            letterSpacing: '0.5px'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = 'var(--accent-deep)';
+                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = 'var(--accent)';
+                                            e.currentTarget.style.transform = 'none';
+                                        }}
+                                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
+                                        onMouseUp={(e) => e.currentTarget.style.transform = 'none'}
+                                    >
+                                        JOIN PRIVATE ROOM
+                                    </button>
+                                </div>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

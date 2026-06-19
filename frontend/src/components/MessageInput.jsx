@@ -23,6 +23,8 @@ import {
     RefreshCw,
     Crop
 } from "lucide-react";
+import { SmoothInput } from "./SmoothInput";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 
 // Lazy load the full emoji picker for performance
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -332,6 +334,91 @@ function MessageInput({
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [activePreviewIndex, setActivePreviewIndex] = useState(0);
+
+    // Animated caret for contentEditable rich text area
+    const editorCaretX = useMotionValue(0);
+    const editorCaretY = useMotionValue(0);
+    const editorCaretOpacity = useMotionValue(0);
+    const editorCaretHeight = useMotionValue(20);
+
+    const springEditorCaretX = useSpring(editorCaretX, { stiffness: 600, damping: 35, mass: 0.4 });
+    const springEditorCaretY = useSpring(editorCaretY, { stiffness: 600, damping: 35, mass: 0.4 });
+
+    const updateEditorCaret = () => {
+        const editor = inputRef.current;
+        if (!editor || document.activeElement !== editor) {
+            editorCaretOpacity.set(0);
+            return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            editorCaretOpacity.set(0);
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const hasSelection = !range.collapsed;
+        if (hasSelection) {
+            editorCaretOpacity.set(0);
+            return;
+        }
+
+        const editorRect = editor.getBoundingClientRect();
+        let caretRect = null;
+        const rects = range.getClientRects();
+
+        if (rects && rects.length > 0) {
+            caretRect = rects[0];
+        } else {
+            const computed = window.getComputedStyle(editor);
+            const paddingLeft = parseFloat(computed.paddingLeft) || 0;
+            const paddingTop = parseFloat(computed.paddingTop) || 0;
+            const fontSize = parseFloat(computed.fontSize) || 14;
+            
+            caretRect = {
+                left: editorRect.left + paddingLeft,
+                top: editorRect.top + paddingTop,
+                height: fontSize * 1.25
+            };
+        }
+
+        if (caretRect) {
+            const x = caretRect.left - editorRect.left;
+            const y = caretRect.top - editorRect.top;
+            const h = caretRect.height || 20;
+
+            editorCaretX.set(x);
+            editorCaretY.set(y);
+            editorCaretHeight.set(h);
+            editorCaretOpacity.set(1);
+        } else {
+            editorCaretOpacity.set(0);
+        }
+    };
+
+    useEffect(() => {
+        const editor = inputRef.current;
+        if (!editor) return;
+
+        const handleSelectionChange = () => {
+            if (document.activeElement === editor) {
+                updateEditorCaret();
+            }
+        };
+
+        const handleScroll = () => {
+            updateEditorCaret();
+        };
+
+        document.addEventListener("selectionchange", handleSelectionChange);
+        editor.addEventListener("scroll", handleScroll);
+
+        return () => {
+            document.removeEventListener("selectionchange", handleSelectionChange);
+            editor.removeEventListener("scroll", handleScroll);
+        };
+    }, []);
     const [hdQuality, setHdQuality] = useState(false);
     const [captionText, setCaptionText] = useState("");
     const [uploading, setUploading] = useState(false);
@@ -1093,7 +1180,7 @@ function MessageInput({
                         <h3>Insert Link</h3>
                         <div className="modal-form-group">
                             <label>Text</label>
-                            <input 
+                            <SmoothInput 
                                 type="text"
                                 placeholder="Link display text..."
                                 value={linkText}
@@ -1103,7 +1190,7 @@ function MessageInput({
                         </div>
                         <div className="modal-form-group">
                             <label>URL</label>
-                            <input 
+                            <SmoothInput 
                                 type="text"
                                 placeholder="https://example.com"
                                 value={linkUrl}
@@ -1366,68 +1453,102 @@ function MessageInput({
                     </div>
                 )}
 
-                <div
-                    ref={inputRef}
-                    className="composer-textarea-editable"
-                    contentEditable="true"
-                    data-placeholder={isEditing ? "Edit your message..." : "Type a message..."}
-                    onInput={handleInput}
-                    onKeyUp={updateActiveStyles}
-                    onMouseUp={updateActiveStyles}
-                    onFocus={updateActiveStyles}
-                    onBlur={() => setActiveStyles([])}
-                    onKeyDown={(e) => {
-                        // Keyboard shortcuts for formatting
-                        if (e.ctrlKey || e.metaKey) {
-                            const key = e.key.toLowerCase();
-                            if (key === "b") {
-                                e.preventDefault();
-                                applyFormatting("bold");
-                                return;
-                            } else if (key === "i") {
-                                e.preventDefault();
-                                applyFormatting("italic");
-                                return;
-                            } else if (key === "u") {
-                                e.preventDefault();
-                                applyFormatting("underline");
-                                return;
-                            } else if (key === "e") {
-                                e.preventDefault();
-                                applyFormatting("code-inline");
-                                return;
-                            } else if (key === "k") {
-                                e.preventDefault();
-                                const selectionText = window.getSelection()?.toString() || "";
-                                setLinkText(selectionText);
-                                setLinkUrl("");
-                                setLinkModalOpen(true);
-                                return;
-                            } else if (e.shiftKey && key === "x") {
-                                e.preventDefault();
-                                applyFormatting("strikethrough");
-                                return;
-                            } else if (e.shiftKey && key === "c") {
-                                e.preventDefault();
-                                applyFormatting("code-block");
-                                return;
+                <div style={{ position: "relative", flex: 1, display: "flex", borderRadius: "24px", overflow: "hidden" }}>
+                    <div
+                        ref={inputRef}
+                        className="composer-textarea-editable"
+                        contentEditable="true"
+                        data-placeholder={isEditing ? "Edit your message..." : "Type a message..."}
+                        onInput={() => {
+                            handleInput();
+                            updateEditorCaret();
+                        }}
+                        onKeyUp={(e) => {
+                            updateActiveStyles(e);
+                            updateEditorCaret();
+                        }}
+                        onMouseUp={(e) => {
+                            updateActiveStyles(e);
+                            updateEditorCaret();
+                        }}
+                        onFocus={(e) => {
+                            updateActiveStyles(e);
+                            updateEditorCaret();
+                        }}
+                        onBlur={() => {
+                            setActiveStyles([]);
+                            editorCaretOpacity.set(0);
+                        }}
+                        onKeyDown={(e) => {
+                            // Keyboard shortcuts for formatting
+                            if (e.ctrlKey || e.metaKey) {
+                                const key = e.key.toLowerCase();
+                                if (key === "b") {
+                                    e.preventDefault();
+                                    applyFormatting("bold");
+                                    return;
+                                } else if (key === "i") {
+                                    e.preventDefault();
+                                    applyFormatting("italic");
+                                    return;
+                                } else if (key === "u") {
+                                    e.preventDefault();
+                                    applyFormatting("underline");
+                                    return;
+                                } else if (key === "e") {
+                                    e.preventDefault();
+                                    applyFormatting("code-inline");
+                                    return;
+                                } else if (key === "k") {
+                                    e.preventDefault();
+                                    const selectionText = window.getSelection()?.toString() || "";
+                                    setLinkText(selectionText);
+                                    setLinkUrl("");
+                                    setLinkModalOpen(true);
+                                    return;
+                                } else if (e.shiftKey && key === "x") {
+                                    e.preventDefault();
+                                    applyFormatting("strikethrough");
+                                    return;
+                                } else if (e.shiftKey && key === "c") {
+                                    e.preventDefault();
+                                    applyFormatting("code-block");
+                                    return;
+                                }
                             }
-                        }
 
-                        if (e.key === "Enter") {
-                            if (e.shiftKey) {
-                                // Allow default shift+enter newline behavior
-                                return;
-                            } else {
-                                // Enter only: send message
-                                e.preventDefault();
-                                sendMessage();
+                            if (e.key === "Enter") {
+                                if (e.shiftKey) {
+                                    // Allow default shift+enter newline behavior
+                                    return;
+                                } else {
+                                    // Enter only: send message
+                                    e.preventDefault();
+                                    sendMessage();
+                                }
                             }
-                        }
-                        if (e.key === "Escape" && isEditing) onCancelEdit();
-                        if (e.key === "Escape" && emojiOpen) setEmojiOpen(false);
-                    }}
-                />
+                            if (e.key === "Escape" && isEditing) onCancelEdit();
+                            if (e.key === "Escape" && emojiOpen) setEmojiOpen(false);
+                        }}
+                    />
+                    <motion.div
+                        style={{
+                            x: springEditorCaretX,
+                            y: springEditorCaretY,
+                            opacity: editorCaretOpacity,
+                            height: editorCaretHeight,
+                            position: "absolute",
+                            pointerEvents: "none",
+                            width: "2.5px",
+                            backgroundColor: "var(--accent, currentColor)",
+                            left: 0,
+                            top: 0,
+                            borderRadius: "999px",
+                            boxShadow: "0 0 8px var(--accent)",
+                            zIndex: 10
+                        }}
+                    />
+                </div>
                 <button className="send-btn" onClick={sendMessage} disabled={!message.trim()} aria-label="Send Message">
                     {isEditing ? "Save" : <SendHorizontal size={17} />}
                 </button>
@@ -1847,7 +1968,7 @@ function MessageInput({
                                         </div>
                                     ) : (
                                         <div className="preview-caption-row">
-                                            <input 
+                                            <SmoothInput 
                                                 type="text" 
                                                 placeholder="Add a caption..." 
                                                 value={captionText} 

@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import ParticleBackground from '../components/ParticleBackground';
 import logo from '../assets/logo.png';
 import './Landing.css';
+import { SmoothInput } from '../components/SmoothInput';
 import { useState, useEffect } from 'react';
 import { HiOutlineChatBubbleLeftRight } from 'react-icons/hi2';
 import { FiSun, FiMoon } from 'react-icons/fi';
@@ -205,7 +206,7 @@ export default function Landing() {
                   Choose a username to enter the General Chat as a guest.
                 </p>
                 <div className="guest-input-wrap">
-                  <input
+                  <SmoothInput
                     type="text"
                     placeholder="Enter your username"
                     value={guestUsername}
