@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import "../App.css";
 import { getBackendUrl } from "../utils/config";
 import { SmoothInput } from "../components/SmoothInput";
-import { FiSun, FiMoon } from "react-icons/fi";
+import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
 
 import logo from "../assets/logo.png";
@@ -73,9 +73,7 @@ function Login() {
 
   return (
     <div className="auth-wrapper">
-      <button className="floating-theme-toggle" onClick={handleThemeToggle} aria-label="Toggle theme">
-        {theme === 'dark' ? <FiSun /> : <FiMoon />}
-      </button>
+      <ThemeToggleButton theme={theme} onToggle={handleThemeToggle} className="floating-theme-toggle" />
       <div className="auth-pattern" aria-hidden="true" />
       <div className="auth-stage">
         <div className="auth-container">

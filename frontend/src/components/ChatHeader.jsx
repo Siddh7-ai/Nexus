@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings } from "react-icons/fi";
 import OnlineUsers from "./OnlineUsers";
+import { setThemeBrightness } from "../utils/theme";
+import { ThemeToggleIcon } from "./ThemeToggleButton";
 
 function Avatar({ username, avatarSrc, size = 32, className = "" }) {
     if (avatarSrc) {
@@ -52,6 +54,14 @@ function ChatHeader({
     const dropdownRef = useRef(null);
     const [copiedCode, setCopiedCode] = useState(false);
     const [copiedLink, setCopiedLink] = useState(false);
+    const [brightness, setBrightness] = useState(() => {
+        return localStorage.getItem("themeBrightness") || "100";
+    });
+
+    const handleBrightnessChange = (value) => {
+        setBrightness(value);
+        setThemeBrightness(value);
+    };
 
     const handleCopyCode = (e) => {
         e.stopPropagation();
@@ -264,6 +274,24 @@ function ChatHeader({
                                 </button>
                             )}
 
+                             {/* Theme Brightness Slider */}
+                            <div className="header-dropdown-brightness">
+                                <span className="brightness-label">
+                                    <FiSun /> Brightness: {brightness}%
+                                </span>
+                                <div className="brightness-slider-container">
+                                    <input 
+                                        type="range" 
+                                        min="40" 
+                                        max="130" 
+                                        value={brightness} 
+                                        onChange={(e) => handleBrightnessChange(e.target.value)}
+                                        className="brightness-slider"
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                            </div>
+
                             {/* 5. Theme Toggle */}
                             <button 
                                 className="header-dropdown-item" 
@@ -272,9 +300,10 @@ function ChatHeader({
                                     if (onThemeToggle) onThemeToggle();
                                 }}
                             >
-                                {theme === "dark" ? <FiSun /> : <FiMoon />}
+                                <ThemeToggleIcon theme={theme} />
                                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
                             </button>
+
 
                             {/* 6. Clear Chat */}
                             <button 

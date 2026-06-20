@@ -17,6 +17,7 @@ import {
 } from "react-icons/fi";
 import logo from "../assets/logo.png";
 import "./Features.css";
+import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
 
 const FEATURES = [
@@ -81,9 +82,7 @@ export default function Features() {
             <span><strong>Nexus</strong> Messenger</span>
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button className="theme-toggle-btn" onClick={handleThemeToggle} aria-label="Toggle theme">
-              {theme === 'dark' ? <FiSun /> : <FiMoon />}
-            </button>
+            <ThemeToggleButton theme={theme} onToggle={handleThemeToggle} className="theme-toggle-btn" />
             <Link to="/chat" className="features-nav-link">Open chat</Link>
           </div>
         </nav>

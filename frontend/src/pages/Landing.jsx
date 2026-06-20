@@ -5,7 +5,7 @@ import './Landing.css';
 import { SmoothInput } from '../components/SmoothInput';
 import { useState, useEffect } from 'react';
 import { HiOutlineChatBubbleLeftRight } from 'react-icons/hi2';
-import { FiSun, FiMoon } from 'react-icons/fi';
+import ThemeToggleButton from '../components/ThemeToggleButton';
 import { getBackendUrl } from '../utils/config';
 import { initTheme, toggleTheme } from '../utils/theme';
 
@@ -123,9 +123,7 @@ export default function Landing() {
 
         {/* Right — auth buttons */}
         <div className={`nav-actions ${showContent ? 'show' : ''}`}>
-          <button className="theme-toggle-btn" onClick={handleThemeToggle} aria-label="Toggle theme" style={{ marginRight: '8px' }}>
-            {theme === 'dark' ? <FiSun /> : <FiMoon />}
-          </button>
+          <ThemeToggleButton theme={theme} onToggle={handleThemeToggle} className="theme-toggle-btn" style={{ marginRight: '8px' }} />
           <button className="nav-sign-in" onClick={() => navigate('/login')}>
             Sign In
           </button>

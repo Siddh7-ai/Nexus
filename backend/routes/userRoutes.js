@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Message = require("../models/Message");
 const Report = require("../models/Report");
 const ClearedChat = require("../models/ClearedChat");
+const FriendRequest = require("../models/FriendRequest");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
@@ -74,7 +75,28 @@ router.get("/profile/:username", authenticateToken, async (req, res) => {
             ? (await User.findOne({ username: requester.username }))?.blockedUsers.includes(targetUser.username)
             : false;
         
-        const isFriend = targetUser.friends.includes(requester?.username);
+        let isFriend = false;
+        if (requester && !requester.isGuest) {
+            const requesterUser = await User.findOne({ username: requester.username });
+            isFriend = targetUser.friends.includes(requester.username) && requesterUser && requesterUser.friends.includes(targetUser.username);
+        }
+
+        let friendshipStatus = "none";
+        if (isSelf) {
+            friendshipStatus = "none";
+        } else if (isFriend) {
+            friendshipStatus = "friends";
+        } else if (requester && !requester.isGuest) {
+            const outgoingReq = await FriendRequest.findOne({ sender: requester.username, receiver: targetUser.username, status: "pending" });
+            if (outgoingReq) {
+                friendshipStatus = "requested";
+            } else {
+                const incomingReq = await FriendRequest.findOne({ sender: targetUser.username, receiver: requester.username, status: "pending" });
+                if (incomingReq) {
+                    friendshipStatus = "pending_approval";
+                }
+            }
+        }
 
         // Prepare return payload based on privacy visibility
         const responseData = {
@@ -131,6 +153,7 @@ router.get("/profile/:username", authenticateToken, async (req, res) => {
             // Include block and friend status for the requester
             responseData.isBlocked = isRequesterBlocked;
             responseData.isFriend = isFriend;
+            responseData.friendshipStatus = friendshipStatus;
         }
 
         res.json(responseData);
@@ -348,6 +371,240 @@ router.post("/report", authenticateToken, async (req, res) => {
     } catch (err) {
         console.error("Error creating report:", err);
         res.status(500).json({ message: "Server error reporting user" });
+    }
+});
+
+// Send Friend Request
+router.post("/friend-request/send", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.status(403).json({ message: "Guests cannot send friend requests" });
+        const { targetUsername } = req.body;
+        if (!targetUsername) return res.status(400).json({ message: "Target username required" });
+        if (targetUsername.toLowerCase() === req.user.username.toLowerCase()) {
+            return res.status(400).json({ message: "You cannot send a friend request to yourself" });
+        }
+
+        const targetUser = await User.findOne({ username: targetUsername });
+        if (!targetUser) return res.status(404).json({ message: "Target user not found" });
+
+        // Check if blocked
+        if (targetUser.blockedUsers.includes(req.user.username)) {
+            return res.status(403).json({ message: "You are blocked by this user" });
+        }
+
+        // Check if already friends
+        const senderUser = await User.findOne({ username: req.user.username });
+        const alreadyFriends = targetUser.friends.includes(req.user.username) && senderUser.friends.includes(targetUsername);
+        if (alreadyFriends) {
+            return res.status(400).json({ message: "You are already friends with this user" });
+        }
+
+        // Check if there is an incoming request from them - if so, auto-accept!
+        const incomingReq = await FriendRequest.findOne({ sender: targetUsername, receiver: req.user.username, status: "pending" });
+        if (incomingReq) {
+            // Auto accept
+            if (!senderUser.friends.includes(targetUsername)) senderUser.friends.push(targetUsername);
+            if (!targetUser.friends.includes(req.user.username)) targetUser.friends.push(req.user.username);
+            await Promise.all([senderUser.save(), targetUser.save(), FriendRequest.deleteOne({ _id: incomingReq._id })]);
+
+            // Notify via socket
+            const io = req.app.get("io");
+            if (io) {
+                io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
+                io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+            }
+            return res.json({ message: "Friend request automatically accepted (mutual request)", friendshipStatus: "friends" });
+        }
+
+        // Check if request already sent
+        const existingReq = await FriendRequest.findOne({ sender: req.user.username, receiver: targetUsername });
+        if (existingReq) {
+            return res.status(400).json({ message: "Friend request already sent" });
+        }
+
+        // Create new request
+        await FriendRequest.create({
+            sender: req.user.username,
+            receiver: targetUsername,
+            status: "pending"
+        });
+
+        // Notify receiver via socket
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+        }
+
+        res.json({ message: "Friend request sent successfully", friendshipStatus: "requested" });
+    } catch (err) {
+        console.error("Error sending friend request:", err);
+        res.status(500).json({ message: "Server error sending friend request" });
+    }
+});
+
+// Accept Friend Request
+router.post("/friend-request/accept", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.status(403).json({ message: "Guests cannot accept requests" });
+        const { targetUsername } = req.body;
+        if (!targetUsername) return res.status(400).json({ message: "Target username required" });
+
+        const pendingReq = await FriendRequest.findOne({ sender: targetUsername, receiver: req.user.username, status: "pending" });
+        if (!pendingReq) {
+            return res.status(404).json({ message: "No pending friend request found from this user" });
+        }
+
+        const [user, senderUser] = await Promise.all([
+            User.findById(req.user.userId),
+            User.findOne({ username: targetUsername })
+        ]);
+
+        if (!user || !senderUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // Add to friends lists mutually
+        if (!user.friends.includes(targetUsername)) {
+            user.friends.push(targetUsername);
+        }
+        if (!senderUser.friends.includes(req.user.username)) {
+            senderUser.friends.push(req.user.username);
+        }
+
+        await Promise.all([
+            user.save(),
+            senderUser.save(),
+            FriendRequest.deleteOne({ _id: pendingReq._id })
+        ]);
+
+        // Notify both via socket
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
+            io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+        }
+
+        res.json({ message: "Friend request accepted successfully", friendshipStatus: "friends" });
+    } catch (err) {
+        console.error("Error accepting friend request:", err);
+        res.status(500).json({ message: "Server error accepting request" });
+    }
+});
+
+// Decline Friend Request
+router.post("/friend-request/decline", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.status(403).json({ message: "Guests cannot decline requests" });
+        const { targetUsername } = req.body;
+        if (!targetUsername) return res.status(400).json({ message: "Target username required" });
+
+        const pendingReq = await FriendRequest.findOne({ sender: targetUsername, receiver: req.user.username, status: "pending" });
+        if (!pendingReq) {
+            return res.status(404).json({ message: "No pending friend request found from this user" });
+        }
+
+        await FriendRequest.deleteOne({ _id: pendingReq._id });
+
+        // Notify both via socket
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
+            io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+        }
+
+        res.json({ message: "Friend request declined", friendshipStatus: "none" });
+    } catch (err) {
+        console.error("Error declining friend request:", err);
+        res.status(500).json({ message: "Server error declining request" });
+    }
+});
+
+// Cancel Friend Request
+router.post("/friend-request/cancel", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.status(403).json({ message: "Guests cannot cancel requests" });
+        const { targetUsername } = req.body;
+        if (!targetUsername) return res.status(400).json({ message: "Target username required" });
+
+        const pendingReq = await FriendRequest.findOne({ sender: req.user.username, receiver: targetUsername, status: "pending" });
+        if (!pendingReq) {
+            return res.status(404).json({ message: "No pending friend request found to this user" });
+        }
+
+        await FriendRequest.deleteOne({ _id: pendingReq._id });
+
+        // Notify both via socket
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
+            io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+        }
+
+        res.json({ message: "Friend request cancelled", friendshipStatus: "none" });
+    } catch (err) {
+        console.error("Error cancelling friend request:", err);
+        res.status(500).json({ message: "Server error cancelling request" });
+    }
+});
+
+// Remove Friend (Mutual)
+router.post("/friend-request/remove", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.status(403).json({ message: "Guests cannot remove friends" });
+        const { targetUsername } = req.body;
+        if (!targetUsername) return res.status(400).json({ message: "Target username required" });
+
+        const [user, targetUser] = await Promise.all([
+            User.findById(req.user.userId),
+            User.findOne({ username: targetUsername })
+        ]);
+
+        if (user) {
+            user.friends = user.friends.filter(f => f !== targetUsername);
+            await user.save();
+        }
+        if (targetUser) {
+            targetUser.friends = targetUser.friends.filter(f => f !== req.user.username);
+            await targetUser.save();
+        }
+
+        // Notify both via socket
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
+            io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
+        }
+
+        res.json({ message: "Friend removed successfully", friendshipStatus: "none" });
+    } catch (err) {
+        console.error("Error removing friend:", err);
+        res.status(500).json({ message: "Server error removing friend" });
+    }
+});
+
+// Get Pending Friend Requests List (Incoming)
+router.get("/friend-requests/pending", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.json({ incoming: [] });
+
+        const pendingIncoming = await FriendRequest.find({ receiver: req.user.username, status: "pending" });
+        
+        // Fetch sender profiles (avatar, displayName) for each request
+        const incomingWithProfiles = await Promise.all(pendingIncoming.map(async (reqItem) => {
+            const senderUser = await User.findOne({ username: reqItem.sender });
+            return {
+                _id: reqItem._id,
+                sender: reqItem.sender,
+                displayName: senderUser ? (senderUser.displayName || reqItem.sender) : reqItem.sender,
+                avatar: senderUser ? senderUser.avatar : "",
+                createdAt: reqItem.createdAt
+            };
+        }));
+
+        res.json({ incoming: incomingWithProfiles });
+    } catch (err) {
+        console.error("Error fetching pending requests:", err);
+        res.status(500).json({ message: "Server error fetching pending requests" });
     }
 });
 

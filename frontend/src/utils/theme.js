@@ -1,5 +1,8 @@
 export function initTheme() {
     const savedTheme = localStorage.getItem("theme");
+    const savedBrightness = localStorage.getItem("themeBrightness") || "100";
+    document.documentElement.style.setProperty("--theme-brightness", `${savedBrightness}%`);
+    
     // Default to dark mode if user preferred, else default to light mode
     if (savedTheme === "dark") {
         document.body.classList.add("dark-theme");
@@ -21,3 +24,9 @@ export function toggleTheme() {
     }
     return nextTheme;
 }
+
+export function setThemeBrightness(value) {
+    localStorage.setItem("themeBrightness", value);
+    document.documentElement.style.setProperty("--theme-brightness", `${value}%`);
+}
+

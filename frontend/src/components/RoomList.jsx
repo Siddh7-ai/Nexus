@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiCompass, FiActivity } from "react-icons/fi";
 
 const ROOMS = ["General chat", "Project chat", "Study chat"];
 const ROOM_ICONS = {
@@ -9,6 +9,19 @@ const ROOM_ICONS = {
     "Project chat": "🚀",
     "Study chat": "📝"
 };
+
+
+
+function formatTimeAgo(date) {
+    const diffMs = Date.now() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString();
+}
 
 function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = false }) {
     if (avatarSrc) {
@@ -68,8 +81,9 @@ function RoomList({
     customRooms = [],
     customRoomsLoading = false,
     onCreateRoomClick,
-    activeSidebarTab = "rooms",
-    setActiveSidebarTab
+    activeSidebarTab = "messages",
+    setActiveSidebarTab,
+    pendingRequestsCount = 0
 }) {
     const [dmSearch, setDmSearch] = useState("");
 
@@ -138,30 +152,32 @@ function RoomList({
             <div className="sidebar-narrow-nav">
                 <div className="narrow-nav-top">
                     {/* Brand logo */}
-                    <div className="narrow-nav-logo-box" onClick={() => setActiveSidebarTab("rooms")} title="Nexus Rooms">
+                    <div className="narrow-nav-logo-box" onClick={() => setActiveSidebarTab("messages")} title="Nexus Messages">
                         <img src={logo} alt="Nexus Logo" className="narrow-nav-logo-img" />
                     </div>
 
                     {/* Nav stack */}
                     <div className="narrow-nav-items">
                         <button 
-                            className={`narrow-nav-btn ${activeSidebarTab === "rooms" ? "active" : ""}`}
-                            onClick={() => setActiveSidebarTab("rooms")}
-                            title="Rooms"
+                            className={`narrow-nav-btn ${activeSidebarTab === "messages" ? "active" : ""}`}
+                            onClick={() => setActiveSidebarTab("messages")}
+                            title="Messages"
                         >
-                            <FiHome />
-                        </button>
-
-                        <button 
-                            className={`narrow-nav-btn ${activeSidebarTab === "dms" ? "active" : ""}`}
-                            onClick={() => setActiveSidebarTab("dms")}
-                            title="Direct Messages"
-                        >
-                            <FiSend />
+                            <FiMessageSquare />
                             {totalDmUnread > 0 && (
                                 <span className="narrow-nav-btn-unread">{totalDmUnread}</span>
                             )}
                         </button>
+
+                        <button 
+                            className={`narrow-nav-btn ${activeSidebarTab === "rooms" ? "active" : ""}`}
+                            onClick={() => setActiveSidebarTab("rooms")}
+                            title="Rooms Only"
+                        >
+                            <FiCompass />
+                        </button>
+
+
 
                         {!isGuest && (
                             <button 
@@ -181,6 +197,7 @@ function RoomList({
                         className={`narrow-avatar-wrapper ${activeSidebarTab === "profile" ? "active" : ""}`}
                         onClick={onProfileClick}
                         title="Profile Settings"
+                        style={{ position: 'relative' }}
                     >
                         <div className="narrow-avatar-border">
                             <Avatar 
@@ -191,6 +208,29 @@ function RoomList({
                             />
                         </div>
                         <span className="narrow-nav-status-dot" />
+                        {pendingRequestsCount > 0 && (
+                            <span 
+                                className="narrow-nav-btn-unread" 
+                                style={{ 
+                                    background: '#ef4444', 
+                                    top: '-4px', 
+                                    right: '-4px', 
+                                    zIndex: 12,
+                                    position: 'absolute',
+                                    fontSize: '9px',
+                                    minWidth: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#fff',
+                                    fontWeight: '800'
+                                }}
+                            >
+                                {pendingRequestsCount}
+                            </span>
+                        )}
                     </div>
 
                     <button 
@@ -205,7 +245,218 @@ function RoomList({
 
             {/* 2. Right active list panel */}
             <div className="sidebar-active-panel">
-                {activeSidebarTab === "rooms" ? (
+                {activeSidebarTab === "messages" ? (
+                    <>
+                        <div className="panel-header-section">
+                            <h3 className="panel-header-title">Messages</h3>
+                            <div className="panel-search-box" style={{ position: 'relative' }}>
+                                <SmoothInput
+                                    type="text"
+                                    placeholder="Search chats, rooms or users..."
+                                    value={dmSearch}
+                                    onChange={(e) => setDmSearch(e.target.value)}
+                                    className="dm-search-input"
+                                />
+                                {dmSearch && (
+                                    <button className="dm-search-clear" onClick={() => setDmSearch("")} style={{ position: 'absolute', top: '14px', right: '10px', border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '16px' }}>×</button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
+                            <div className="dm-list-container" style={{ height: '100%', overflowY: 'visible' }}>
+                                
+                                {/* 1. Rooms & Groups Section */}
+                                <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <span>Rooms & Groups</span>
+                                </div>
+                                <div className="unified-rooms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
+                                    {/* Public Rooms */}
+                                    {ROOMS.filter(r => !dmSearch || r.toLowerCase().includes(dmSearch.toLowerCase())).map(room => {
+                                        const isActive = activeRoom === room && !activePrivate;
+                                        const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
+                                        const isLocked = isGuest && room !== "General chat";
+                                        
+                                        return (
+                                            <div 
+                                                key={room} 
+                                                className={`dm-row-card ${isActive ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                                onClick={() => !isLocked && onSelectRoom(room)}
+                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                            >
+                                                <div className="dm-row-left">
+                                                    <div className="grid-card-emoji-icon" style={{ fontSize: '18px', marginRight: '10px' }}>
+                                                        {ROOM_ICONS[room]}
+                                                    </div>
+                                                    <span className="dm-row-name" style={{ fontSize: '13px' }}>
+                                                        {room.replace(" chat", "")} Chat
+                                                    </span>
+                                                </div>
+                                                <div className="dm-row-right">
+                                                    {isLocked ? (
+                                                        <FiLock className="dm-lock-icon" />
+                                                    ) : unread > 0 ? (
+                                                        <span className="dm-unread-badge" style={{ background: '#ef4444' }}>{unread}</span>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Custom Private Rooms */}
+                                    {customRooms.filter(r => !dmSearch || r.name.toLowerCase().includes(dmSearch.toLowerCase())).map(room => {
+                                        const isActive = activeRoom === room.name && !activePrivate;
+                                        const unread = unreadCounts && unreadCounts[room.name] ? unreadCounts[room.name] : 0;
+                                        
+                                        return (
+                                            <div 
+                                                key={room.code} 
+                                                className={`dm-row-card ${isActive ? "active" : ""}`}
+                                                onClick={() => onSelectRoom(room.name)}
+                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                            >
+                                                <div className="dm-row-left">
+                                                    {room.avatar ? (
+                                                        <img 
+                                                            src={room.avatar} 
+                                                            alt={room.name} 
+                                                            style={{ width: '24px', height: '24px', borderRadius: '6px', marginRight: '10px', objectFit: 'cover' }} 
+                                                        />
+                                                    ) : (
+                                                        <span style={{ fontSize: '18px', marginRight: '10px' }}>🔒</span>
+                                                    )}
+                                                    <span className="dm-row-name" style={{ fontSize: '13px' }}>
+                                                        {room.name}
+                                                    </span>
+                                                </div>
+                                                <div className="dm-row-right">
+                                                    {unread > 0 ? (
+                                                        <span className="dm-unread-badge" style={{ background: '#ef4444' }}>{unread}</span>
+                                                    ) : (
+                                                        <span className="guest-badge-pill" style={{ background: 'var(--soft)', color: 'var(--muted)', fontSize: '9px' }}>PVT</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* 2. Direct Messages Section */}
+                                <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <span>Direct Messages</span>
+                                </div>
+                                <div className="unified-dms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {dmSearch.trim() ? (
+                                        filteredSearchUsers.length === 0 ? (
+                                            <div className="sidebar-empty-state">No users found.</div>
+                                        ) : (
+                                            filteredSearchUsers.map(user => {
+                                                const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
+                                                const isLocked = isGuest;
+                                                const unreadKey = unreadCounts ? Object.keys(unreadCounts).find(k => k.toLowerCase() === privateChatId.toLowerCase()) : null;
+                                                const unread = unreadKey ? unreadCounts[unreadKey] : 0;
+                                                
+                                                return (
+                                                    <div 
+                                                        key={user.username}
+                                                        className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                                        onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
+                                                        style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                                    >
+                                                        <div className="dm-row-left">
+                                                            <div 
+                                                                className="dm-avatar-wrapper"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    onUserProfileClick(user.username);
+                                                                }}
+                                                            >
+                                                                <Avatar 
+                                                                    username={user.username} 
+                                                                    avatarSrc={user.avatar} 
+                                                                    size={28} 
+                                                                    className="dm-row-avatar" 
+                                                                />
+                                                                <span className={`dm-status-dot ${
+                                                                    user.role === "guest" ? "guest-dot" :
+                                                                    user.status === "Online" ? "" :
+                                                                    user.status === "Away" ? "away" :
+                                                                    user.status === "Busy" ? "busy" : "offline"
+                                                                }`} />
+                                                            </div>
+                                                            <span className="dm-row-name" style={{ fontSize: '13px' }}>
+                                                                {user.displayName || user.username}
+                                                            </span>
+                                                        </div>
+                                                        <div className="dm-row-right">
+                                                            {isLocked ? (
+                                                                <FiLock className="dm-lock-icon" />
+                                                            ) : unread > 0 ? (
+                                                                <span className="dm-unread-badge">{unread}</span>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )
+                                    ) : (
+                                        dmConversations.length === 0 ? (
+                                            <div className="sidebar-empty-state" style={{ fontSize: '11px' }}>No direct messages yet.</div>
+                                        ) : (
+                                            dmConversations.map(user => {
+                                                const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
+                                                const isLocked = isGuest;
+                                                const unreadKey = unreadCounts ? Object.keys(unreadCounts).find(k => k.toLowerCase() === privateChatId.toLowerCase()) : null;
+                                                const unread = unreadKey ? unreadCounts[unreadKey] : 0;
+                                                
+                                                return (
+                                                    <div 
+                                                        key={user.username}
+                                                        className={`dm-row-card ${activePrivate === privateChatId ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                                        onClick={() => !isLocked && onSelectPrivate(privateChatId, user.username)}
+                                                        style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                                    >
+                                                        <div className="dm-row-left">
+                                                            <div 
+                                                                className="dm-avatar-wrapper"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    onUserProfileClick(user.username);
+                                                                }}
+                                                            >
+                                                                <Avatar 
+                                                                    username={user.username} 
+                                                                    avatarSrc={user.avatar} 
+                                                                    size={28} 
+                                                                    className="dm-row-avatar" 
+                                                                />
+                                                                <span className={`dm-status-dot ${
+                                                                    user.role === "guest" ? "guest-dot" :
+                                                                    user.status === "Online" ? "" :
+                                                                    user.status === "Away" ? "away" :
+                                                                    user.status === "Busy" ? "busy" : "offline"
+                                                                }`} />
+                                                            </div>
+                                                            <span className="dm-row-name" style={{ fontSize: '13px' }}>
+                                                                {user.displayName || user.username}
+                                                            </span>
+                                                        </div>
+                                                        <div className="dm-row-right">
+                                                            {isLocked ? (
+                                                                <FiLock className="dm-lock-icon" />
+                                                            ) : unread > 0 ? (
+                                                                <span className="dm-unread-badge">{unread}</span>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                ) : activeSidebarTab === "rooms" ? (
                     <>
                         <div className="panel-header-section">
                             <h3 className="panel-header-title">Rooms</h3>
@@ -266,7 +517,7 @@ function RoomList({
                                             transition: 'color 0.2s, background-color 0.2s'
                                         }}
                                     >
-                                        <FiPlus size={18} />
+                                        <FiPlus />
                                     </button>
                                 )}
                             </div>

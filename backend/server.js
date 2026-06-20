@@ -183,6 +183,8 @@ const io = new Server(server, {
     }
 });
 
+app.set("io", io);
+
 mongoose.connect("mongodb://127.0.0.1:27017/Chatapp")
     .then(() => console.log("MongoDB Connected"))
     .catch((err) => console.log(err));
@@ -288,6 +290,8 @@ function emitPresence() {
     io.emit("onlineUsers", userList.length);
     io.emit("onlineUserList", userList);
 }
+
+
 
 async function getChatClearedAt(username, chatId) {
     if (!username || !chatId) return null;
@@ -416,6 +420,8 @@ io.on("connection", async (socket) => {
             }
         })();
     }
+
+
 
     // Calculate and emit initial unread counts
     (async () => {
@@ -1353,6 +1359,8 @@ io.on("connection", async (socket) => {
             socket.emit("error", { message: "Failed to delete room." });
         }
     });
+
+
 
     socket.on("disconnect", async () => {
         const userObj = connectedUsers.get(socket.id);

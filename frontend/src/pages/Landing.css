@@ -303,13 +303,12 @@ body.dark-theme .hero-chat-btn:hover {
   background: #e5e7eb;
 }
 body.dark-theme .hero-secondary-btn {
-  background: #e5e7eb;
-  color: #0f1013;
-  border-color: #e5e7eb;
+  background: #15171c;
+  color: #f3f4f6;
+  border-color: #2a2d35;
 }
 body.dark-theme .hero-secondary-btn:hover {
-  background: #ffffff;
-  border-color: #ffffff;
+  background: #1f2229;
 }
 body.dark-theme .landing-nav .theme-toggle-btn {
   border-color: #e5e7eb;

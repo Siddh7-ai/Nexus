@@ -14,7 +14,7 @@ import RoomList from "../components/RoomList";
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
-import { FiLock } from "react-icons/fi";
+import { FiLock, FiTrash2 } from "react-icons/fi";
 
 // Lazy-load emoji picker library to optimize bundle load times
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -45,6 +45,47 @@ function getAuthToken() {
         }
     }
     return token;
+}
+
+function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = false }) {
+    if (avatarSrc) {
+        return (
+            <img 
+                src={avatarSrc} 
+                alt={`${username}'s avatar`} 
+                className={`avatar ${className}`} 
+                style={{ width: size, height: size, objectFit: 'cover', borderRadius: '50%' }} 
+            />
+        );
+    }
+    const colors = darkVariant ? ["#121212"] : ["#bff7f2", "#c8eeff", "#d8f7cf", "#ffe1b8", "#e7dcff"];
+    let colorIndex = 0;
+    if (!darkVariant) {
+        for (let i = 0; i < username.length; i++) {
+            colorIndex += username.charCodeAt(i);
+        }
+    }
+    const color = colors[colorIndex % colors.length];
+
+    return (
+        <div 
+            className={`avatar ${className}`} 
+            style={{ 
+                backgroundColor: color, 
+                color: darkVariant ? "#ffffff" : "#23303d", 
+                width: size, 
+                height: size, 
+                fontSize: size * 0.42,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%'
+            }}
+        >
+            {username.charAt(0).toUpperCase()}
+        </div>
+    );
 }
 
 function Chat() {
@@ -154,6 +195,10 @@ function Chat() {
 
     // Other user profile states
     const [selectedProfileUsername, setSelectedProfileUsername] = useState(null);
+    const selectedProfileUsernameRef = useRef(selectedProfileUsername);
+    useEffect(() => {
+        selectedProfileUsernameRef.current = selectedProfileUsername;
+    }, [selectedProfileUsername]);
     const [selectedProfileData, setSelectedProfileData] = useState(null);
     const [loadingProfileCard, setLoadingProfileCard] = useState(false);
     const [profileCardError, setProfileCardError] = useState("");
@@ -166,7 +211,10 @@ function Chat() {
     const [customRooms, setCustomRooms] = useState([]);
     const [customRoomsLoading, setCustomRoomsLoading] = useState(true);
     const [showCreateJoinModal, setShowCreateJoinModal] = useState(false);
-    const [activeSidebarTab, setActiveSidebarTab] = useState("rooms"); // "rooms" or "dms"
+    const [activeSidebarTab, setActiveSidebarTab] = useState("messages"); // "messages" or "rooms"
+
+    const [pendingRequests, setPendingRequests] = useState([]);
+
     const [activeModalTab, setActiveModalTab] = useState("create"); // "create" or "join"
     const [codeArray, setCodeArray] = useState(Array(6).fill(""));
     const [activeRoomDetails, setActiveRoomDetails] = useState(null); // { name, code, admin, members, isPrivate }
@@ -344,6 +392,78 @@ function Chat() {
         }
     };
 
+    const fetchPendingRequests = async () => {
+        if (isGuest || !username) return;
+        try {
+            const res = await fetch(`${getBackendUrl()}/api/user/friend-requests/pending`, {
+                headers: { "Authorization": `Bearer ${getAuthToken()}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPendingRequests(data.incoming || []);
+            }
+        } catch (err) {
+            console.error("Error fetching pending requests:", err);
+        }
+    };
+
+    const reloadSelectedProfileCard = async (uname) => {
+        if (!uname) return;
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/user/profile/${uname}`, {
+                headers: { "Authorization": `Bearer ${getAuthToken()}` }
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setSelectedProfileData(data);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleAcceptRequest = async (targetUsername) => {
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/user/friend-request/accept`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getAuthToken()}`
+                },
+                body: JSON.stringify({ targetUsername })
+            });
+            if (response.ok) {
+                await fetchPendingRequests();
+                if (selectedProfileUsernameRef.current?.toLowerCase() === targetUsername.toLowerCase()) {
+                    await reloadSelectedProfileCard(targetUsername);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleDeclineRequest = async (targetUsername) => {
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/user/friend-request/decline`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getAuthToken()}`
+                },
+                body: JSON.stringify({ targetUsername })
+            });
+            if (response.ok) {
+                await fetchPendingRequests();
+                if (selectedProfileUsernameRef.current?.toLowerCase() === targetUsername.toLowerCase()) {
+                    await reloadSelectedProfileCard(targetUsername);
+                }
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     useEffect(() => {
         if (isGuest || !username) return;
         
@@ -381,6 +501,7 @@ function Chat() {
         }
         
         fetchUserData();
+        fetchPendingRequests();
     }, [username, isGuest]);
 
     useEffect(() => {
@@ -603,10 +724,25 @@ function Chat() {
         newSocket.on("onlineUserList", (list) => setOnlineUserList(list));
 
         newSocket.on("messageUpdated", (updatedMsg) => {
-            setMessages(prev =>
-                prev.map(m => (m._id === updatedMsg._id ? updatedMsg : m))
-            );
+            const isMatch = updatedMsg.privateChatId
+                ? (activePrivateRef.current?.toLowerCase() === updatedMsg.privateChatId?.toLowerCase())
+                : (activeRoomRef.current === updatedMsg.room);
+
+            if (!isMatch) return;
+
+            setMessages(prev => {
+                const exists = prev.some(m => m._id === updatedMsg._id);
+                if (exists) {
+                    return prev.map(m => (m._id === updatedMsg._id ? updatedMsg : m));
+                }
+                if (updatedMsg.isDeleted) {
+                    const list = [...prev, updatedMsg];
+                    return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                }
+                return prev;
+            });
         });
+
 
         newSocket.on("messageDeletedForMe", (msgId) => {
             setMessages(prev => prev.filter(m => m._id !== msgId));
@@ -615,6 +751,15 @@ function Chat() {
         newSocket.on("customRoomsList", (rooms) => {
             setCustomRooms(rooms);
             setCustomRoomsLoading(false);
+        });
+
+
+
+        newSocket.on("friendRequestUpdated", async () => {
+            await fetchPendingRequests();
+            if (selectedProfileUsernameRef.current) {
+                await reloadSelectedProfileCard(selectedProfileUsernameRef.current);
+            }
         });
 
         newSocket.on("roomCreatedSuccess", (room) => {
@@ -710,11 +855,11 @@ function Chat() {
                 setSearchParams({ room: "General chat" });
                 setActiveRoom("General chat");
                 setActivePrivate(null);
-                setActiveSidebarTab("rooms");
+                setActiveSidebarTab("messages");
             } else {
                 setActiveRoom("General chat");
                 setActivePrivate(null);
-                setActiveSidebarTab("rooms");
+                setActiveSidebarTab("messages");
             }
         } else {
             // Normal user session restoration
@@ -725,13 +870,13 @@ function Chat() {
                     setActiveRoom(null);
                     setActivePrivate(pChatId);
                     setActivePrivateName(privateUrl);
-                    setActiveSidebarTab("dms");
+                    setActiveSidebarTab("messages");
                 }
             } else {
                 setSearchParams({ room: roomUrl });
                 setActiveRoom(roomUrl);
                 setActivePrivate(null);
-                setActiveSidebarTab("rooms");
+                setActiveSidebarTab("messages");
             }
         }
 
@@ -807,7 +952,6 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
-        setActiveSidebarTab("rooms");
         setSearchParams({ room });
         setActiveRoom(room);
         setActivePrivate(null);
@@ -825,7 +969,6 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
-        setActiveSidebarTab("dms");
         setSearchParams({ private: otherUsername });
         setActivePrivate(privateChatId);
         setActivePrivateName(otherUsername);
@@ -1345,7 +1488,20 @@ function Chat() {
 
     async function handleFriendToggle() {
         if (!selectedProfileData) return;
-        const endpoint = selectedProfileData.isFriend ? "remove-friend" : "add-friend";
+        
+        let endpoint = "";
+        const status = selectedProfileData.friendshipStatus;
+        
+        if (status === "friends") {
+            endpoint = "friend-request/remove";
+        } else if (status === "requested") {
+            endpoint = "friend-request/cancel";
+        } else if (status === "pending_approval") {
+            endpoint = "friend-request/accept";
+        } else {
+            endpoint = "friend-request/send";
+        }
+        
         try {
             const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
                 method: "POST",
@@ -1356,14 +1512,28 @@ function Chat() {
                 body: JSON.stringify({ targetUsername: selectedProfileData.username })
             });
             if (response.ok) {
-                // reload card
-                const updatedResponse = await fetch(`${getBackendUrl()}/api/user/profile/${selectedProfileData.username}`, {
-                    headers: { "Authorization": `Bearer ${getAuthToken()}` }
-                });
-                const updatedData = await updatedResponse.json();
-                if (updatedResponse.ok) {
-                    setSelectedProfileData(updatedData);
-                }
+                await reloadSelectedProfileCard(selectedProfileData.username);
+                await fetchPendingRequests();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function handleFriendDecline() {
+        if (!selectedProfileData) return;
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/user/friend-request/decline`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getAuthToken()}`
+                },
+                body: JSON.stringify({ targetUsername: selectedProfileData.username })
+            });
+            if (response.ok) {
+                await reloadSelectedProfileCard(selectedProfileData.username);
+                await fetchPendingRequests();
             }
         } catch (err) {
             console.error(err);
@@ -1576,6 +1746,8 @@ function Chat() {
         ? `${activePrivateName}`
         : `#${activeRoom}`;
 
+
+
     return (
         <div className="chat-wrapper">
 
@@ -1614,6 +1786,8 @@ function Chat() {
                         }}
                         activeSidebarTab={activeSidebarTab}
                         setActiveSidebarTab={setActiveSidebarTab}
+
+                        pendingRequestsCount={pendingRequests.length}
                     />
                 </div>
 
@@ -1932,6 +2106,43 @@ function Chat() {
                                                         >
                                                             Unblock
                                                         </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Pending Friend Requests */}
+                                    {pendingRequests && pendingRequests.length > 0 && (
+                                        <div className="profile-blocked-card" style={{ background: 'var(--soft)', border: '1px solid var(--border)', borderRadius: '12px', padding: '12px 16px' }}>
+                                            <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Friend Requests ({pendingRequests.length})</h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '150px', overflowY: 'auto' }}>
+                                                {pendingRequests.map(reqItem => (
+                                                    <div key={reqItem._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <Avatar username={reqItem.sender} avatarSrc={reqItem.avatar} size={24} />
+                                                            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)' }}>
+                                                                @{reqItem.sender}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleAcceptRequest(reqItem.sender)}
+                                                                className="modal-btn primary"
+                                                                style={{ fontSize: '11px', padding: '4px 8px', height: '24px', minWidth: 'unset', cursor: 'pointer' }}
+                                                            >
+                                                                Accept
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeclineRequest(reqItem.sender)}
+                                                                className="modal-btn cancel"
+                                                                style={{ fontSize: '11px', padding: '4px 8px', height: '24px', minWidth: 'unset', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer' }}
+                                                            >
+                                                                Decline
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2403,22 +2614,52 @@ function Chat() {
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
                                                         Video
                                                     </button>
-                                                    <button 
-                                                        onClick={handleFriendToggle} 
-                                                        className="action-btn-card outline"
-                                                    >
-                                                        {selectedProfileData.isFriend ? (
-                                                            <>
-                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>
-                                                                Remove
-                                                            </>
-                                                        ) : (
-                                                            <>
+                                                    {selectedProfileData.friendshipStatus === "pending_approval" ? (
+                                                        <>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={handleFriendToggle} 
+                                                                className="action-btn-card solid"
+                                                                title="Accept Friend Request"
+                                                                style={{ background: 'var(--accent)', color: '#fff' }}
+                                                            >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
-                                                                Connect
-                                                            </>
-                                                        )}
-                                                    </button>
+                                                                Accept
+                                                            </button>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={handleFriendDecline} 
+                                                                className="action-btn-card outline"
+                                                                title="Decline Friend Request"
+                                                            >
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                                Decline
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={handleFriendToggle} 
+                                                            className="action-btn-card outline"
+                                                        >
+                                                            {selectedProfileData.friendshipStatus === "friends" ? (
+                                                                <>
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                    Remove
+                                                                </>
+                                                            ) : selectedProfileData.friendshipStatus === "requested" ? (
+                                                                <>
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                                                    Requested
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                                                    Connect
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
                                                     <button 
                                                         onClick={handleBlockToggle} 
                                                         className="action-btn-card outline"
