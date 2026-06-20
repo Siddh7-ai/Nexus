@@ -10,6 +10,7 @@ import { getBackendUrl } from "../utils/config";
 import TypingIndicator from "../components/TypingIndicator";
 import MessageInput from "../components/MessageInput";
 import RoomList from "../components/RoomList";
+import CrowdCanvas from "../components/CrowdCanvas";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
@@ -129,7 +130,7 @@ function Chat() {
     const [allUsers, setAllUsers] = useState([]);
     const [conversationUsers, setConversationUsers] = useState([]);
 
-    const [activeRoom, setActiveRoom] = useState("General chat");
+    const [activeRoom, setActiveRoom] = useState(null);
     const [activePrivate, setActivePrivate] = useState(null); // privateChatId
     const [activePrivateName, setActivePrivateName] = useState(""); // other username
 
@@ -212,6 +213,7 @@ function Chat() {
     const [customRoomsLoading, setCustomRoomsLoading] = useState(true);
     const [showCreateJoinModal, setShowCreateJoinModal] = useState(false);
     const [activeSidebarTab, setActiveSidebarTab] = useState("messages"); // "messages" or "rooms"
+    const [deletedSystemRooms, setDeletedSystemRooms] = useState([]);
 
     const [pendingRequests, setPendingRequests] = useState([]);
 
@@ -505,6 +507,19 @@ function Chat() {
     }, [username, isGuest]);
 
     useEffect(() => {
+        if (isGuest) {
+            try {
+                const localDeleted = JSON.parse(localStorage.getItem("deletedSystemRooms") || "[]");
+                setDeletedSystemRooms(localDeleted);
+            } catch (e) {
+                console.error(e);
+            }
+        } else if (ownProfileData) {
+            setDeletedSystemRooms(ownProfileData.deletedSystemRooms || []);
+        }
+    }, [ownProfileData, isGuest]);
+
+    useEffect(() => {
         if (!socketRef.current) return;
         if (activePrivate) {
             socketRef.current.emit("joinPrivateChat", { otherUsername: activePrivateName });
@@ -556,8 +571,6 @@ function Chat() {
                     newSocket.emit("joinPrivateChat", { otherUsername: activePrivateNameRef.current });
                 } else if (activeRoomRef.current) {
                     newSocket.emit("joinRoom", activeRoomRef.current);
-                } else {
-                    newSocket.emit("joinRoom", "General chat");
                 }
             }
         });
@@ -753,6 +766,11 @@ function Chat() {
             setCustomRoomsLoading(false);
         });
 
+        newSocket.on("deletedSystemRoomsUpdated", (updatedList) => {
+            setDeletedSystemRooms(updatedList || []);
+            switchToDefaultRoom(updatedList || []);
+        });
+
 
 
         newSocket.on("friendRequestUpdated", async () => {
@@ -807,11 +825,7 @@ function Chat() {
         newSocket.on("roomDeleted", ({ roomName }) => {
             if (activeRoomRef.current === roomName) {
                 alert(`The private room #${roomName} has been deleted by the admin.`);
-                setSearchParams({ room: "General chat" });
-                setActiveRoom("General chat");
-                setActiveRoomDetails(null);
-                setActivePrivate(null);
-                setActivePrivateName("");
+                switchToDefaultRoom(deletedSystemRooms);
                 setMessages([]);
             }
         });
@@ -845,19 +859,23 @@ function Chat() {
         });
 
         // Parse search query params on socket connect
-        const roomUrl = searchParams.get("room") || "General chat";
+        const roomUrl = searchParams.get("room");
         const privateUrl = searchParams.get("private");
 
         if (isGuest) {
             // Guest route protection on mount
-            if (roomUrl !== "General chat" || privateUrl) {
+            if (roomUrl && roomUrl !== "General chat") {
                 setShowLoginModal(true);
-                setSearchParams({ room: "General chat" });
+                setSearchParams({});
+                setActiveRoom(null);
+                setActivePrivate(null);
+                setActiveSidebarTab("messages");
+            } else if (roomUrl === "General chat") {
                 setActiveRoom("General chat");
                 setActivePrivate(null);
                 setActiveSidebarTab("messages");
             } else {
-                setActiveRoom("General chat");
+                setActiveRoom(null);
                 setActivePrivate(null);
                 setActiveSidebarTab("messages");
             }
@@ -872,9 +890,12 @@ function Chat() {
                     setActivePrivateName(privateUrl);
                     setActiveSidebarTab("messages");
                 }
-            } else {
-                setSearchParams({ room: roomUrl });
+            } else if (roomUrl) {
                 setActiveRoom(roomUrl);
+                setActivePrivate(null);
+                setActiveSidebarTab("messages");
+            } else {
+                setActiveRoom(null);
                 setActivePrivate(null);
                 setActiveSidebarTab("messages");
             }
@@ -1076,15 +1097,62 @@ function Chat() {
         }
     };
 
+    const switchToDefaultRoom = (deletedList = []) => {
+        const ROOMS = ["General chat", "Project chat", "Study chat"];
+        const remaining = ROOMS.filter(r => !deletedList.includes(r));
+        if (remaining.length > 0) {
+            const nextRoom = remaining[0];
+            setSearchParams({ room: nextRoom });
+            setActiveRoom(nextRoom);
+        } else {
+            setSearchParams({});
+            setActiveRoom(null);
+            setActiveRoomDetails(null);
+        }
+    };
+
+    const clearActiveChat = () => {
+        setSearchParams({});
+        setActiveRoom(null);
+        setActiveRoomDetails(null);
+        setActivePrivate(null);
+        setActivePrivateName("");
+        setMessages([]);
+    };
+
     const handleLeaveRoom = () => {
-        if (!activeRoom || !activeRoomDetails) return;
-        const isAdmin = activeRoomDetails.admin?._id === ownProfileData?._id || activeRoomDetails.admin?.username === username;
-        const confirmMsg = isAdmin 
-            ? `Are you sure you want to delete the private room "${activeRoom}"? This will delete the room and disconnect all members.`
-            : `Are you sure you want to leave the private room "${activeRoom}"?`;
-            
-        if (window.confirm(confirmMsg)) {
-            socketRef.current?.emit("leaveRoom", activeRoom);
+        if (!activeRoom) return;
+        const isPrivateRoom = activeRoomDetails && activeRoomDetails.isPrivate;
+
+        if (isPrivateRoom) {
+            const isAdmin = activeRoomDetails.admin?._id === ownProfileData?._id || activeRoomDetails.admin?.username === username;
+            const confirmMsg = isAdmin 
+                ? `Are you sure you want to delete the private room "${activeRoom}"? This will delete the room and disconnect all members.`
+                : `Are you sure you want to leave the private room "${activeRoom}"?`;
+                
+            if (window.confirm(confirmMsg)) {
+                socketRef.current?.emit("leaveRoom", activeRoom);
+            }
+        } else {
+            const confirmMsg = `Are you sure you want to delete the room "${activeRoom}"? This will remove it from your room list.`;
+            if (window.confirm(confirmMsg)) {
+                if (isGuest) {
+                    let localDeleted = [];
+                    try {
+                        localDeleted = JSON.parse(localStorage.getItem("deletedSystemRooms") || "[]");
+                    } catch (e) {
+                        console.error(e);
+                    }
+                    if (!localDeleted.includes(activeRoom)) {
+                        localDeleted.push(activeRoom);
+                        localStorage.setItem("deletedSystemRooms", JSON.stringify(localDeleted));
+                    }
+                    setDeletedSystemRooms(localDeleted);
+                    switchToDefaultRoom(localDeleted);
+                } else {
+                    socketRef.current?.emit("deleteSystemRoom", { roomName: activeRoom });
+                }
+            }
         }
     };
 
@@ -1786,73 +1854,142 @@ function Chat() {
                         }}
                         activeSidebarTab={activeSidebarTab}
                         setActiveSidebarTab={setActiveSidebarTab}
-
+                        deletedSystemRooms={deletedSystemRooms}
                         pendingRequestsCount={pendingRequests.length}
+                        onLogoClick={clearActiveChat}
                     />
                 </div>
 
                 {/* Main chat */}
                 <div className="chat-container">
+                    {!activeRoom && !activePrivate ? (
+                        <div className="empty-chat-placeholder" style={{ 
+                            position: 'relative',
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            height: '100%', 
+                            color: 'var(--muted)', 
+                            textAlign: 'center', 
+                            padding: '24px',
+                            background: 'var(--page)',
+                            overflow: 'hidden'
+                        }}>
+                            {/* Typography/Logo Header at the top */}
+                            <div className="empty-chat-header" style={{
+                                position: 'absolute',
+                                top: '15%',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '12px',
+                                zIndex: 2
+                            }}>
+                                <span className="empty-chat-logo-label" style={{
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '3px',
+                                    color: 'var(--accent)',
+                                    opacity: 0.8
+                                }}>
+                                    Nexus Messenger
+                                </span>
+                                <h2 style={{
+                                    margin: '0',
+                                    fontSize: '28px',
+                                    fontWeight: '800',
+                                    color: 'var(--text)',
+                                    letterSpacing: '-0.5px'
+                                }}>
+                                    Select a room to start
+                                </h2>
+                                <p style={{
+                                    margin: '0',
+                                    fontSize: '13px',
+                                    color: 'var(--muted)',
+                                    maxWidth: '280px',
+                                    lineHeight: '1.5'
+                                }}>
+                                    Choose an existing room from the sidebar, start a private conversation, or create your own room!
+                                </p>
+                            </div>
 
-                    <ChatHeader
-                        username={username}
-                        onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
-                        chatTitle={chatTitle}
-                        onlineUsers={onlineUsers}
-                        onlineUserList={onlineUserList}
-                        onMenuToggle={() => setSidebarOpen(v => !v)}
-                        isGuest={isGuest}
-                        onClearChatClick={() => setShowClearConfirm(true)}
-                        theme={theme}
-                        onThemeToggle={handleThemeToggle}
-                        isPrivate={!!activePrivate}
-                        privateUser={
-                            onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase()) ||
-                            allUsers.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())
-                        }
-                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                        onShowOnlineListClick={() => setShowOnlineList(true)}
-                        isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
-                        onToggleBlock={handleHeaderBlockToggle}
-                        roomDetails={activeRoomDetails}
-                        onLeaveRoom={handleLeaveRoom}
-                        onEditRoomClick={() => {
-                            if (activeRoomDetails) {
-                                setEditRoomName(activeRoomDetails.name);
-                                setEditRoomAvatar(activeRoomDetails.avatar || "");
-                                setShowEditRoomModal(true);
-                            }
-                        }}
-                    />
+                            {/* Crowd Canvas at the bottom */}
+                            <div className="empty-chat-canvas-wrapper" style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '55%',
+                                zIndex: 1
+                            }}>
+                                <CrowdCanvas src="/images/peeps/all-peeps.png" rows={15} cols={7} theme={theme} />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <ChatHeader
+                                username={username}
+                                onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
+                                chatTitle={chatTitle}
+                                onlineUsers={onlineUsers}
+                                onlineUserList={onlineUserList}
+                                onMenuToggle={() => setSidebarOpen(v => !v)}
+                                isGuest={isGuest}
+                                onClearChatClick={() => setShowClearConfirm(true)}
+                                theme={theme}
+                                onThemeToggle={handleThemeToggle}
+                                isPrivate={!!activePrivate}
+                                privateUser={
+                                    onlineUserList.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase()) ||
+                                    allUsers.find(u => u.username?.toLowerCase() === activePrivateName?.toLowerCase())
+                                }
+                                onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                                onShowOnlineListClick={() => setShowOnlineList(true)}
+                                isBlocked={ownProfileData?.blockedUsers?.includes(activePrivateName)}
+                                onToggleBlock={handleHeaderBlockToggle}
+                                roomDetails={activeRoomDetails}
+                                onLeaveRoom={handleLeaveRoom}
+                                onEditRoomClick={() => {
+                                    if (activeRoomDetails) {
+                                        setEditRoomName(activeRoomDetails.name);
+                                        setEditRoomAvatar(activeRoomDetails.avatar || "");
+                                        setShowEditRoomModal(true);
+                                    }
+                                }}
+                            />
 
-                    <MessageList
-                        messages={messages}
-                        currentUser={username}
-                        messagesEndRef={messagesEndRef}
-                        onReact={handleReact}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        isPrivate={!!activePrivate}
-                        onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
-                        typingUser={typingUser}
-                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                        allUsers={allUsers}
-                    />
+                            <MessageList
+                                messages={messages}
+                                currentUser={username}
+                                messagesEndRef={messagesEndRef}
+                                onReact={handleReact}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                isPrivate={!!activePrivate}
+                                onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
+                                typingUser={typingUser}
+                                onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                                allUsers={allUsers}
+                            />
 
-                    <MessageInput
-                        message={message}
-                        setMessage={setMessage}
-                        sendMessage={editingMsg ? submitEdit : sendMessage}
-                        username={username}
-                        activeRoom={activeRoom}
-                        activePrivate={activePrivate}
-                        onTyping={emitTyping}
-                        isEditing={!!editingMsg}
-                        onCancelEdit={cancelEdit}
-                        isGuest={isGuest}
-                        onLockTrigger={() => setShowLoginModal(true)}
-                    />
-
+                            <MessageInput
+                                message={message}
+                                setMessage={setMessage}
+                                sendMessage={editingMsg ? submitEdit : sendMessage}
+                                username={username}
+                                activeRoom={activeRoom}
+                                activePrivate={activePrivate}
+                                onTyping={emitTyping}
+                                isEditing={!!editingMsg}
+                                onCancelEdit={cancelEdit}
+                                isGuest={isGuest}
+                                onLockTrigger={() => setShowLoginModal(true)}
+                            />
+                        </>
+                    )}
                 </div>
             </div>
 

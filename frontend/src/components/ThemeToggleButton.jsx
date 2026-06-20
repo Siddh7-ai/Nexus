@@ -28,6 +28,7 @@ export function ThemeToggleIcon({ theme, className = "", style = {} }) {
       </clipPath>
       <g clipPath="url(#theme-toggle-clip-path)">
         <motion.circle
+          r={isDark ? 10 : 8}
           animate={{ r: isDark ? 10 : 8 }}
           transition={{ ease: "easeInOut", duration: 0.35 }}
           cx="16"

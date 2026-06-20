@@ -60,6 +60,10 @@ const userSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    deletedSystemRooms: {
+        type: [String],
+        default: []
+    },
     totalMessagesSent: {
         type: Number,
         default: 0

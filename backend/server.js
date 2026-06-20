@@ -430,15 +430,20 @@ io.on("connection", async (socket) => {
             const unreadCounts = {};
             
             // Build list of accessible rooms for the user
-            const accessibleRoomIds = ["General chat", "Project chat", "Study chat"];
+            let systemRooms = ["General chat", "Project chat", "Study chat"];
             const customRoomMap = {};
             if (socket.userId && !socket.userId.startsWith("guest_")) {
+                const userDoc = await User.findById(socket.userId);
+                if (userDoc && userDoc.deletedSystemRooms) {
+                    systemRooms = systemRooms.filter(r => !userDoc.deletedSystemRooms.includes(r));
+                }
                 const userRooms = await Room.find({ members: socket.userId });
                 userRooms.forEach(r => {
-                    accessibleRoomIds.push(r._id.toString());
+                    systemRooms.push(r._id.toString());
                     customRoomMap[r._id.toString()] = r.name;
                 });
             }
+            const accessibleRoomIds = systemRooms;
 
             const unreadMessages = await Message.find({
                 username: { $ne: socket.username },
@@ -1356,6 +1361,26 @@ io.on("connection", async (socket) => {
             socket.emit("customRoomsList", rooms);
         } catch (err) {
             console.error("Error deleting room:", err);
+            socket.emit("error", { message: "Failed to delete room." });
+        }
+    });
+
+    socket.on("deleteSystemRoom", async ({ roomName }) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            const username = socket.request.user.username;
+            
+            const updatedUser = await User.findByIdAndUpdate(
+                userId,
+                { $addToSet: { deletedSystemRooms: roomName } },
+                { new: true }
+            );
+            
+            console.log(`User ${username} deleted/hid system room: ${roomName}`);
+            socket.emit("deletedSystemRoomsUpdated", updatedUser.deletedSystemRooms || []);
+        } catch (err) {
+            console.error("Error hiding/deleting system room:", err);
             socket.emit("error", { message: "Failed to delete room." });
         }
     });

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiCompass, FiActivity } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity } from "react-icons/fi";
 
 const ROOMS = ["General chat", "Project chat", "Study chat"];
 const ROOM_ICONS = {
@@ -83,7 +83,9 @@ function RoomList({
     onCreateRoomClick,
     activeSidebarTab = "messages",
     setActiveSidebarTab,
-    pendingRequestsCount = 0
+    pendingRequestsCount = 0,
+    deletedSystemRooms = [],
+    onLogoClick
 }) {
     const [dmSearch, setDmSearch] = useState("");
 
@@ -152,7 +154,14 @@ function RoomList({
             <div className="sidebar-narrow-nav">
                 <div className="narrow-nav-top">
                     {/* Brand logo */}
-                    <div className="narrow-nav-logo-box" onClick={() => setActiveSidebarTab("messages")} title="Nexus Messages">
+                    <div 
+                        className="narrow-nav-logo-box" 
+                        onClick={() => {
+                            setActiveSidebarTab("messages");
+                            if (onLogoClick) onLogoClick();
+                        }} 
+                        title="Nexus Messages"
+                    >
                         <img src={logo} alt="Nexus Logo" className="narrow-nav-logo-img" />
                     </div>
 
@@ -174,7 +183,7 @@ function RoomList({
                             onClick={() => setActiveSidebarTab("rooms")}
                             title="Rooms Only"
                         >
-                            <FiCompass />
+                            <FiUsers />
                         </button>
 
 
@@ -271,7 +280,7 @@ function RoomList({
                                 </div>
                                 <div className="unified-rooms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
                                     {/* Public Rooms */}
-                                    {ROOMS.filter(r => !dmSearch || r.toLowerCase().includes(dmSearch.toLowerCase())).map(room => {
+                                    {ROOMS.filter(r => !deletedSystemRooms.includes(r) && (!dmSearch || r.toLowerCase().includes(dmSearch.toLowerCase()))).map(room => {
                                         const isActive = activeRoom === room && !activePrivate;
                                         const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
                                         const isLocked = isGuest && room !== "General chat";
@@ -464,7 +473,7 @@ function RoomList({
                         <div className="panel-content-scroll">
                             {/* Grid of rooms (public) */}
                             <div className="grid-rooms-container" style={{ marginBottom: "18px" }}>
-                                {ROOMS.map(room => {
+                                {ROOMS.filter(room => !deletedSystemRooms.includes(room)).map(room => {
                                     const isActive = activeRoom === room && !activePrivate;
                                     const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
                                     const isLocked = isGuest && room !== "General chat";

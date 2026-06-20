@@ -149,6 +149,7 @@ router.get("/profile/:username", authenticateToken, async (req, res) => {
             responseData.privacyPrivateMessages = targetUser.privacyPrivateMessages;
             responseData.blockedUsers = targetUser.blockedUsers;
             responseData.friends = targetUser.friends;
+            responseData.deletedSystemRooms = targetUser.deletedSystemRooms || [];
         } else {
             // Include block and friend status for the requester
             responseData.isBlocked = isRequesterBlocked;

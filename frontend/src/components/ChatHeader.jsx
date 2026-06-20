@@ -274,6 +274,19 @@ function ChatHeader({
                                 </button>
                             )}
 
+                            {/* Delete System Room */}
+                            {!isPrivate && (!roomDetails || !roomDetails.isPrivate) && (
+                                <button 
+                                    className="header-dropdown-item logout" 
+                                    onClick={() => {
+                                        setShowDropdown(false);
+                                        if (onLeaveRoom) onLeaveRoom();
+                                    }}
+                                >
+                                    <FiTrash2 /> Delete Room
+                                </button>
+                            )}
+
                              {/* Theme Brightness Slider */}
                             <div className="header-dropdown-brightness">
                                 <span className="brightness-label">
