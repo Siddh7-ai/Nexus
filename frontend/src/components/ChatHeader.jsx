@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings } from "react-icons/fi";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft } from "react-icons/fi";
 import OnlineUsers from "./OnlineUsers";
 import { setThemeBrightness } from "../utils/theme";
 import { ThemeToggleIcon } from "./ThemeToggleButton";
@@ -34,6 +34,7 @@ function ChatHeader({
     onLogout, 
     chatTitle, 
     onMenuToggle, 
+    onBack,
     onlineUsers, 
     onlineUserList = [],
     isGuest, 
@@ -100,42 +101,47 @@ function ChatHeader({
     return (
         <div className="chat-header">
             <div className="chat-header-left">
-                <button className="menu-toggle-btn" onClick={onMenuToggle} aria-label="Toggle sidebar">
-                    Menu
+                <button className="header-back-btn" onClick={onBack} aria-label="Go back to chat list" title="Back to Chats">
+                    <FiChevronLeft size={20} />
+                </button>
+                <button className="menu-toggle-btn" onClick={onMenuToggle} aria-label="Toggle sidebar" title="Toggle Sidebar">
+                    <FiMenu size={20} />
                 </button>
 
-                <div>
+                <div className="chat-header-info">
                     {isPrivate ? (
                         <div 
                             className="chat-header-profile-trigger"
                             onClick={() => onUserProfileClick && onUserProfileClick(privateUser?.username || chatTitle)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}
                             title="View Profile"
                         >
                             <Avatar username={privateUser?.username || chatTitle} avatarSrc={privateUser?.avatar} size={36} className="header-avatar" />
                             <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                {roomDetails && roomDetails.isPrivate && (
+                                    <Avatar 
+                                        username={roomDetails.name} 
+                                        avatarSrc={roomDetails.avatar} 
+                                        size={36} 
+                                        className="header-avatar" 
+                                    />
+                                )}
+                                <div className="chat-title">{chatTitle || "# General chat"}</div>
+                            </div>
                             {roomDetails && roomDetails.isPrivate && (
-                                <Avatar 
-                                    username={roomDetails.name} 
-                                    avatarSrc={roomDetails.avatar} 
-                                    size={36} 
-                                    className="header-avatar" 
-                                />
-                            )}
-                            <div className="chat-title">{chatTitle || "# General chat"}</div>
-                            {roomDetails && roomDetails.isPrivate && (
-                                <div className="header-private-room-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: (roomDetails.avatar ? '46px' : '0') }}>
                                     <span 
                                         className="room-code-badge" 
                                         style={{ 
                                             fontFamily: 'monospace', 
                                             background: 'var(--card-bg, rgba(255, 255, 255, 0.05))', 
-                                            padding: '4px 8px', 
-                                            borderRadius: '6px', 
-                                            fontSize: '12px', 
+                                            padding: '2px 6px', 
+                                            borderRadius: '4px', 
+                                            fontSize: '11px', 
                                             fontWeight: '700', 
                                             letterSpacing: '1px',
                                             border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -145,46 +151,6 @@ function ChatHeader({
                                     >
                                         Code: {roomDetails.code}
                                     </span>
-                                    <button 
-                                        onClick={handleCopyCode} 
-                                        style={{
-                                            background: 'rgba(255, 255, 255, 0.05)',
-                                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                                            borderRadius: '6px',
-                                            padding: '4px 8px',
-                                            fontSize: '11px',
-                                            color: 'var(--text)',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            transition: 'all 0.2s'
-                                        }}
-                                        title="Copy Room Code"
-                                    >
-                                        <FiCopy size={12} />
-                                        {copiedCode ? "Copied!" : "Copy Code"}
-                                    </button>
-                                    <button 
-                                        onClick={handleCopyLink} 
-                                        style={{
-                                            background: 'rgba(255, 255, 255, 0.05)',
-                                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                                            borderRadius: '6px',
-                                            padding: '4px 8px',
-                                            fontSize: '11px',
-                                            color: 'var(--text)',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            transition: 'all 0.2s'
-                                        }}
-                                        title="Copy Invite Link"
-                                    >
-                                        <FiShare2 size={12} />
-                                        {copiedLink ? "Copied Link!" : "Copy Link"}
-                                    </button>
                                 </div>
                             )}
                         </div>
@@ -234,6 +200,30 @@ function ChatHeader({
                             >
                                 <FiUser /> View Profile
                             </button>
+
+                            {/* Copy Room Code & Link (only for custom private rooms) */}
+                            {roomDetails && roomDetails.isPrivate && (
+                                <>
+                                    <button 
+                                        className="header-dropdown-item" 
+                                        onClick={(e) => {
+                                            handleCopyCode(e);
+                                            setTimeout(() => setShowDropdown(false), 800);
+                                        }}
+                                    >
+                                        <FiCopy /> {copiedCode ? "Copied!" : "Copy Code"}
+                                    </button>
+                                    <button 
+                                        className="header-dropdown-item" 
+                                        onClick={(e) => {
+                                            handleCopyLink(e);
+                                            setTimeout(() => setShowDropdown(false), 800);
+                                        }}
+                                    >
+                                        <FiShare2 /> {copiedLink ? "Copied Link!" : "Copy Link"}
+                                    </button>
+                                </>
+                            )}
 
                             {/* 3. Block/Unblock (only in private chat and if not guest) */}
                             {isPrivate && !isGuest && (

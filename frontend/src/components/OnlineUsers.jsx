@@ -48,7 +48,7 @@ function OnlineUsers({ onlineUsers, onlineUserList = [], currentUser, onUserProf
                 </div>
             )}
             <span className="online-dot"></span>
-            <span>{onlineUsers} {onlineUsers === 1 ? "user" : "users"} online</span>
+            <span>{onlineUsers} {onlineUsers === 1 ? "user" : "users"}<span className="online-text-label"> online</span></span>
         </div>
     );
 }

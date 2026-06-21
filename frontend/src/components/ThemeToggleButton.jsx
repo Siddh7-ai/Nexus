@@ -16,6 +16,7 @@ export function ThemeToggleIcon({ theme, className = "", style = {} }) {
         height: "1.2em",
         display: "inline-block",
         verticalAlign: "middle",
+        pointerEvents: "none",
         ...style
       }}
     >

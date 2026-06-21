@@ -11,6 +11,7 @@ import TypingIndicator from "../components/TypingIndicator";
 import MessageInput from "../components/MessageInput";
 import RoomList from "../components/RoomList";
 import CrowdCanvas from "../components/CrowdCanvas";
+import ThemeToggleButton from "../components/ThemeToggleButton";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
@@ -116,6 +117,15 @@ function Chat() {
 
     useEffect(() => {
         setTheme(initTheme());
+        
+        // Lock body viewport scrolling for the chat page shell to prevent iOS keyboard/scroll displacement
+        document.body.classList.add("chat-page-body");
+        document.documentElement.classList.add("chat-page-html");
+        
+        return () => {
+            document.body.classList.remove("chat-page-body");
+            document.documentElement.classList.remove("chat-page-html");
+        };
     }, []);
 
     function handleThemeToggle() {
@@ -1098,6 +1108,40 @@ function Chat() {
     };
 
     const switchToDefaultRoom = (deletedList = []) => {
+        // If we are on mobile, first screen should be chats list, so don't auto-select a room
+        // unless they explicitly have a room/private param in the URL (e.g. refresh / deep link)
+        if (window.innerWidth <= 768) {
+            const currentParams = new URLSearchParams(window.location.search);
+            const hasRoomParam = currentParams.get("room") || currentParams.get("private");
+            if (!hasRoomParam) {
+                setSearchParams({});
+                setActiveRoom(null);
+                setActiveRoomDetails(null);
+                return;
+            }
+        }
+
+        // If there's already an active room/private chat in current ref states, check if it's still valid
+        if (activePrivateRef.current) {
+            // Already in a private message, do not switch
+            return;
+        }
+
+        if (activeRoomRef.current) {
+            // If the current activeRoom is one of the system rooms, check if it was deleted
+            const ROOMS = ["General chat", "Project chat", "Study chat"];
+            if (ROOMS.includes(activeRoomRef.current)) {
+                if (!deletedList.includes(activeRoomRef.current)) {
+                    // Current system room is not deleted, so keep it!
+                    return;
+                }
+            } else {
+                // It's a custom room/private room, so don't switch (unless it's deleted, but roomDeleted socket event handles that)
+                return;
+            }
+        }
+
+        // Otherwise, fall back to the first non-deleted system room
         const ROOMS = ["General chat", "Project chat", "Study chat"];
         const remaining = ROOMS.filter(r => !deletedList.includes(r));
         if (remaining.length > 0) {
@@ -1118,6 +1162,7 @@ function Chat() {
         setActivePrivate(null);
         setActivePrivateName("");
         setMessages([]);
+        setSidebarOpen(false); // Close sidebar on mobile
     };
 
     const handleLeaveRoom = () => {
@@ -1816,8 +1861,10 @@ function Chat() {
 
 
 
+    const hasActiveChat = !!(activeRoom || activePrivate);
+
     return (
-        <div className="chat-wrapper">
+        <div className={`chat-wrapper ${hasActiveChat ? "has-active-chat" : "no-active-chat"}`}>
 
             {/* Mobile sidebar overlay */}
             {sidebarOpen && (
@@ -1876,6 +1923,11 @@ function Chat() {
                             background: 'var(--page)',
                             overflow: 'hidden'
                         }}>
+                            <ThemeToggleButton
+                                theme={theme}
+                                onToggle={handleThemeToggle}
+                                className="empty-chat-theme-toggle"
+                            />
                             {/* Typography/Logo Header at the top */}
                             <div className="empty-chat-header" style={{
                                 position: 'absolute',
@@ -1937,6 +1989,7 @@ function Chat() {
                                 onlineUsers={onlineUsers}
                                 onlineUserList={onlineUserList}
                                 onMenuToggle={() => setSidebarOpen(v => !v)}
+                                onBack={clearActiveChat}
                                 isGuest={isGuest}
                                 onClearChatClick={() => setShowClearConfirm(true)}
                                 theme={theme}

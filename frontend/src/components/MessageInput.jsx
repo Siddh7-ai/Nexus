@@ -21,7 +21,8 @@ import {
     Smile,
     X,
     RefreshCw,
-    Crop
+    Crop,
+    Plus
 } from "lucide-react";
 import { SmoothInput } from "./SmoothInput";
 import { motion, useMotionValue, animate } from "framer-motion";
@@ -1430,7 +1431,7 @@ function MessageInput({
                         setAttachmentMenuOpen(!attachmentMenuOpen);
                     }}
                 >
-                    +
+                    <Plus size={20} />
                 </button>
 
                 {/* ATTACHMENT POPOVER MENU */}
@@ -1499,7 +1500,7 @@ function MessageInput({
                     aria-label="Emoji"
                     onClick={() => setEmojiOpen(value => !value)}
                 >
-                    ☺
+                    <Smile size={20} />
                 </button>
 
                 {emojiOpen && (
