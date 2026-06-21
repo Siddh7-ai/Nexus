@@ -1931,7 +1931,7 @@ function Chat() {
                             {/* Typography/Logo Header at the top */}
                             <div className="empty-chat-header" style={{
                                 position: 'absolute',
-                                top: '15%',
+                                top: '30%',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 alignItems: 'center',

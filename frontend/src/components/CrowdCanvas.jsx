@@ -31,8 +31,8 @@ const CrowdCanvas = ({ src, rows = 15, cols = 7, theme = "light" }) => {
     // TWEEN FACTORIES
     const resetPeep = ({ stage, peep }) => {
       const direction = Math.random() > 0.5 ? 1 : -1;
-      const offsetY = 100 - 250 * gsap.parseEase("power2.in")(Math.random());
-      const startY = stage.height - peep.height + offsetY;
+      const offsetY = 80 - 180 * gsap.parseEase("power2.in")(Math.random());
+      const startY = Math.max(25, stage.height - peep.height + offsetY);
       let startX;
       let endX;
 
@@ -107,8 +107,8 @@ const CrowdCanvas = ({ src, rows = 15, cols = 7, theme = "light" }) => {
         walk: null,
         setRect: (rect) => {
           peep.rect = rect;
-          peep.width = rect[2];
-          peep.height = rect[3];
+          peep.width = rect[2] * 0.65;
+          peep.height = rect[3] * 0.65;
           peep.drawArgs = [peep.image, ...rect, 0, 0, peep.width, peep.height];
         },
         render: (ctx) => {
@@ -258,7 +258,8 @@ const CrowdCanvas = ({ src, rows = 15, cols = 7, theme = "light" }) => {
         width: "100%", 
         height: "100%", 
         display: "block",
-        filter: theme === "dark" ? "invert(1) opacity(0.85)" : "opacity(0.85)" 
+        filter: "opacity(0.85)",
+        mixBlendMode: theme === "dark" ? "normal" : "multiply"
       }} 
     />
   );
