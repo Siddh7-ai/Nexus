@@ -3293,10 +3293,10 @@ body.dark-theme {
   transform: scale(1.05);
 }
 
-.floating-theme-toggle {
+.floating-theme-toggle,
+.floating-back-btn {
   position: fixed;
   top: 24px;
-  right: 24px;
   z-index: 100;
   display: inline-flex;
   align-items: center;
@@ -3313,7 +3313,16 @@ body.dark-theme {
   font-size: 20px;
 }
 
-.floating-theme-toggle:hover {
+.floating-theme-toggle {
+  right: 24px;
+}
+
+.floating-back-btn {
+  left: 24px;
+}
+
+.floating-theme-toggle:hover,
+.floating-back-btn:hover {
   background: var(--soft);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
@@ -3346,6 +3355,7 @@ body.dark-theme {
 }
 
 body.dark-theme .floating-theme-toggle,
+body.dark-theme .floating-back-btn,
 body.dark-theme .empty-chat-theme-toggle,
 body.dark-theme .theme-toggle-btn {
   border-color: rgba(255, 255, 255, 0.15);
@@ -6396,12 +6406,20 @@ body.dark-theme .modal-premium-input:focus {
   }
 
   /* Scale and reposition floating theme toggle on login/register */
-  .floating-theme-toggle {
+  .floating-theme-toggle,
+  .floating-back-btn {
     top: 16px !important;
-    right: 16px !important;
     width: 36px !important;
     height: 36px !important;
     font-size: 18px !important;
+  }
+
+  .floating-theme-toggle {
+    right: 16px !important;
+  }
+
+  .floating-back-btn {
+    left: 16px !important;
   }
 }
 

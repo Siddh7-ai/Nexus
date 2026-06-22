@@ -5,6 +5,7 @@ import { getBackendUrl } from "../utils/config";
 import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
+import { FiArrowLeft } from "react-icons/fi";
 
 import logo from "../assets/logo.png";
 
@@ -72,6 +73,14 @@ function Register() {
 
   return (
     <div className="auth-wrapper">
+      <button 
+        className="floating-back-btn" 
+        onClick={() => navigate("/")} 
+        aria-label="Back to landing page"
+        title="Back to Home"
+      >
+        <FiArrowLeft />
+      </button>
       <ThemeToggleButton theme={theme} onToggle={handleThemeToggle} className="floating-theme-toggle" />
       <div className="auth-pattern" aria-hidden="true" />
       <div className="auth-stage">
