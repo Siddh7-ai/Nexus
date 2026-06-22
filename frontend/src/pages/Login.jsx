@@ -6,6 +6,12 @@ import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { FiArrowLeft } from "react-icons/fi";
+import { 
+  deriveKeysFromPassword, 
+  setMasterKey, 
+  loadDecryptedKeys, 
+  generateAndStoreKeys 
+} from "../utils/crypto/manager";
 
 import logo from "../assets/logo.png";
 
@@ -59,7 +65,30 @@ function Login() {
 
       if (response.ok) {
         sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem("username", data.username);
         localStorage.removeItem("token");
+
+        // 1. Derive the master key from the password
+        const { masterKey } = await deriveKeysFromPassword(password, data.username);
+        setMasterKey(masterKey);
+
+        // 2. Check if E2EE keys are stored locally in IndexedDB
+        const myKeys = await loadDecryptedKeys(data.username);
+        if (!myKeys) {
+          console.log("No cryptographic keys found locally. Generating and uploading new bundle...");
+          // Deterministically re-generate identity key and upload new bundle
+          const bundle = await generateAndStoreKeys(password, data.username);
+          
+          await fetch(`${getBackendUrl()}/api/keys/upload`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${data.token}`
+            },
+            body: JSON.stringify(bundle)
+          });
+        }
+
         navigate("/chat");
       } else {
         alert(data.message);

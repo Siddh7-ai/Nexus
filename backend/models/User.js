@@ -67,6 +67,22 @@ const userSchema = new mongoose.Schema({
     totalMessagesSent: {
         type: Number,
         default: 0
+    },
+    identityPublicKey: {
+        type: String,
+        default: null
+    },
+    signedPrekey: {
+        publicKey: { type: String, default: null },
+        signature: { type: String, default: null },
+        createdAt: { type: Date, default: null }
+    },
+    oneTimePrekeys: {
+        type: [{
+            keyId: { type: String, required: true },
+            publicKey: { type: String, required: true }
+        }],
+        default: []
     }
 }, { timestamps: true });
 

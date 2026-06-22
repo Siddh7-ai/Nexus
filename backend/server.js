@@ -10,6 +10,7 @@ const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const keyRoutes = require("./routes/keyRoutes");
 const { canAccessRoom } = require("./permissions");
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
@@ -30,6 +31,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/keys", keyRoutes);
 
 // Upload endpoint (stores files in MongoDB GridFS)
 app.post("/api/upload", upload.single("file"), async (req, res) => {
@@ -623,6 +625,11 @@ io.on("connection", async (socket) => {
         io.to(`private_${privateChatId}`).emit("messagesSeenUpdate", updatedMsgs);
     });
 
+    socket.on("requestSessionReset", ({ privateChatId }) => {
+        if (!privateChatId) return;
+        socket.to(`private_${privateChatId}`).emit("sessionResetRequested", { privateChatId });
+    });
+
     socket.on("typing", async ({ room, privateChatId }) => {
         if (privateChatId) {
             if (socket.role === "guest") return;
@@ -778,7 +785,10 @@ io.on("connection", async (socket) => {
                 fileName: data.fileName || null,
                 fileSize: data.fileSize || null,
                 fileType: data.fileType || null,
-                fileQuality: data.fileQuality || null
+                fileQuality: data.fileQuality || null,
+                ratchetHeader: data.ratchetHeader || null,
+                handshakePayload: data.handshakePayload || null,
+                senderCiphertext: data.senderCiphertext || null
             };
 
             if (data.privateChatId) {

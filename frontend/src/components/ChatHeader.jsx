@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft } from "react-icons/fi";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity } from "react-icons/fi";
 import OnlineUsers from "./OnlineUsers";
 import { setThemeBrightness } from "../utils/theme";
 import { ThemeToggleIcon } from "./ThemeToggleButton";
@@ -49,7 +49,9 @@ function ChatHeader({
     onToggleBlock,
     roomDetails,
     onLeaveRoom,
-    onEditRoomClick
+    onEditRoomClick,
+    onVerifyClick,
+    onToggleVisualizer
 }) {
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -110,14 +112,58 @@ function ChatHeader({
 
                 <div className="chat-header-info">
                     {isPrivate ? (
-                        <div 
-                            className="chat-header-profile-trigger"
-                            onClick={() => onUserProfileClick && onUserProfileClick(privateUser?.username || chatTitle)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}
-                            title="View Profile"
-                        >
-                            <Avatar username={privateUser?.username || chatTitle} avatarSrc={privateUser?.avatar} size={36} className="header-avatar" />
-                            <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                            <div 
+                                className="chat-header-profile-trigger"
+                                onClick={() => onUserProfileClick && onUserProfileClick(privateUser?.username || chatTitle)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}
+                                title="View Profile"
+                            >
+                                <Avatar username={privateUser?.username || chatTitle} avatarSrc={privateUser?.avatar} size={36} className="header-avatar" />
+                                <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                <button 
+                                    className="header-lock-btn" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onVerifyClick && onVerifyClick();
+                                    }}
+                                    title="Verify Encryption"
+                                    style={{ 
+                                        background: 'none', 
+                                        border: 'none', 
+                                        color: 'var(--accent, #a855f7)', 
+                                        cursor: 'pointer', 
+                                        padding: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        opacity: 0.8
+                                    }}
+                                >
+                                    <FiLock size={16} />
+                                </button>
+                                <button 
+                                    className="header-activity-btn" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleVisualizer && onToggleVisualizer();
+                                    }}
+                                    title="Toggle Data-Flow Visualizer"
+                                    style={{ 
+                                        background: 'none', 
+                                        border: 'none', 
+                                        color: 'var(--accent, #a855f7)', 
+                                        cursor: 'pointer', 
+                                        padding: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        opacity: 0.8
+                                    }}
+                                >
+                                    <FiActivity size={16} />
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>

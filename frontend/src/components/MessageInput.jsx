@@ -1042,7 +1042,6 @@ function MessageInput({
         const input = inputRef.current;
         if (!input) return;
         
-        console.log("DEBUG EDITOR HTML:", input.innerHTML);
         const nextMarkdown = getMarkdownFromHtml(input.innerHTML);
         handleTyping(nextMarkdown);
     }

@@ -6,6 +6,7 @@ import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { FiArrowLeft } from "react-icons/fi";
+import { generateAndStoreKeys } from "../utils/crypto/manager";
 
 import logo from "../assets/logo.png";
 
@@ -46,12 +47,23 @@ function Register() {
     setLoading(true);
 
     try {
+      // 1. Generate local E2EE keys, encrypt with derived master key, save to IndexedDB
+      const bundle = await generateAndStoreKeys(password, username);
+
+      // 2. Submit user details along with public prekey bundle
       const response = await fetch(
         `${getBackendUrl()}/api/auth/register`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, email, password })
+          body: JSON.stringify({
+            username,
+            email,
+            password,
+            identityPublicKey: bundle.identityPublicKey,
+            signedPrekey: bundle.signedPrekey,
+            oneTimePrekeys: bundle.oneTimePrekeys
+          })
         }
       );
 

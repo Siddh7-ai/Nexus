@@ -6,12 +6,24 @@ import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity } fr
 import ChatHeader from "../components/ChatHeader";
 import OnlineUsers from "../components/OnlineUsers";
 import MessageList from "../components/MessageList";
+import VerifyModal from "../components/VerifyModal";
+import DataFlowVisualizer from "../components/DataFlowVisualizer";
 import { getBackendUrl } from "../utils/config";
 import TypingIndicator from "../components/TypingIndicator";
 import MessageInput from "../components/MessageInput";
 import RoomList from "../components/RoomList";
 import CrowdCanvas from "../components/CrowdCanvas";
 import ThemeToggleButton from "../components/ThemeToggleButton";
+import { 
+  encryptOutgoingMessage, 
+  decryptIncomingMessage, 
+  replenishOneTimePrekeysIfNeeded,
+  loadDecryptedKeys,
+  saveDecryptedMessage,
+  getDecryptedMessage
+} from "../utils/crypto/manager";
+import { fromBase64, toBase64 } from "../utils/crypto/encoding";
+import { getFullSessionRecord, getSessionState, saveSessionState, deleteSessionState } from "../utils/crypto/keydb";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
@@ -134,16 +146,131 @@ function Chat() {
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
+    const [decryptedMessages, setDecryptedMessages] = useState({});
+    
+    const [activeRoom, setActiveRoom] = useState(null);
+    const [activePrivate, setActivePrivate] = useState(null); // privateChatId
+    const [activePrivateName, setActivePrivateName] = useState(""); // other username
+
+    const [showVerifyModal, setShowVerifyModal] = useState(false);
+    const [showVisualizer, setShowVisualizer] = useState(false);
+    const [visualizerData, setVisualizerData] = useState(null);
+    const [partnerIdentityKey, setPartnerIdentityKey] = useState(null);
+    const [myIdentityKey, setMyIdentityKey] = useState(null);
+    const expectingIncomingVisualizerRef = useRef(null);
+
+    useEffect(() => {
+        let isCancelled = false;
+
+        async function decryptAll() {
+            if (!activePrivate || !messages.length) return;
+            const token = getAuthToken();
+            const myUsername = usernameRef.current;
+
+            // Decrypt sequentially to avoid parallel IndexedDB transaction race conditions on the Double Ratchet state
+            for (const msg of messages) {
+                if (isCancelled) break;
+                if (msg.isDeleted) continue; // Skip deleted messages
+                if (!msg.privateChatId || !msg.ratchetHeader) continue;
+                if (decryptedMessages[msg._id]) continue; // already decrypted
+
+                try {
+                    // Try to load from local cache first
+                    let decryptedPayload = await getDecryptedMessage(msg._id);
+                    
+                    if (!decryptedPayload) {
+                        decryptedPayload = await decryptIncomingMessage(msg, myUsername, token);
+                        await saveDecryptedMessage(msg._id, decryptedPayload);
+                    }
+
+                    if (isCancelled) break;
+                    setDecryptedMessages(prev => ({
+                        ...prev,
+                        [msg._id]: decryptedPayload
+                    }));
+
+                    if (expectingIncomingVisualizerRef.current === msg._id) {
+                        expectingIncomingVisualizerRef.current = null;
+                        setVisualizerData({
+                            plaintext: decryptedPayload.text,
+                            ciphertext: msg.text,
+                            type: "receive",
+                            username: msg.username,
+                            messageNumber: msg.ratchetHeader.messageNumber,
+                            sessionId: msg.privateChatId
+                        });
+                    }
+                } catch (error) {
+                    console.error("Failed to decrypt message:", msg._id, error);
+                    if (isCancelled) break;
+                    setDecryptedMessages(prev => ({
+                        ...prev,
+                        [msg._id]: { text: "[Decryption Error: Session out of sync]", isError: true }
+                    }));
+                    if (socketRef.current && msg.privateChatId) {
+                        socketRef.current.emit("requestSessionReset", { privateChatId: msg.privateChatId });
+                    }
+                }
+            }
+        }
+
+        decryptAll();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [messages, activePrivate]);
+
+
+    useEffect(() => {
+        if (!activePrivate || !activePrivateName) {
+            setPartnerIdentityKey(null);
+            setMyIdentityKey(null);
+            return;
+        }
+
+        async function loadIdentityKeys() {
+            try {
+                // Try to load from IndexedDB cached session record
+                const record = await getFullSessionRecord(activePrivate);
+                if (record && record.partnerIdentityPublicKey && record.myIdentityPublicKey) {
+                    setPartnerIdentityKey(record.partnerIdentityPublicKey);
+                    setMyIdentityKey(record.myIdentityPublicKey);
+                } else {
+                    // Fetch from server / load from local keys
+                    const token = getAuthToken();
+                    const response = await fetch(`${getBackendUrl()}/api/keys/bundle/${activePrivateName}`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        const partnerBundle = await response.json();
+                        setPartnerIdentityKey(partnerBundle.identityPublicKey);
+                        
+                        const myKeys = await loadDecryptedKeys(usernameRef.current);
+                        if (myKeys) {
+                            setMyIdentityKey(myKeys.identityPublicKey);
+                            
+                            // Cache them in IndexedDB if session already exists
+                            const sessionBlob = await getSessionState(activePrivate);
+                            if (sessionBlob) {
+                                await saveSessionState(activePrivate, sessionBlob, partnerBundle.identityPublicKey, myKeys.identityPublicKey);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load identity keys for verification:", err);
+            }
+        }
+
+        loadIdentityKeys();
+    }, [activePrivate, activePrivateName]);
+
     const [typingUser, setTypingUser] = useState("");
     const [onlineUsers, setOnlineUsers] = useState(0);
     const [onlineUserList, setOnlineUserList] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
     const [conversationUsers, setConversationUsers] = useState([]);
-
-    const [activeRoom, setActiveRoom] = useState(null);
-    const [activePrivate, setActivePrivate] = useState(null); // privateChatId
-    const [activePrivateName, setActivePrivateName] = useState(""); // other username
-
     const [drafts, setDrafts] = useState({});
 
     const messageRef = useRef(message);
@@ -550,6 +677,11 @@ function Chat() {
             return;
         }
 
+        // Check if one-time prekeys are low on the server and replenish them
+        if (token && !token.startsWith("guest:")) {
+            replenishOneTimePrekeysIfNeeded(usernameRef.current, token);
+        }
+
         const newSocket = io(getBackendUrl(), { auth: { token } });
         socketRef.current = newSocket;
 
@@ -656,6 +788,9 @@ function Chat() {
                 : (activeRoomRef.current === data.room);
 
             if (isMatch) {
+                if (data.privateChatId && data.username?.toLowerCase() !== usernameRef.current?.toLowerCase()) {
+                    expectingIncomingVisualizerRef.current = data._id;
+                }
                 setMessages((prev) => {
                     if (prev.some(m => m._id === data._id)) return prev;
                     return [...prev, data];
@@ -678,41 +813,59 @@ function Chat() {
                 triggerPageGlow();
                 playNotificationSound();
 
-                if (!isMatch) {
-                    const displayName = data.displayName || data.username;
-                    const chatType = data.privateChatId ? "private" : "room";
-                    
-                    let partnerUsername = data.username;
-                    if (data.privateChatId) {
-                        const parts = data.privateChatId.split("_");
-                        const partner = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
-                        if (partner) {
-                            partnerUsername = partner;
+                // Decrypt message asynchronously for E2EE notifications/toasts
+                (async () => {
+                    let displayData = { ...data };
+                    if (data.privateChatId && data.ratchetHeader) {
+                        try {
+                            const token = getAuthToken();
+                            const decryptedPayload = await decryptIncomingMessage(data, usernameRef.current, token);
+                            displayData.text = decryptedPayload.text;
+                            if (data._id) {
+                                await saveDecryptedMessage(data._id, decryptedPayload);
+                            }
+                        } catch (err) {
+                            console.error("Failed to decrypt incoming message for notification:", err);
+                            displayData.text = "[Decrypted Message]";
                         }
                     }
 
-                    setActiveToast({
-                        id: data._id || Date.now(),
-                        sender: displayName,
-                        senderUsername: partnerUsername,
-                        text: data.text || "Sent an attachment",
-                        avatarUrl: data.avatarUrl || data.senderAvatar,
-                        room: data.room,
-                        privateChatId: data.privateChatId,
-                        chatType
-                    });
+                    if (!isMatch) {
+                        const displayName = displayData.displayName || displayData.username;
+                        const chatType = displayData.privateChatId ? "private" : "room";
+                        
+                        let partnerUsername = displayData.username;
+                        if (displayData.privateChatId) {
+                            const parts = displayData.privateChatId.split("_");
+                            const partner = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
+                            if (partner) {
+                                partnerUsername = partner;
+                            }
+                        }
 
-                    if (toastTimeoutRef.current) {
-                        clearTimeout(toastTimeoutRef.current);
+                        setActiveToast({
+                            id: displayData._id || Date.now(),
+                            sender: displayName,
+                            senderUsername: partnerUsername,
+                            text: displayData.text || "Sent an attachment",
+                            avatarUrl: displayData.avatarUrl || displayData.senderAvatar,
+                            room: displayData.room,
+                            privateChatId: displayData.privateChatId,
+                            chatType
+                        });
+
+                        if (toastTimeoutRef.current) {
+                            clearTimeout(toastTimeoutRef.current);
+                        }
+                        toastTimeoutRef.current = setTimeout(() => {
+                            setActiveToast(null);
+                        }, 5000);
                     }
-                    toastTimeoutRef.current = setTimeout(() => {
-                        setActiveToast(null);
-                    }, 5000);
-                }
 
-                if (document.hidden) {
-                    triggerDesktopNotification(data);
-                }
+                    if (document.hidden) {
+                        triggerDesktopNotification(displayData);
+                    }
+                })();
             }
         });
 
@@ -838,6 +991,11 @@ function Chat() {
                 switchToDefaultRoom(deletedSystemRooms);
                 setMessages([]);
             }
+        });
+
+        newSocket.on("sessionResetRequested", async ({ privateChatId }) => {
+            console.log(`Session reset requested for private chat ${privateChatId}. Deleting local session state...`);
+            await deleteSessionState(privateChatId);
         });
 
         newSocket.on("roomMemberUpdate", (room) => {
@@ -1202,7 +1360,7 @@ function Chat() {
     };
 
 
-    function sendMessage(attachment = null) {
+    async function sendMessage(attachment = null) {
         if (!username || !socketRef.current) return;
 
         // Guard against event objects passed via event listeners (e.g. onClick)
@@ -1215,11 +1373,41 @@ function Chat() {
 
         if (!realAttachment && !message.trim()) return;
 
-        console.log("DEBUG SENDING MESSAGE:", message);
-        const msgData = realAttachment ? { ...realAttachment } : { text: message };
+        console.log("DEBUG SENDING MESSAGE: [Content Redacted for E2EE]");
+        let msgData;
+
         if (activePrivate) {
-            msgData.privateChatId = activePrivate;
+            try {
+                const token = getAuthToken();
+                // Encrypt message content (with any attachment metadata) via Double Ratchet / X3DH
+                const encryptedPayload = await encryptOutgoingMessage(
+                    activePrivateName,
+                    activePrivate,
+                    realAttachment ? "" : message,
+                    realAttachment,
+                    token
+                );
+                msgData = {
+                    ...encryptedPayload,
+                    privateChatId: activePrivate
+                };
+
+                // Trigger live data-flow visualizer for sent messages
+                setVisualizerData({
+                    plaintext: realAttachment ? `[Attachment: ${realAttachment.fileName || 'File'}]` : message,
+                    ciphertext: encryptedPayload.text,
+                    type: "send",
+                    username: activePrivateName,
+                    messageNumber: encryptedPayload.ratchetHeader.messageNumber,
+                    sessionId: activePrivate
+                });
+            } catch (error) {
+                console.error("Encryption failed:", error);
+                alert("Failed to encrypt message: " + error.message);
+                return;
+            }
         } else {
+            msgData = realAttachment ? { ...realAttachment } : { text: message };
             msgData.room = activeRoom;
         }
 
@@ -2012,21 +2200,78 @@ function Chat() {
                                         setShowEditRoomModal(true);
                                     }
                                 }}
+                                onVerifyClick={() => setShowVerifyModal(true)}
+                                onToggleVisualizer={() => {
+                                    setShowVisualizer(prev => {
+                                        const nextState = !prev;
+                                        if (nextState) {
+                                            // Load/populate with the last E2EE message in this chat
+                                            const lastE2EEMsg = [...messages].reverse().find(msg => 
+                                                msg.privateChatId && 
+                                                msg.ratchetHeader && 
+                                                !msg.isDeleted
+                                            );
+                                            if (lastE2EEMsg) {
+                                                const decrypted = decryptedMessages[lastE2EEMsg._id];
+                                                const isOwn = lastE2EEMsg.username?.toLowerCase() === username?.toLowerCase();
+                                                setVisualizerData({
+                                                    plaintext: decrypted ? decrypted.text : "[Encrypted]",
+                                                    ciphertext: lastE2EEMsg.text,
+                                                    type: isOwn ? "send" : "receive",
+                                                    username: isOwn ? activePrivateName : lastE2EEMsg.username,
+                                                    messageNumber: lastE2EEMsg.ratchetHeader.messageNumber,
+                                                    sessionId: lastE2EEMsg.privateChatId
+                                                });
+                                            }
+                                        }
+                                        return nextState;
+                                    });
+                                }}
                             />
 
-                            <MessageList
-                                messages={messages}
-                                currentUser={username}
-                                messagesEndRef={messagesEndRef}
-                                onReact={handleReact}
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                                isPrivate={!!activePrivate}
-                                onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
-                                typingUser={typingUser}
-                                onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                                allUsers={allUsers}
-                            />
+                            {(() => {
+                                const processedMessages = messages.map(msg => {
+                                    if (msg.isDeleted) {
+                                        return msg;
+                                    }
+                                    if (msg.privateChatId && msg.ratchetHeader) {
+                                        const decrypted = decryptedMessages[msg._id];
+                                        if (decrypted) {
+                                            return {
+                                                ...msg,
+                                                text: decrypted.text,
+                                                fileUrl: decrypted.fileUrl || null,
+                                                fileName: decrypted.fileName || null,
+                                                fileSize: decrypted.fileSize || null,
+                                                fileType: decrypted.fileType || null,
+                                                fileQuality: decrypted.fileQuality || null
+                                            };
+                                        } else {
+                                            return {
+                                                ...msg,
+                                                text: "[Decrypting E2EE message...]",
+                                                fileUrl: null
+                                            };
+                                        }
+                                    }
+                                    return msg;
+                                });
+                                return (
+                                    <MessageList
+                                        messages={processedMessages}
+                                        currentUser={username}
+                                        messagesEndRef={messagesEndRef}
+                                        onReact={handleReact}
+                                        onEdit={handleEdit}
+                                        onDelete={handleDelete}
+                                        isPrivate={!!activePrivate}
+                                        onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
+                                        typingUser={typingUser}
+                                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                                        allUsers={allUsers}
+                                    />
+                                );
+                            })()}
 
                             <MessageInput
                                 message={message}
@@ -2105,6 +2350,21 @@ function Chat() {
                     </div>
                 </div>
             )}
+
+            <VerifyModal
+                isOpen={showVerifyModal}
+                onClose={() => setShowVerifyModal(false)}
+                myUsername={username}
+                partnerUsername={activePrivateName}
+                myIdentityKey={myIdentityKey}
+                partnerIdentityKey={partnerIdentityKey}
+            />
+
+            <DataFlowVisualizer
+                isOpen={showVisualizer}
+                onClose={() => setShowVisualizer(false)}
+                visualizerData={visualizerData}
+            />
 
             {/* Block Target Confirmation Modal */}
             {blockTargetConfirm && (

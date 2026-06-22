@@ -11,7 +11,7 @@ router.post("/register", async (req, res) => {
 
     try {
 
-        const { username, email, password } = req.body;
+        const { username, email, password, identityPublicKey, signedPrekey, oneTimePrekeys } = req.body;
 
         const existingUser = await User.findOne({ email });
 
@@ -26,7 +26,17 @@ router.post("/register", async (req, res) => {
         const user = await User.create({
             username,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            identityPublicKey: identityPublicKey || null,
+            signedPrekey: signedPrekey ? {
+                publicKey: signedPrekey.publicKey,
+                signature: signedPrekey.signature,
+                createdAt: new Date()
+            } : undefined,
+            oneTimePrekeys: Array.isArray(oneTimePrekeys) ? oneTimePrekeys.map(k => ({
+                keyId: k.keyId,
+                publicKey: k.publicKey
+            })) : []
         });
 
         res.status(201).json({
@@ -71,7 +81,9 @@ router.post("/login", async (req, res) => {
 
         res.status(200).json({
             message: "Login successful",
-            token
+            token,
+            username: user.username,
+            email: user.email
         });
 
     } catch (error) {

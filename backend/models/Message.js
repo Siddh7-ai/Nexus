@@ -77,6 +77,29 @@ const messageSchema = new mongoose.Schema({
         type: String, // "HD" or "Normal"
         default: null
     },
+    ratchetHeader: {
+        type: {
+            publicKey: { type: String, required: true },
+            messageNumber: { type: Number, required: true },
+            numberOfMessagesInPreviousSendingChain: { type: Number, required: true }
+        },
+        default: null
+    },
+    handshakePayload: {
+        type: {
+            aliceIdentityPublicKey: { type: String, required: true },
+            aliceEphemeralPublicKey: { type: String, required: true },
+            oneTimePrekeyId: { type: String, default: null }
+        },
+        default: null
+    },
+    senderCiphertext: {
+        type: {
+            nonce: { type: String },
+            ciphertext: { type: String }
+        },
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now

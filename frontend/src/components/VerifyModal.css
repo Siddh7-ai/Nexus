@@ -1,0 +1,215 @@
+.verify-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-out;
+}
+
+.verify-modal-container {
+    width: 90%;
+    max-width: 440px;
+    background: var(--card-bg, #1e1e1e);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text-main, #ffffff);
+    animation: slideUp 0.2s ease-out;
+}
+
+.verify-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.verify-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.verify-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted, #a0a0a0);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+
+.verify-modal-close:hover {
+    color: var(--text-main, #ffffff);
+}
+
+.verify-modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.verify-modal-desc {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted, #c0c0c0);
+}
+
+.verify-graphic-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.two-phones-icon {
+    display: flex;
+    gap: 12px;
+}
+
+.phone-screen {
+    font-size: 32px;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+.left-phone {
+    transform: rotate(-10deg);
+}
+
+.right-phone {
+    transform: rotate(10deg);
+}
+
+.verified-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.verified-check-icon {
+    flex-shrink: 0;
+}
+
+.verify-loading {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-muted, #a0a0a0);
+    font-size: 14px;
+}
+
+.verify-tabs {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.verify-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted, #a0a0a0);
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.verify-tab.active {
+    color: var(--accent, #a855f7);
+    border-bottom-color: var(--accent, #a855f7);
+}
+
+.verify-tab-content {
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding-top: 15px;
+}
+
+.verify-qr-panel, .verify-number-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.qr-wrapper {
+    background: white;
+    padding: 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.qr-img {
+    display: block;
+    width: 170px;
+    height: 170px;
+}
+
+.qr-subtext, .number-subtext {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-muted, #808080);
+    text-align: center;
+}
+
+.safety-number-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px 16px;
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.safety-number-group {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    color: var(--text-main, #ffffff);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 6px 4px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}

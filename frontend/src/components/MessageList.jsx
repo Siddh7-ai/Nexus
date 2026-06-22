@@ -213,9 +213,11 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                 <div className="message-menu">
                     {isOwn ? (
                         <>
-                            <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
-                                Edit
-                            </button>
+                            {!msg.privateChatId && (
+                                <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
+                                    Edit
+                                </button>
+                            )}
                             <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
                                 Delete for me
                             </button>
@@ -423,7 +425,6 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                         <>
                                             {msg.text && (
                                                 <div className="message-text markdown-content">
-                                                    {console.log("DEBUG RENDERING MESSAGE TEXT:", msg.text)}
                                                     <ReactMarkdown 
                                                         remarkPlugins={[remarkGfm]} 
                                                         rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
