@@ -258,17 +258,19 @@ function RoomList({
                     <>
                         <div className="panel-header-section">
                             <h3 className="panel-header-title">Messages</h3>
-                            <div className="panel-search-box" style={{ position: 'relative' }}>
-                                <SmoothInput
-                                    type="text"
-                                    placeholder="Search chats, rooms or users..."
-                                    value={dmSearch}
-                                    onChange={(e) => setDmSearch(e.target.value)}
-                                    className="dm-search-input"
-                                />
-                                {dmSearch && (
-                                    <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
-                                )}
+                            <div className="panel-search-box">
+                                <div style={{ position: 'relative', width: '100%' }}>
+                                    <SmoothInput
+                                        type="text"
+                                        placeholder="Search chats, rooms or users..."
+                                        value={dmSearch}
+                                        onChange={(e) => setDmSearch(e.target.value)}
+                                        className="dm-search-input"
+                                    />
+                                    {dmSearch && (
+                                        <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
@@ -588,17 +590,19 @@ function RoomList({
                         <div className="panel-header-section">
                             <h3 className="panel-header-title">Direct Messages</h3>
                             {!isGuest && (
-                                <div className="panel-search-box" style={{ position: 'relative' }}>
-                                    <SmoothInput
-                                        type="text"
-                                        placeholder="Search your chat..."
-                                        value={dmSearch}
-                                        onChange={(e) => setDmSearch(e.target.value)}
-                                        className="dm-search-input"
-                                    />
-                                    {dmSearch && (
-                                        <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
-                                    )}
+                                <div className="panel-search-box">
+                                    <div style={{ position: 'relative', width: '100%' }}>
+                                        <SmoothInput
+                                            type="text"
+                                            placeholder="Search your chat..."
+                                            value={dmSearch}
+                                            onChange={(e) => setDmSearch(e.target.value)}
+                                            className="dm-search-input"
+                                        />
+                                        {dmSearch && (
+                                            <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
