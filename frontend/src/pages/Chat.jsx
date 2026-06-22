@@ -2111,6 +2111,18 @@ function Chat() {
                             background: 'var(--page)',
                             overflow: 'hidden'
                         }}>
+                            <div className="empty-chat-corner-brand" style={{
+                                position: 'absolute',
+                                top: '24px',
+                                left: '28px',
+                                zIndex: 10,
+                                fontSize: '30px',
+                                fontWeight: '850',
+                                color: 'var(--text)',
+                                letterSpacing: '-0.3px'
+                            }}>
+                                Nexus.
+                            </div>
                             <ThemeToggleButton
                                 theme={theme}
                                 onToggle={handleThemeToggle}
@@ -2126,16 +2138,6 @@ function Chat() {
                                 gap: '12px',
                                 zIndex: 2
                             }}>
-                                <span className="empty-chat-logo-label" style={{
-                                    fontSize: '11px',
-                                    fontWeight: '800',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '3px',
-                                    color: 'var(--accent)',
-                                    opacity: 0.8
-                                }}>
-                                    Nexus Messenger
-                                </span>
                                 <h2 style={{
                                     margin: '0',
                                     fontSize: '28px',

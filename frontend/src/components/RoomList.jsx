@@ -267,7 +267,7 @@ function RoomList({
                                     className="dm-search-input"
                                 />
                                 {dmSearch && (
-                                    <button className="dm-search-clear" onClick={() => setDmSearch("")} style={{ position: 'absolute', top: '14px', right: '10px', border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '16px' }}>×</button>
+                                    <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
                                 )}
                             </div>
                         </div>
@@ -597,7 +597,7 @@ function RoomList({
                                         className="dm-search-input"
                                     />
                                     {dmSearch && (
-                                        <button className="dm-search-clear" onClick={() => setDmSearch("")} style={{ position: 'absolute', top: '14px', right: '10px', border: 'none', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '16px' }}>×</button>
+                                        <button className="dm-search-clear" onClick={() => setDmSearch("")}>×</button>
                                     )}
                                 </div>
                             )}
