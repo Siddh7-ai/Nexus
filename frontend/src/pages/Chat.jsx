@@ -29,6 +29,7 @@ import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
 import { FiLock, FiTrash2 } from "react-icons/fi";
+import ThemeTransitionOptions from "../components/ThemeTransitionOptions";
 
 // Lazy-load emoji picker library to optimize bundle load times
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -140,8 +141,8 @@ function Chat() {
         };
     }, []);
 
-    function handleThemeToggle() {
-        setTheme(toggleTheme());
+    function handleThemeToggle(e) {
+        setTheme(toggleTheme(e));
     }
 
     const [message, setMessage] = useState("");
@@ -3930,6 +3931,7 @@ function Chat() {
                     </motion.div>
                 )}
             </AnimatePresence>
+            <ThemeTransitionOptions />
         </div>
     );
 }

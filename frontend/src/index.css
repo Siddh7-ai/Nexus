@@ -14,6 +14,8 @@
   -moz-osx-font-smoothing: grayscale;
   /* Removed: color-scheme: dark, color: #ccfbf1, background: #042f2e */
   /* These were bleeding into light-themed pages (Features, Auth, Landing) */
+  --expo-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --expo-in: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
 *,

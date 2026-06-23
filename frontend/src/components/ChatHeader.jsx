@@ -344,9 +344,9 @@ function ChatHeader({
                             {/* 5. Theme Toggle */}
                             <button 
                                 className="header-dropdown-item" 
-                                onClick={() => {
+                                onClick={(e) => {
                                     setShowDropdown(false);
-                                    if (onThemeToggle) onThemeToggle();
+                                    if (onThemeToggle) onThemeToggle(e);
                                 }}
                             >
                                 <ThemeToggleIcon theme={theme} />

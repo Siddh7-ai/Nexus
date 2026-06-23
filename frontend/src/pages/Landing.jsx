@@ -26,8 +26,8 @@ export default function Landing() {
     setTheme(initTheme());
   }, []);
 
-  function handleThemeToggle() {
-    setTheme(toggleTheme());
+  function handleThemeToggle(e) {
+    setTheme(toggleTheme(e));
   }
 
   const fullText =

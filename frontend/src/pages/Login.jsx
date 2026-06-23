@@ -39,8 +39,8 @@ function Login() {
     setTheme(initTheme());
   }, []);
 
-  function handleThemeToggle() {
-    setTheme(toggleTheme());
+  function handleThemeToggle(e) {
+    setTheme(toggleTheme(e));
   }
 
   async function handleLogin() {
