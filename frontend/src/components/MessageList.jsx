@@ -124,15 +124,32 @@ function ThoughtBubbleIndicator({ typingUser }) {
 
 const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👍"];
 
-function SeenStatus({ msg, currentUser, isPrivate }) {
-    if (!isPrivate || msg.username?.toLowerCase() !== currentUser?.toLowerCase() || msg.isDeleted) return null;
+function SeenStatus({ msg, currentUser }) {
+    if (msg.username?.toLowerCase() !== currentUser?.toLowerCase() || msg.isDeleted) return null;
 
     const seenBy = msg.seenBy || [];
     const seenByOther = seenBy.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase()).length > 0;
+    const isSending = msg.status === 'sending' || (msg._id && msg._id.toString().startsWith('temp_'));
+
+    if (isSending) {
+        return (
+            <span className="seen-status sending" title="Sending...">
+                🕐
+            </span>
+        );
+    }
+
+    if (seenByOther) {
+        return (
+            <span className="seen-status read" title="Read">
+                ✓✓
+            </span>
+        );
+    }
 
     return (
-        <span className={`seen-status ${seenByOther ? "seen" : "delivered"}`}>
-            {seenByOther ? "Seen" : "Sent"}
+        <span className="seen-status sent" title="Sent">
+            ✓
         </span>
     );
 }
@@ -445,7 +462,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                             {formatTimestamp(msg.createdAt)}
                                             {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
                                         </span>
-                                        <SeenStatus msg={msg} currentUser={currentUser} isPrivate={isPrivate} />
+                                        <SeenStatus msg={msg} currentUser={currentUser} />
                                     </div>
                                 </div>
 

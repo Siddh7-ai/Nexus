@@ -1,7 +1,7 @@
 import sodium from 'libsodium-wrappers-sumo';
 import { DoubleRatchet, Header } from 'double-ratchet-ts';
 import { fromBase64, toBase64, cryptoReady } from './encoding';
-import { saveKeys, getKeys, saveSessionState, getSessionState, getFullSessionRecord, deleteSessionState, openDatabase } from './keydb';
+import { saveKeys, getKeys, saveSessionState, getSessionState, getFullSessionRecord, deleteSessionState, openDatabase, acquireSessionLock, getCurrentUsername } from './keydb';
 import { initiateSession, receiveSession, computeSafetyNumber } from './x3dh';
 import { getBackendUrl } from '../config';
 
@@ -208,85 +208,90 @@ export async function loadDecryptedKeys(username) {
  */
 export async function encryptOutgoingMessage(partnerUsername, privateChatId, text, attachment, token) {
     await cryptoReady;
-    const myUsername = sessionStorage.getItem("username") || localStorage.getItem("username");
+    const myUsername = getCurrentUsername();
     if (!myUsername) throw new Error("Local username not set");
 
-    // Load active session state
-    let sessionBlob = await getSessionState(privateChatId);
-    let session = null;
-    let handshakePayload = null;
-    let partnerIdentityPublicKey = null;
-    let myIdentityPublicKey = null;
+    const release = await acquireSessionLock(privateChatId);
+    try {
+        // Load active session state
+        let sessionBlob = await getSessionState(privateChatId);
+        let session = null;
+        let handshakePayload = null;
+        let partnerIdentityPublicKey = null;
+        let myIdentityPublicKey = null;
 
-    if (sessionBlob) {
-        session = DoubleRatchet.initSessionStateBlob(sessionBlob);
-    } else {
-        // No session exists, initiate X3DH handshake
-        console.log(`Initiating E2EE handshake with ${partnerUsername}...`);
-        
-        // 1. Fetch partner's bundle
-        const response = await fetch(`${getBackendUrl()}/api/keys/bundle/${partnerUsername}`, {
-            headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to fetch prekey bundle for ${partnerUsername}`);
+        if (sessionBlob) {
+            session = DoubleRatchet.initSessionStateBlob(sessionBlob);
+        } else {
+            // No session exists, initiate X3DH handshake
+            console.log(`Initiating E2EE handshake with ${partnerUsername}...`);
+            
+            // 1. Fetch partner's bundle
+            const response = await fetch(`${getBackendUrl()}/api/keys/bundle/${partnerUsername}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to fetch prekey bundle for ${partnerUsername}`);
+            }
+            const partnerBundle = await response.json();
+
+            // 2. Load my keys
+            const myKeys = await loadDecryptedKeys(myUsername);
+            if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
+
+            // 3. Initiate handshake
+            const handshakeResult = await initiateSession(myKeys, partnerBundle);
+            const { sharedSecret } = handshakeResult;
+            handshakePayload = handshakeResult.handshakePayload;
+
+            // 4. Capture keys for verification
+            partnerIdentityPublicKey = partnerBundle.identityPublicKey;
+            myIdentityPublicKey = myKeys.identityPublicKey;
+
+            // 5. Initialize Double Ratchet session
+            const remotePublicKey = fromBase64(partnerBundle.signedPrekey.publicKey);
+            session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, remotePublicKey, undefined);
         }
-        const partnerBundle = await response.json();
 
-        // 2. Load my keys
-        const myKeys = await loadDecryptedKeys(myUsername);
-        if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
+        // Prepare plaintext payload object containing message and optional file metadata
+        const payload = {
+            text: text || "",
+            fileUrl: attachment ? attachment.fileUrl : null,
+            fileName: attachment ? attachment.fileName : null,
+            fileSize: attachment ? attachment.fileSize : null,
+            fileType: attachment ? attachment.fileType : null,
+            fileQuality: attachment ? attachment.fileQuality : null
+        };
+        const plaintextBytes = sodium.from_string(JSON.stringify(payload));
 
-        // 3. Initiate handshake
-        const handshakeResult = await initiateSession(myKeys, partnerBundle);
-        const { sharedSecret } = handshakeResult;
-        handshakePayload = handshakeResult.handshakePayload;
+        // Encrypt using the Double Ratchet session
+        const encrypted = await session.encrypt(plaintextBytes);
 
-        // 4. Capture keys for verification
-        partnerIdentityPublicKey = partnerBundle.identityPublicKey;
-        myIdentityPublicKey = myKeys.identityPublicKey;
+        // Save updated session state
+        const newSessionBlob = DoubleRatchet.sessionStateBlob(session.sessionState);
+        await saveSessionState(privateChatId, newSessionBlob, partnerIdentityPublicKey, myIdentityPublicKey);
 
-        // 5. Initialize Double Ratchet session
-        const remotePublicKey = fromBase64(partnerBundle.signedPrekey.publicKey);
-        session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, remotePublicKey, undefined);
+        // Encrypt a copy for the sender using their own master key
+        let senderCiphertext = null;
+        const masterKey = getMasterKey();
+        if (masterKey) {
+            senderCiphertext = encryptData(plaintextBytes, masterKey);
+        }
+
+        // Return the message body format expected by the backend
+        return {
+            text: toBase64(encrypted.cipher),
+            ratchetHeader: {
+                publicKey: toBase64(encrypted.header.publicKey),
+                messageNumber: encrypted.header.messageNumber,
+                numberOfMessagesInPreviousSendingChain: encrypted.header.numberOfMessagesInPreviousSendingChain
+            },
+            handshakePayload,
+            senderCiphertext
+        };
+    } finally {
+        release();
     }
-
-    // Prepare plaintext payload object containing message and optional file metadata
-    const payload = {
-        text: text || "",
-        fileUrl: attachment ? attachment.fileUrl : null,
-        fileName: attachment ? attachment.fileName : null,
-        fileSize: attachment ? attachment.fileSize : null,
-        fileType: attachment ? attachment.fileType : null,
-        fileQuality: attachment ? attachment.fileQuality : null
-    };
-    const plaintextBytes = sodium.from_string(JSON.stringify(payload));
-
-    // Encrypt using the Double Ratchet session
-    const encrypted = await session.encrypt(plaintextBytes);
-
-    // Save updated session state
-    const newSessionBlob = DoubleRatchet.sessionStateBlob(session.sessionState);
-    await saveSessionState(privateChatId, newSessionBlob, partnerIdentityPublicKey, myIdentityPublicKey);
-
-    // Encrypt a copy for the sender using their own master key
-    let senderCiphertext = null;
-    const masterKey = getMasterKey();
-    if (masterKey) {
-        senderCiphertext = encryptData(plaintextBytes, masterKey);
-    }
-
-    // Return the message body format expected by the backend
-    return {
-        text: toBase64(encrypted.cipher),
-        ratchetHeader: {
-            publicKey: toBase64(encrypted.header.publicKey),
-            messageNumber: encrypted.header.messageNumber,
-            numberOfMessagesInPreviousSendingChain: encrypted.header.numberOfMessagesInPreviousSendingChain
-        },
-        handshakePayload,
-        senderCiphertext
-    };
 }
 
 /**
@@ -341,90 +346,95 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
         }
     }
 
-    let sessionBlob = await getSessionState(privateChatId);
-    let session = null;
+    const release = await acquireSessionLock(privateChatId);
+    try {
+        let sessionBlob = await getSessionState(privateChatId);
+        let session = null;
 
-    const reconstructedMsg = {
-        cipher: fromBase64(msg.text),
-        header: new Header(
-            fromBase64(msg.ratchetHeader.publicKey),
-            msg.ratchetHeader.numberOfMessagesInPreviousSendingChain,
-            msg.ratchetHeader.messageNumber
-        )
-    };
+        const reconstructedMsg = {
+            cipher: fromBase64(msg.text),
+            header: new Header(
+                fromBase64(msg.ratchetHeader.publicKey),
+                msg.ratchetHeader.numberOfMessagesInPreviousSendingChain,
+                msg.ratchetHeader.messageNumber
+            )
+        };
 
-    if (sessionBlob) {
-        session = DoubleRatchet.initSessionStateBlob(sessionBlob);
-        try {
-            // Attempt to decrypt with existing session
-            const decryptedBytes = await session.decrypt(reconstructedMsg);
-            const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
-            
-            // Save updated session
-            await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState));
-            return decryptedPayload;
-        } catch (error) {
-            console.warn("Decryption failed with existing session, checking for handshake payload...", error);
-            // Fall through to handshake setup if handshakePayload exists (handles session reset/device change)
-            if (!msg.handshakePayload) throw error;
-        }
-    }
-
-    // No session or decryption failed: check if a handshake payload exists
-    if (!msg.handshakePayload) {
         if (sessionBlob) {
-            console.warn("Session is permanently corrupted. Deleting local session state.");
-            await deleteSessionState(privateChatId);
+            session = DoubleRatchet.initSessionStateBlob(sessionBlob);
+            try {
+                // Attempt to decrypt with existing session
+                const decryptedBytes = await session.decrypt(reconstructedMsg);
+                const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
+                
+                // Save updated session
+                await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState));
+                return decryptedPayload;
+            } catch (error) {
+                console.warn("Decryption failed with existing session, checking for handshake payload...", error);
+                // Fall through to handshake setup if handshakePayload exists (handles session reset/device change)
+                if (!msg.handshakePayload) throw error;
+            }
         }
-        throw new Error("Decryption failed: Session out of sync. The corrupted session has been reset. The next message sent will establish a new secure session.");
-    }
 
-    console.log(`Receiving E2EE handshake from ${partnerUsername}...`);
-    const myKeys = await loadDecryptedKeys(myUsername);
-    if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
-
-    // Retrieve my one-time prekey private key if Alice consumed one
-    let opkPrivateKeyBase64 = null;
-    const requestedOpkId = msg.handshakePayload.oneTimePrekeyId;
-    if (requestedOpkId && myKeys.oneTimePrekeys) {
-        const foundOpk = myKeys.oneTimePrekeys.find(k => k.keyId === requestedOpkId);
-        if (foundOpk) {
-            opkPrivateKeyBase64 = foundOpk.secretKey;
-            
-            // Remove consumed OPK from my local list to preserve forward secrecy
-            const updatedOPKs = myKeys.oneTimePrekeys.filter(k => k.keyId !== requestedOpkId);
-            const masterKey = getMasterKey();
-            const encryptedOPKs = encryptData(sodium.from_string(JSON.stringify(updatedOPKs)), masterKey);
-            
-            const dbKeys = await getKeys(myUsername);
-            await saveKeys(myUsername, {
-                ...dbKeys,
-                encryptedOneTimePrekeys: encryptedOPKs
-            });
-        } else {
-            console.warn(`Consumed OPK ${requestedOpkId} not found in local IndexedDB. Proceeding with DH1-DH3 fallback.`);
+        // No session or decryption failed: check if a handshake payload exists
+        if (!msg.handshakePayload) {
+            if (sessionBlob) {
+                console.warn("Session is permanently corrupted. Deleting local session state.");
+                await deleteSessionState(privateChatId);
+            }
+            throw new Error("Decryption failed: Session out of sync. The corrupted session has been reset. The next message sent will establish a new secure session.");
         }
+
+        console.log(`Receiving E2EE handshake from ${partnerUsername}...`);
+        const myKeys = await loadDecryptedKeys(myUsername);
+        if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
+
+        // Retrieve my one-time prekey private key if Alice consumed one
+        let opkPrivateKeyBase64 = null;
+        const requestedOpkId = msg.handshakePayload.oneTimePrekeyId;
+        if (requestedOpkId && myKeys.oneTimePrekeys) {
+            const foundOpk = myKeys.oneTimePrekeys.find(k => k.keyId === requestedOpkId);
+            if (foundOpk) {
+                opkPrivateKeyBase64 = foundOpk.secretKey;
+                
+                // Remove consumed OPK from my local list to preserve forward secrecy
+                const updatedOPKs = myKeys.oneTimePrekeys.filter(k => k.keyId !== requestedOpkId);
+                const masterKey = getMasterKey();
+                const encryptedOPKs = encryptData(sodium.from_string(JSON.stringify(updatedOPKs)), masterKey);
+                
+                const dbKeys = await getKeys(myUsername);
+                await saveKeys(myUsername, {
+                    ...dbKeys,
+                    encryptedOneTimePrekeys: encryptedOPKs
+                });
+            } else {
+                console.warn(`Consumed OPK ${requestedOpkId} not found in local IndexedDB. Proceeding with DH1-DH3 fallback.`);
+            }
+        }
+
+        // Calculate the identical shared secret
+        const sharedSecret = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
+
+        // Initialize my Double Ratchet receiver session
+        const spkPrivateKey = fromBase64(myKeys.signedPrekeySecretKey);
+        const mySPKKeyPair = {
+            publicKey: sodium.crypto_scalarmult_base(spkPrivateKey),
+            privateKey: spkPrivateKey
+        };
+        session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, undefined, mySPKKeyPair);
+
+        // Decrypt the message
+        const decryptedBytes = await session.decrypt(reconstructedMsg);
+        const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
+
+        // Save the new session state
+        await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState), msg.handshakePayload.aliceIdentityPublicKey, myKeys.identityPublicKey);
+
+        return decryptedPayload;
+    } finally {
+        release();
     }
-
-    // Calculate the identical shared secret
-    const sharedSecret = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
-
-    // Initialize my Double Ratchet receiver session
-    const spkPrivateKey = fromBase64(myKeys.signedPrekeySecretKey);
-    const mySPKKeyPair = {
-        publicKey: sodium.crypto_scalarmult_base(spkPrivateKey),
-        privateKey: spkPrivateKey
-    };
-    session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, undefined, mySPKKeyPair);
-
-    // Decrypt the message
-    const decryptedBytes = await session.decrypt(reconstructedMsg);
-    const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
-
-    // Save the new session state
-    await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState), msg.handshakePayload.aliceIdentityPublicKey, myKeys.identityPublicKey);
-
-    return decryptedPayload;
 }
 
 /**
@@ -497,6 +507,12 @@ export async function replenishOneTimePrekeysIfNeeded(username, token) {
     }
 }
 
+function getDecryptedMessageKey(messageId) {
+    const myUsername = getCurrentUsername();
+    const prefix = myUsername ? `${myUsername.toLowerCase()}_` : "";
+    return prefix + messageId;
+}
+
 /**
  * Saves a decrypted message payload (encrypted with the master key) to IndexedDB decrypted_messages cache.
  * @param {string} messageId 
@@ -510,12 +526,13 @@ export async function saveDecryptedMessage(messageId, decryptedPayload) {
 
     const payloadBytes = sodium.from_string(JSON.stringify(decryptedPayload));
     const encrypted = encryptData(payloadBytes, masterKey);
+    const key = getDecryptedMessageKey(messageId);
 
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("decrypted_messages", "readwrite");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "decrypted_messages");
-        const request = store.put({ messageId, encrypted });
+        const request = store.put({ messageId: key, encrypted });
 
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
@@ -532,12 +549,13 @@ export async function getDecryptedMessage(messageId) {
     const masterKey = getMasterKey();
     if (!masterKey) return null;
 
+    const key = getDecryptedMessageKey(messageId);
     try {
         const db = await openDatabase();
         const record = await new Promise((resolve, reject) => {
             const transaction = db.transaction("decrypted_messages", "readonly");
             const store = transaction.objectStore(transaction.objectStoreNames[0] || "decrypted_messages");
-            const request = store.get(messageId);
+            const request = store.get(key);
             request.onsuccess = (event) => resolve(event.target.result || null);
             request.onerror = () => reject(request.error);
         });
@@ -549,5 +567,67 @@ export async function getDecryptedMessage(messageId) {
     } catch (error) {
         console.error("Error retrieving decrypted message from cache:", error);
         return null;
+    }
+}
+
+// In-memory cache of ongoing decryption promises to prevent parallel Double Ratchet decryption races
+const ongoingDecryptions = new Map();
+
+/**
+ * Checks cache first, and if not present, decrypts incoming message and caches it.
+ * Coordinated in-memory to ensure only one decryption executes concurrently per messageId.
+ * 
+ * @param {object} msg 
+ * @param {string} myUsername 
+ * @param {string} token 
+ * @returns {Promise<object>} The decrypted message payload
+ */
+export async function decryptAndCacheMessage(msg, myUsername, token) {
+    await cryptoReady;
+    
+    // Handle deleted messages immediately (don't attempt E2EE decryption)
+    if (msg.isDeleted) {
+        return {
+            text: msg.text || "This message was deleted",
+            fileUrl: null,
+            fileName: null,
+            fileSize: null,
+            fileType: null,
+            fileQuality: null,
+            isDeleted: true
+        };
+    }
+
+    if (!msg._id) {
+        // Fallback for temporary messages or messages without a DB ID
+        return decryptIncomingMessage(msg, myUsername, token);
+    }
+
+    // 1. Check in-memory ongoing decryptions map
+    if (ongoingDecryptions.has(msg._id)) {
+        return ongoingDecryptions.get(msg._id);
+    }
+
+    const decryptPromise = (async () => {
+        // 2. Check IndexedDB decrypted message cache
+        const cached = await getDecryptedMessage(msg._id);
+        if (cached) {
+            return cached;
+        }
+
+        // 3. Perform the actual cryptographic decryption
+        const decryptedPayload = await decryptIncomingMessage(msg, myUsername, token);
+
+        // 4. Save to IndexedDB cache
+        await saveDecryptedMessage(msg._id, decryptedPayload);
+        return decryptedPayload;
+    })();
+
+    ongoingDecryptions.set(msg._id, decryptPromise);
+
+    try {
+        return await decryptPromise;
+    } finally {
+        ongoingDecryptions.delete(msg._id);
     }
 }

@@ -10,6 +10,10 @@ const messageSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    tempId: {
+        type: String,
+        default: null
+    },
     text: {
         type: String,
         default: ""

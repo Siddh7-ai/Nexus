@@ -29,7 +29,7 @@ const FEATURES = [
   { title: "Secure Auth", icon: FiShield, status: "Live", tone: "green" },
   { title: "Smart User Profiles", icon: FiUser, status: "Live", tone: "green" },
   { title: "Universal Search", icon: FiSearch, status: "Soon", tone: "blue" },
-  { title: "File Sharing", icon: FiFile, status: "Soon", tone: "blue" },
+  { title: "File Sharing", icon: FiFile, status: "Live", tone: "green" },
   { title: "Dark Mode", icon: FiMoon, status: "Live", tone: "green" },
   { title: "AI Assistant", icon: FiCpu, status: "Soon", tone: "blue" },
   { title: "Video Calling", icon: FiVideo, status: "Soon", tone: "blue" }

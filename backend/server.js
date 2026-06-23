@@ -522,6 +522,8 @@ io.on("connection", async (socket) => {
                             },
                             { $push: { seenBy: socket.username } }
                         );
+                        const updatedMsgs = await Message.find({ room: uniqueRoomId, privateChatId: null }).select("_id seenBy");
+                        io.to(uniqueRoomId).emit("messagesSeenUpdate", updatedMsgs);
                     } catch (err) {
                         console.error("Error marking room messages as seen:", err);
                     }
@@ -564,6 +566,8 @@ io.on("connection", async (socket) => {
                             },
                             { $push: { seenBy: socket.username } }
                         );
+                        const updatedMsgs = await Message.find({ room, privateChatId: null }).select("_id seenBy");
+                        io.to(room).emit("messagesSeenUpdate", updatedMsgs);
                     } catch (err) {
                         console.error("Error marking room messages as seen:", err);
                     }
@@ -776,6 +780,7 @@ io.on("connection", async (socket) => {
 
             const msgData = {
                 username: socket.username,
+                tempId: data.tempId || null,
                 text: data.text,
                 isGuest: socket.role === "guest",
                 seenBy: activeUsernames,

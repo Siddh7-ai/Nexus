@@ -16,14 +16,13 @@ import CrowdCanvas from "../components/CrowdCanvas";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { 
   encryptOutgoingMessage, 
-  decryptIncomingMessage, 
+  decryptAndCacheMessage, 
   replenishOneTimePrekeysIfNeeded,
   loadDecryptedKeys,
-  saveDecryptedMessage,
-  getDecryptedMessage
+  saveDecryptedMessage
 } from "../utils/crypto/manager";
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
-import { getFullSessionRecord, getSessionState, saveSessionState, deleteSessionState } from "../utils/crypto/keydb";
+import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys } from "../utils/crypto/keydb";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
@@ -159,6 +158,7 @@ function Chat() {
     const [partnerIdentityKey, setPartnerIdentityKey] = useState(null);
     const [myIdentityKey, setMyIdentityKey] = useState(null);
     const expectingIncomingVisualizerRef = useRef(null);
+    const newlyReceivedMessageIdsRef = useRef(new Set());
 
     useEffect(() => {
         let isCancelled = false;
@@ -176,14 +176,8 @@ function Chat() {
                 if (decryptedMessages[msg._id]) continue; // already decrypted
 
                 try {
-                    // Try to load from local cache first
-                    let decryptedPayload = await getDecryptedMessage(msg._id);
+                    const decryptedPayload = await decryptAndCacheMessage(msg, myUsername, token);
                     
-                    if (!decryptedPayload) {
-                        decryptedPayload = await decryptIncomingMessage(msg, myUsername, token);
-                        await saveDecryptedMessage(msg._id, decryptedPayload);
-                    }
-
                     if (isCancelled) break;
                     setDecryptedMessages(prev => ({
                         ...prev,
@@ -208,8 +202,11 @@ function Chat() {
                         ...prev,
                         [msg._id]: { text: "[Decryption Error: Session out of sync]", isError: true }
                     }));
-                    if (socketRef.current && msg.privateChatId) {
-                        socketRef.current.emit("requestSessionReset", { privateChatId: msg.privateChatId });
+                    if (newlyReceivedMessageIdsRef.current.has(msg._id)) {
+                        newlyReceivedMessageIdsRef.current.delete(msg._id);
+                        if (socketRef.current && msg.privateChatId) {
+                            socketRef.current.emit("requestSessionReset", { privateChatId: msg.privateChatId });
+                        }
                     }
                 }
             }
@@ -251,11 +248,8 @@ function Chat() {
                         if (myKeys) {
                             setMyIdentityKey(myKeys.identityPublicKey);
                             
-                            // Cache them in IndexedDB if session already exists
-                            const sessionBlob = await getSessionState(activePrivate);
-                            if (sessionBlob) {
-                                await saveSessionState(activePrivate, sessionBlob, partnerBundle.identityPublicKey, myKeys.identityPublicKey);
-                            }
+                            // Cache them in IndexedDB
+                            await cacheSessionIdentityKeys(activePrivate, partnerBundle.identityPublicKey, myKeys.identityPublicKey);
                         }
                     }
                 }
@@ -785,6 +779,23 @@ function Chat() {
                 }
             }
 
+            // If we received our own sent message back, process cache transition
+            if (data.tempId && data.username?.toLowerCase() === usernameRef.current?.toLowerCase()) {
+                setDecryptedMessages((prev) => {
+                    const cachedDecrypted = prev[data.tempId];
+                    if (cachedDecrypted) {
+                        saveDecryptedMessage(data._id, cachedDecrypted).catch(err => {
+                            console.error("Failed to save optimistic message decrypt to IndexedDB cache:", err);
+                        });
+                        return {
+                            ...prev,
+                            [data._id]: cachedDecrypted
+                        };
+                    }
+                    return prev;
+                });
+            }
+
             const isMatch = data.privateChatId
                 ? (activePrivateRef.current?.toLowerCase() === data.privateChatId?.toLowerCase())
                 : (activeRoomRef.current === data.room);
@@ -793,7 +804,18 @@ function Chat() {
                 if (data.privateChatId && data.username?.toLowerCase() !== usernameRef.current?.toLowerCase()) {
                     expectingIncomingVisualizerRef.current = data._id;
                 }
+                if (data._id) {
+                    newlyReceivedMessageIdsRef.current.add(data._id);
+                }
                 setMessages((prev) => {
+                    if (data.tempId && data.username?.toLowerCase() === usernameRef.current?.toLowerCase()) {
+                        const index = prev.findIndex(m => m._id === data.tempId);
+                        if (index !== -1) {
+                            const updated = [...prev];
+                            updated[index] = data;
+                            return updated;
+                        }
+                    }
                     if (prev.some(m => m._id === data._id)) return prev;
                     return [...prev, data];
                 });
@@ -821,11 +843,8 @@ function Chat() {
                     if (data.privateChatId && data.ratchetHeader) {
                         try {
                             const token = getAuthToken();
-                            const decryptedPayload = await decryptIncomingMessage(data, usernameRef.current, token);
+                            const decryptedPayload = await decryptAndCacheMessage(data, usernameRef.current, token);
                             displayData.text = decryptedPayload.text;
-                            if (data._id) {
-                                await saveDecryptedMessage(data._id, decryptedPayload);
-                            }
                         } catch (err) {
                             console.error("Failed to decrypt incoming message for notification:", err);
                             displayData.text = "[Decrypted Message]";
@@ -1025,7 +1044,14 @@ function Chat() {
         });
 
         newSocket.on("messagesSeenUpdate", (updatedMsgs) => {
-            setMessages(updatedMsgs);
+            if (Array.isArray(updatedMsgs)) {
+                setMessages((prev) => {
+                    return prev.map(msg => {
+                        const match = updatedMsgs.find(u => u._id === msg._id);
+                        return match ? { ...msg, seenBy: match.seenBy } : msg;
+                    });
+                });
+            }
         });
 
         // Parse search query params on socket connect
@@ -1376,44 +1402,44 @@ function Chat() {
         if (!realAttachment && !message.trim()) return;
 
         console.log("DEBUG SENDING MESSAGE: [Content Redacted for E2EE]");
-        let msgData;
+
+        const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+        const originalMessage = message;
+
+        const tempMsg = {
+            _id: tempId,
+            username: username,
+            displayName: currentUserProfile?.displayName || username,
+            text: realAttachment ? "" : originalMessage,
+            room: activeRoom,
+            privateChatId: activePrivate,
+            createdAt: new Date().toISOString(),
+            status: "sending",
+            seenBy: [username],
+            fileUrl: realAttachment ? realAttachment.fileUrl : null,
+            fileName: realAttachment ? realAttachment.fileName : null,
+            fileSize: realAttachment ? realAttachment.fileSize : null,
+            fileType: realAttachment ? realAttachment.fileType : null,
+            fileQuality: realAttachment ? realAttachment.fileQuality : null
+        };
 
         if (activePrivate) {
-            try {
-                const token = getAuthToken();
-                // Encrypt message content (with any attachment metadata) via Double Ratchet / X3DH
-                const encryptedPayload = await encryptOutgoingMessage(
-                    activePrivateName,
-                    activePrivate,
-                    realAttachment ? "" : message,
-                    realAttachment,
-                    token
-                );
-                msgData = {
-                    ...encryptedPayload,
-                    privateChatId: activePrivate
-                };
-
-                // Trigger live data-flow visualizer for sent messages
-                setVisualizerData({
-                    plaintext: realAttachment ? `[Attachment: ${realAttachment.fileName || 'File'}]` : message,
-                    ciphertext: encryptedPayload.text,
-                    type: "send",
-                    username: activePrivateName,
-                    messageNumber: encryptedPayload.ratchetHeader.messageNumber,
-                    sessionId: activePrivate
-                });
-            } catch (error) {
-                console.error("Encryption failed:", error);
-                alert("Failed to encrypt message: " + error.message);
-                return;
-            }
-        } else {
-            msgData = realAttachment ? { ...realAttachment } : { text: message };
-            msgData.room = activeRoom;
+            const decPayload = {
+                text: realAttachment ? "" : originalMessage,
+                fileUrl: realAttachment ? realAttachment.fileUrl : null,
+                fileName: realAttachment ? realAttachment.fileName : null,
+                fileSize: realAttachment ? realAttachment.fileSize : null,
+                fileType: realAttachment ? realAttachment.fileType : null,
+                fileQuality: realAttachment ? realAttachment.fileQuality : null
+            };
+            setDecryptedMessages(prev => ({
+                ...prev,
+                [tempId]: decPayload
+            }));
         }
 
-        socketRef.current.emit("message", msgData);
+        setMessages(prev => [...prev, tempMsg]);
+
         if (!realAttachment) {
             setMessage("");
             const currentKey = activePrivate ? `dm:${activePrivate}` : (activeRoom ? `room:${activeRoom}` : null);
@@ -1430,6 +1456,48 @@ function Chat() {
             room: activeRoom,
             privateChatId: activePrivate
         });
+
+        (async () => {
+            let msgData;
+            if (activePrivate) {
+                try {
+                    const token = getAuthToken();
+                    // Encrypt message content (with any attachment metadata) via Double Ratchet / X3DH
+                    const encryptedPayload = await encryptOutgoingMessage(
+                        activePrivateNameRef.current,
+                        activePrivateRef.current,
+                        realAttachment ? "" : originalMessage,
+                        realAttachment,
+                        token
+                    );
+                    msgData = {
+                        ...encryptedPayload,
+                        privateChatId: activePrivateRef.current,
+                        tempId: tempId
+                    };
+
+                    // Trigger live data-flow visualizer for sent messages
+                    setVisualizerData({
+                        plaintext: realAttachment ? `[Attachment: ${realAttachment.fileName || 'File'}]` : originalMessage,
+                        ciphertext: encryptedPayload.text,
+                        type: "send",
+                        username: activePrivateNameRef.current,
+                        messageNumber: encryptedPayload.ratchetHeader.messageNumber,
+                        sessionId: activePrivateRef.current
+                    });
+                } catch (error) {
+                    console.error("Encryption failed:", error);
+                    setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "error", text: `[Failed to encrypt: ${error.message}]` } : m));
+                    return;
+                }
+            } else {
+                msgData = realAttachment ? { ...realAttachment } : { text: originalMessage };
+                msgData.room = activeRoomRef.current;
+                msgData.tempId = tempId;
+            }
+
+            socketRef.current.emit("message", msgData);
+        })();
     }
 
     function emitTyping(value) {

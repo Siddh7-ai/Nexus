@@ -69,6 +69,53 @@ export async function getKeys(username) {
     });
 }
 
+export function getCurrentUsername() {
+    // Try sessionStorage first
+    let username = sessionStorage.getItem("username") || localStorage.getItem("username");
+    if (username) return username;
+
+    // Try parsing the token from sessionStorage/localStorage
+    let token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (!token) {
+        const guestProfileStr = localStorage.getItem("guestProfile");
+        if (guestProfileStr) {
+            try {
+                const profile = JSON.parse(guestProfileStr);
+                if (profile && profile.username) {
+                    token = `guest:${profile.username}`;
+                }
+            } catch (e) {}
+        }
+    }
+
+    if (token) {
+        if (token.startsWith("guest:")) {
+            return token.split(":")[1];
+        }
+        try {
+            const base64Url = token.split(".")[1];
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            const jsonPayload = decodeURIComponent(
+                atob(base64)
+                    .split("")
+                    .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                    .join("")
+            );
+            const parsed = JSON.parse(jsonPayload);
+            return parsed?.username || null;
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function getSessionKey(chatId) {
+    const myUsername = getCurrentUsername();
+    const prefix = myUsername ? `${myUsername.toLowerCase()}_` : "";
+    return prefix + chatId.toLowerCase();
+}
+
 /**
  * Saves the Double Ratchet session blob string and cached identity public keys for verification.
  * @param {string} chatId - Target privateChatId (e.g. "user1_user2")
@@ -79,15 +126,16 @@ export async function getKeys(username) {
  */
 export async function saveSessionState(chatId, sessionBlob, partnerIdentityPublicKey = null, myIdentityPublicKey = null) {
     const db = await openDatabase();
+    const key = getSessionKey(chatId);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readwrite");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
-        const getRequest = store.get(chatId.toLowerCase());
+        const getRequest = store.get(key);
 
         getRequest.onsuccess = (e) => {
             const existing = e.target.result || {};
             const record = {
-                chatId: chatId.toLowerCase(),
+                chatId: key,
                 sessionBlob,
                 partnerIdentityPublicKey: partnerIdentityPublicKey || existing.partnerIdentityPublicKey || null,
                 myIdentityPublicKey: myIdentityPublicKey || existing.myIdentityPublicKey || null
@@ -107,10 +155,11 @@ export async function saveSessionState(chatId, sessionBlob, partnerIdentityPubli
  */
 export async function getSessionState(chatId) {
     const db = await openDatabase();
+    const key = getSessionKey(chatId);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readonly");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
-        const request = store.get(chatId.toLowerCase());
+        const request = store.get(key);
 
         request.onsuccess = (event) => {
             const res = event.target.result;
@@ -127,10 +176,11 @@ export async function getSessionState(chatId) {
  */
 export async function getFullSessionRecord(chatId) {
     const db = await openDatabase();
+    const key = getSessionKey(chatId);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readonly");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
-        const request = store.get(chatId.toLowerCase());
+        const request = store.get(key);
 
         request.onsuccess = (event) => resolve(event.target.result || null);
         request.onerror = () => reject(request.error);
@@ -144,12 +194,89 @@ export async function getFullSessionRecord(chatId) {
  */
 export async function deleteSessionState(chatId) {
     const db = await openDatabase();
+    const key = getSessionKey(chatId);
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readwrite");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
-        const request = store.delete(chatId.toLowerCase());
+        const request = store.delete(key);
 
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
+    });
+}
+
+// Map to hold lock queues per chatId
+const sessionLocks = new Map();
+
+/**
+ * Acquire a promise-based queue lock for a specific chatId.
+ * Returns a function to release the lock.
+ * 
+ * @param {string} chatId 
+ * @returns {Promise<function>} release function
+ */
+export async function acquireSessionLock(chatId) {
+    const key = getSessionKey(chatId);
+    
+    // Get existing queue or initialize a new one
+    if (!sessionLocks.has(key)) {
+        sessionLocks.set(key, Promise.resolve());
+    }
+    
+    const currentQueue = sessionLocks.get(key);
+    
+    let release;
+    const nextPromise = new Promise((resolve) => {
+        release = resolve;
+    });
+    
+    // Update the map with the new promise chain link
+    sessionLocks.set(key, currentQueue.then(() => nextPromise).catch(() => nextPromise));
+    
+    // Wait for the previous chain link to resolve
+    await currentQueue;
+    
+    return () => {
+        release();
+    };
+}
+
+/**
+ * Caches identity public keys in the session record without modifying the sessionBlob.
+ * 
+ * @param {string} chatId 
+ * @param {string} partnerIdentityPublicKey 
+ * @param {string} myIdentityPublicKey 
+ * @returns {Promise<void>}
+ */
+export async function cacheSessionIdentityKeys(chatId, partnerIdentityPublicKey, myIdentityPublicKey) {
+    const db = await openDatabase();
+    const key = getSessionKey(chatId);
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("sessions", "readwrite");
+        const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
+        const getRequest = store.get(key);
+
+        getRequest.onsuccess = (e) => {
+            const existing = e.target.result;
+            if (!existing) {
+                const record = {
+                    chatId: key,
+                    sessionBlob: null,
+                    partnerIdentityPublicKey,
+                    myIdentityPublicKey
+                };
+                const putRequest = store.put(record);
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            } else {
+                existing.partnerIdentityPublicKey = partnerIdentityPublicKey || existing.partnerIdentityPublicKey;
+                existing.myIdentityPublicKey = myIdentityPublicKey || existing.myIdentityPublicKey;
+                const putRequest = store.put(existing);
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            }
+        };
+        getRequest.onerror = () => reject(getRequest.error);
     });
 }

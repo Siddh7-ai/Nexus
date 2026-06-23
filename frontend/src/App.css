@@ -617,6 +617,31 @@ body.dark-theme .scroll-to-bottom-btn:hover {
   color: #8c929c;
 }
 
+.seen-status.sending {
+  font-size: 8px;
+  margin-left: 4px;
+  opacity: 0.65;
+  display: inline-block;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.seen-status.sent {
+  font-size: 10px;
+  color: #8c929c;
+  margin-left: 4px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.seen-status.read {
+  font-size: 10px;
+  color: #34b7f1 !important; /* Premium WhatsApp Blue */
+  margin-left: 4px;
+  font-weight: 800;
+  display: inline-block;
+  text-shadow: 0 0 1px rgba(52, 183, 241, 0.3);
+}
+
 .message-bubble.other .message-time,
 .message-bubble.other .edited-label,
 .message-bubble.other .seen-status {
@@ -834,10 +859,11 @@ body.dark-theme .menu-item:hover {
 
 .thought-circle {
   border-radius: 50%;
-  background-color: var(--soft-3); /* soft purple */
+  background: linear-gradient(135deg, var(--accent-deep), var(--accent));
   flex-shrink: 0;
   transform-origin: center;
   animation: thoughtPulse 1.4s ease-in-out infinite;
+  box-shadow: 0 2px 6px rgba(18, 199, 189, 0.15);
 }
 
 .thought-circle-1 {
@@ -859,10 +885,10 @@ body.dark-theme .menu-item:hover {
 }
 
 .thought-cloud {
-  width: 40px;
-  height: 22px;
-  border-radius: 11px; /* Pill shape */
-  background-color: var(--soft-3); /* soft purple */
+  width: 42px;
+  height: 24px;
+  border-radius: 12px; /* Pill shape */
+  background: linear-gradient(135deg, var(--accent-deep), var(--accent));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -871,25 +897,49 @@ body.dark-theme .menu-item:hover {
   transform-origin: center;
   animation: thoughtPulse 1.4s ease-in-out infinite;
   animation-delay: 0.6s;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 12px rgba(18, 199, 189, 0.25);
 }
 
 .thought-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background-color: #5c54db; /* matching dark purple */
+  background-color: #ffffff; /* contrasting white dots */
   display: inline-block;
   flex-shrink: 0;
+  animation: dotPulse 1.4s infinite ease-in-out both;
+}
+
+.thought-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.thought-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thought-dot:nth-child(3) {
+  animation-delay: 0.4s;
 }
 
 @keyframes thoughtPulse {
   0%, 100% {
     transform: scale(0.9);
-    opacity: 0.5;
+    opacity: 0.85;
   }
   50% {
     transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% { 
+    transform: scale(0.6);
+    opacity: 0.4;
+  } 
+  40% { 
+    transform: scale(1.15);
     opacity: 1;
   }
 }
