@@ -310,6 +310,7 @@ function Chat() {
     }, [activeRoom, activePrivate]);
     const [editingMsg, setEditingMsg] = useState(null); // { _id, text }
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showTransitionSettings, setShowTransitionSettings] = useState(false);
     const [showLoginModal, setShowLoginModal] = useState(false);
     const [activeReactionMsgId, setActiveReactionMsgId] = useState(null); // Msg ID for custom reaction picker
     const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -3931,7 +3932,7 @@ function Chat() {
                     </motion.div>
                 )}
             </AnimatePresence>
-            <ThemeTransitionOptions />
+            <ThemeTransitionOptions isOpen={showTransitionSettings} setIsOpen={setShowTransitionSettings} />
         </div>
     );
 }

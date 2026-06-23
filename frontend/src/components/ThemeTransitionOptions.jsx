@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GripHorizontal } from "lucide-react";
 import { FiSettings, FiX } from "react-icons/fi";
 
-export default function ThemeTransitionOptions() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function ThemeTransitionOptions({ isOpen, setIsOpen }) {
   const [variant, setVariant] = useState(() => localStorage.getItem("theme-transition-variant") || "circle");
   const [start, setStart] = useState(() => localStorage.getItem("theme-transition-start") || "center");
   const [blur, setBlur] = useState(() => localStorage.getItem("theme-transition-blur") === "true");
@@ -50,32 +49,6 @@ export default function ThemeTransitionOptions() {
 
   return (
     <>
-      {/* Floating Gear Button in bottom right */}
-      <button
-        onClick={() => setIsOpen(prev => !prev)}
-        style={{
-          position: "fixed",
-          bottom: "20px",
-          right: "20px",
-          width: "44px",
-          height: "44px",
-          borderRadius: "50%",
-          background: "var(--accent, #12c7bd)",
-          color: "#ffffff",
-          border: "none",
-          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          zIndex: 9999,
-          transition: "transform 0.2s ease, background 0.2s ease",
-        }}
-        className="transition-settings-btn"
-        title="Theme Transition Settings"
-      >
-        <FiSettings size={20} className={isOpen ? "rotate-settings-icon" : ""} />
-      </button>
 
       {/* Styled options stylesheet */}
       <style>{`
