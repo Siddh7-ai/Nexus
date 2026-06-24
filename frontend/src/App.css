@@ -370,7 +370,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: url('/dp.png') no-repeat center center;
+  background: url('/dpp.png') no-repeat center center;
   background-size: 100% 100%;
   filter: brightness(var(--theme-brightness, 100%));
   z-index: 0;
@@ -378,7 +378,7 @@
 }
 
 body.dark-theme .messages-wrapper::before {
-  background-image: url('/wp.png');
+  background-image: url('/wpp.png');
 }
 
 
@@ -3376,6 +3376,16 @@ body.dark-theme {
   background: var(--soft);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.empty-chat-online-users-wrapper {
+  position: absolute;
+  top: 24px;
+  right: 80px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  z-index: 10;
 }
 
 .empty-chat-theme-toggle {
@@ -6533,4 +6543,4 @@ body.chat-page-body #root {
   position: fixed !important;
   width: 100% !important;
 }
-
+

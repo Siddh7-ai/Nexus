@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
+import savedMessagesLogo from "../assets/saved_messages.jpg";
 import { SmoothInput } from "./SmoothInput";
 import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity } from "react-icons/fi";
 
@@ -88,6 +89,9 @@ function RoomList({
     onLogoClick
 }) {
     const [dmSearch, setDmSearch] = useState("");
+
+    const savedMessagesTitle = "Saved Messages";
+    const showSavedMessages = !isGuest && currentUser && (!dmSearch || savedMessagesTitle.toLowerCase().includes(dmSearch.toLowerCase()));
 
     const totalDmUnread = useMemo(() => {
         if (!unreadCounts) return 0;
@@ -257,12 +261,12 @@ function RoomList({
                 {activeSidebarTab === "messages" ? (
                     <>
                         <div className="panel-header-section">
-                            <h3 className="panel-header-title">Messages</h3>
+                            <h3 className="panel-header-title">Direct Messages</h3>
                             <div className="panel-search-box">
                                 <div style={{ position: 'relative', width: '100%' }}>
                                     <SmoothInput
                                         type="text"
-                                        placeholder="Search chats, rooms or users..."
+                                        placeholder="Search chats or users..."
                                         value={dmSearch}
                                         onChange={(e) => setDmSearch(e.target.value)}
                                         className="dm-search-input"
@@ -276,86 +280,43 @@ function RoomList({
                         <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
                             <div className="dm-list-container" style={{ height: '100%', overflowY: 'visible' }}>
                                 
-                                {/* 1. Rooms & Groups Section */}
+                                {/* Private chats Section */}
                                 <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <span>Rooms & Groups</span>
-                                </div>
-                                <div className="unified-rooms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
-                                    {/* Public Rooms */}
-                                    {ROOMS.filter(r => !deletedSystemRooms.includes(r) && (!dmSearch || r.toLowerCase().includes(dmSearch.toLowerCase()))).map(room => {
-                                        const isActive = activeRoom === room && !activePrivate;
-                                        const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
-                                        const isLocked = isGuest && room !== "General chat";
-                                        
-                                        return (
-                                            <div 
-                                                key={room} 
-                                                className={`dm-row-card ${isActive ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
-                                                onClick={() => !isLocked && onSelectRoom(room)}
-                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
-                                            >
-                                                <div className="dm-row-left">
-                                                    <div className="grid-card-emoji-icon" style={{ fontSize: '18px', marginRight: '10px' }}>
-                                                        {ROOM_ICONS[room]}
-                                                    </div>
-                                                    <span className="dm-row-name" style={{ fontSize: '13px' }}>
-                                                        {room.replace(" chat", "")} Chat
-                                                    </span>
-                                                </div>
-                                                <div className="dm-row-right">
-                                                    {isLocked ? (
-                                                        <FiLock className="dm-lock-icon" />
-                                                    ) : unread > 0 ? (
-                                                        <span className="dm-unread-badge" style={{ background: '#ef4444' }}>{unread}</span>
-                                                    ) : null}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-
-                                    {/* Custom Private Rooms */}
-                                    {customRooms.filter(r => !dmSearch || r.name.toLowerCase().includes(dmSearch.toLowerCase())).map(room => {
-                                        const isActive = activeRoom === room.name && !activePrivate;
-                                        const unread = unreadCounts && unreadCounts[room.name] ? unreadCounts[room.name] : 0;
-                                        
-                                        return (
-                                            <div 
-                                                key={room.code} 
-                                                className={`dm-row-card ${isActive ? "active" : ""}`}
-                                                onClick={() => onSelectRoom(room.name)}
-                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
-                                            >
-                                                <div className="dm-row-left">
-                                                    {room.avatar ? (
-                                                        <img 
-                                                            src={room.avatar} 
-                                                            alt={room.name} 
-                                                            style={{ width: '24px', height: '24px', borderRadius: '6px', marginRight: '10px', objectFit: 'cover' }} 
-                                                        />
-                                                    ) : (
-                                                        <span style={{ fontSize: '18px', marginRight: '10px' }}>🔒</span>
-                                                    )}
-                                                    <span className="dm-row-name" style={{ fontSize: '13px' }}>
-                                                        {room.name}
-                                                    </span>
-                                                </div>
-                                                <div className="dm-row-right">
-                                                    {unread > 0 ? (
-                                                        <span className="dm-unread-badge" style={{ background: '#ef4444' }}>{unread}</span>
-                                                    ) : (
-                                                        <span className="guest-badge-pill" style={{ background: 'var(--soft)', color: 'var(--muted)', fontSize: '9px' }}>PVT</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* 2. Direct Messages Section */}
-                                <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <span>Direct Messages</span>
+                                    <span>Private chats</span>
                                 </div>
                                 <div className="unified-dms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {showSavedMessages && (() => {
+                                        const privateChatId = `${currentUser.toLowerCase()}_${currentUser.toLowerCase()}`;
+                                        const isActive = activePrivate === privateChatId;
+                                        const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
+                                        return (
+                                            <div 
+                                                key="saved_messages_chat"
+                                                className={`dm-row-card ${isActive ? "active" : ""}`}
+                                                onClick={() => onSelectPrivate(privateChatId, currentUser)}
+                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                            >
+                                                <div className="dm-row-left">
+                                                    <div className="dm-avatar-wrapper">
+                                                        <img 
+                                                            src={savedMessagesLogo} 
+                                                            alt="Saved Messages" 
+                                                            className="dm-row-avatar" 
+                                                            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }}
+                                                        />
+                                                    </div>
+                                                    <span className="dm-row-name">
+                                                        {savedMessagesTitle}
+                                                    </span>
+                                                </div>
+                                                <div className="dm-row-right">
+                                                    {unread > 0 && (
+                                                        <span className="dm-unread-badge">{unread}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                     {dmSearch.trim() ? (
                                         filteredSearchUsers.length === 0 ? (
                                             <div className="sidebar-empty-state">No users found.</div>
@@ -410,8 +371,8 @@ function RoomList({
                                             })
                                         )
                                     ) : (
-                                        dmConversations.length === 0 ? (
-                                            <div className="sidebar-empty-state" style={{ fontSize: '11px' }}>No direct messages yet.</div>
+                                        dmConversations.length === 0 && !showSavedMessages ? (
+                                            <div className="sidebar-empty-state" style={{ fontSize: '11px' }}>No private chats yet.</div>
                                         ) : (
                                             dmConversations.map(user => {
                                                 const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");
@@ -588,7 +549,7 @@ function RoomList({
                 ) : (
                     <>
                         <div className="panel-header-section">
-                            <h3 className="panel-header-title">Direct Messages</h3>
+                            <h3 className="panel-header-title">Private chats</h3>
                             {!isGuest && (
                                 <div className="panel-search-box">
                                     <div style={{ position: 'relative', width: '100%' }}>
@@ -608,6 +569,40 @@ function RoomList({
                         </div>
                         <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
                             <div className="dm-list-container" style={{ height: '100%', overflowY: 'visible' }}>
+                                {showSavedMessages && (() => {
+                                    const privateChatId = `${currentUser.toLowerCase()}_${currentUser.toLowerCase()}`;
+                                    const isActive = activePrivate === privateChatId;
+                                    const unread = unreadCounts && unreadCounts[privateChatId] ? unreadCounts[privateChatId] : 0;
+                                    return (
+                                        <div 
+                                            key="saved_messages_chat_fallback"
+                                            className={`dm-row-card ${isActive ? "active" : ""}`}
+                                            onClick={() => onSelectPrivate(privateChatId, currentUser)}
+                                            style={{ padding: '10px 12px', borderRadius: '10px' }}
+                                        >
+                                            <div className="dm-row-left">
+                                                <div className="dm-avatar-wrapper">
+                                                    <img 
+                                                        src={savedMessagesLogo} 
+                                                        alt="Saved Messages" 
+                                                        className="dm-row-avatar" 
+                                                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                                                    />
+                                                </div>
+                                                <span className="dm-row-name">
+                                                    {savedMessagesTitle}
+                                                </span>
+                                            </div>
+                                            <div className="dm-row-right">
+                                                {unread > 0 ? (
+                                                    <span className="dm-unread-badge">{unread}</span>
+                                                ) : (
+                                                    <span className="dm-pill">Drafts</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                                 {dmSearch.trim() ? (
                                     filteredSearchUsers.length === 0 ? (
                                         <div className="sidebar-empty-state">No users found. Try another search term.</div>
@@ -666,8 +661,8 @@ function RoomList({
                                         })
                                     )
                                 ) : (
-                                    dmConversations.length === 0 ? (
-                                        <div className="sidebar-empty-state">No direct messages yet. Search for a user to start chatting.</div>
+                                    dmConversations.length === 0 && !showSavedMessages ? (
+                                        <div className="sidebar-empty-state">No private chats yet. Search for a user to start chatting.</div>
                                     ) : (
                                         dmConversations.map(user => {
                                             const privateChatId = [currentUser.toLowerCase(), user.username.toLowerCase()].sort().join("_");

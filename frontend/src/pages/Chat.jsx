@@ -2067,7 +2067,7 @@ function Chat() {
 
         list = list.filter((u) => u.username?.toLowerCase() !== username?.toLowerCase());
 
-        if (activePrivateName && !list.some((u) => u.username?.toLowerCase() === activePrivateName.toLowerCase())) {
+        if (activePrivateName && activePrivateName.toLowerCase() !== username?.toLowerCase() && !list.some((u) => u.username?.toLowerCase() === activePrivateName.toLowerCase())) {
             const activeUserObj = allUsers.find(
                 (u) => u.username?.toLowerCase() === activePrivateName.toLowerCase()
             ) || onlineUserList.find(
@@ -2192,6 +2192,15 @@ function Chat() {
                                 letterSpacing: '-0.3px'
                             }}>
                                 Nexus.
+                            </div>
+                            <div className="empty-chat-online-users-wrapper">
+                                <OnlineUsers
+                                    onlineUsers={onlineUsers}
+                                    onlineUserList={onlineUserList}
+                                    currentUser={username}
+                                    onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                                    onShowOnlineListClick={() => setShowOnlineList(true)}
+                                />
                             </div>
                             <ThemeToggleButton
                                 theme={theme}
@@ -2322,6 +2331,7 @@ function Chat() {
                                             return {
                                                 ...msg,
                                                 text: "[Decrypting E2EE message...]",
+                                                isDecrypting: true,
                                                 fileUrl: null
                                             };
                                         }
@@ -2341,6 +2351,7 @@ function Chat() {
                                         typingUser={typingUser}
                                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                                         allUsers={allUsers}
+                                        onlineUserList={onlineUserList}
                                     />
                                 );
                             })()}
@@ -2446,7 +2457,7 @@ function Chat() {
                             <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800' }}>Block User?</h3>
                         </div>
                         <div className="modal-body-section" style={{ margin: '16px 0', fontSize: '14px', color: 'var(--text)' }}>
-                            <p>Are you sure you want to block <strong>@{blockTargetConfirm.username}</strong>? You will no longer receive direct messages from them.</p>
+                            <p>Are you sure you want to block <strong>@{blockTargetConfirm.username}</strong>? You will no longer receive private messages from them.</p>
                         </div>
                         <div className="modal-footer-buttons" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                             <button className="modal-btn cancel" onClick={() => setBlockTargetConfirm(null)}>Cancel</button>
@@ -3115,7 +3126,7 @@ function Chat() {
                                                         onClick={handleStartPrivateChat} 
                                                         disabled={!selectedProfileData.canDM} 
                                                         className="action-btn-card solid"
-                                                        title={!selectedProfileData.canDM ? "Private Messaging is restricted by user privacy or block settings." : "Send direct message"}
+                                                        title={!selectedProfileData.canDM ? "Private Messaging is restricted by user privacy or block settings." : "Send private message"}
                                                     >
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                                         Message

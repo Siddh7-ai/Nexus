@@ -124,7 +124,7 @@ function ThoughtBubbleIndicator({ typingUser }) {
 
 const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👍"];
 
-function SeenStatus({ msg, currentUser }) {
+function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
     if (msg.username?.toLowerCase() !== currentUser?.toLowerCase() || msg.isDeleted) return null;
 
     const seenBy = msg.seenBy || [];
@@ -139,12 +139,26 @@ function SeenStatus({ msg, currentUser }) {
         );
     }
 
-    if (seenByOther) {
+    const isSelfChat = msg.privateChatId && msg.privateChatId.toLowerCase() === `${currentUser?.toLowerCase()}_${currentUser?.toLowerCase()}`;
+    if (seenByOther || isSelfChat) {
         return (
             <span className="seen-status read" title="Read">
                 ✓✓
             </span>
         );
+    }
+
+    if (msg.privateChatId) {
+        const parts = msg.privateChatId.split("_");
+        const partner = parts.find(u => u.toLowerCase() !== currentUser?.toLowerCase());
+        const isPartnerOnline = partner && onlineUserList.some(u => u.username?.toLowerCase() === partner.toLowerCase());
+        if (isPartnerOnline) {
+            return (
+                <span className="seen-status delivered" title="Delivered">
+                    ✓✓
+                </span>
+            );
+        }
     }
 
     return (
@@ -253,7 +267,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     );
 }
 
-function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [] }) {
+function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [] }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
@@ -438,6 +452,11 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
 
                                     {msg.isDeleted ? (
                                         <p className="message-text">{msg.text}</p>
+                                    ) : (msg.isDecrypting || (msg.text && (msg.text === "[Decrypting E2EE message...]" || msg.text.includes("Decrypting")))) ? (
+                                        <div className="skeleton-loader">
+                                            <div className="skeleton-line first"></div>
+                                            <div className="skeleton-line second"></div>
+                                        </div>
                                     ) : (
                                         <>
                                             {msg.text && (
@@ -462,7 +481,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                             {formatTimestamp(msg.createdAt)}
                                             {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
                                         </span>
-                                        <SeenStatus msg={msg} currentUser={currentUser} />
+                                        <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} />
                                     </div>
                                 </div>
 

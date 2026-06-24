@@ -479,6 +479,12 @@ io.on("connection", async (socket) => {
     // Join a chat room
     socket.on("joinRoom", async (room) => {
         try {
+            // Leave any active private chat rooms since we are switching to a room
+            for (const r of socket.rooms) {
+                if (r.startsWith("private_")) {
+                    socket.leave(r);
+                }
+            }
             const userId = socket.request.user?.id;
             let roomDoc = null;
             if (socket.role !== "guest" && userId) {
@@ -601,6 +607,13 @@ io.on("connection", async (socket) => {
 
         const users = [socket.username.toLowerCase(), otherUsername.toLowerCase()].sort();
         const privateChatId = users.join("_");
+
+        // Leave any other active private chat rooms before joining the new one
+        for (const room of socket.rooms) {
+            if (room.startsWith("private_") && room !== `private_${privateChatId}`) {
+                socket.leave(room);
+            }
+        }
 
         socket.join(`private_${privateChatId}`);
 

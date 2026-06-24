@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity } from "react-icons/fi";
 import OnlineUsers from "./OnlineUsers";
+import savedMessagesLogo from "../assets/saved_messages.jpg";
 import { setThemeBrightness } from "../utils/theme";
 import { ThemeToggleIcon } from "./ThemeToggleButton";
 
@@ -115,12 +116,30 @@ function ChatHeader({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                             <div 
                                 className="chat-header-profile-trigger"
-                                onClick={() => onUserProfileClick && onUserProfileClick(privateUser?.username || chatTitle)}
-                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', minWidth: 0 }}
-                                title="View Profile"
+                                onClick={() => {
+                                    if (privateUser?.username?.toLowerCase() !== username?.toLowerCase()) {
+                                        onUserProfileClick && onUserProfileClick(privateUser?.username || chatTitle);
+                                    }
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: privateUser?.username?.toLowerCase() === username?.toLowerCase() ? 'default' : 'pointer', minWidth: 0 }}
+                                title={privateUser?.username?.toLowerCase() === username?.toLowerCase() ? "" : "View Profile"}
                             >
-                                <Avatar username={privateUser?.username || chatTitle} avatarSrc={privateUser?.avatar} size={36} className="header-avatar" />
-                                <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
+                                {privateUser?.username?.toLowerCase() === username?.toLowerCase() ? (
+                                    <>
+                                        <img 
+                                            src={savedMessagesLogo} 
+                                            alt="Saved Messages" 
+                                            className="avatar header-avatar"
+                                            style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
+                                        />
+                                        <div className="chat-title">Saved Messages</div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Avatar username={privateUser?.username || chatTitle} avatarSrc={privateUser?.avatar} size={36} className="header-avatar" />
+                                        <div className="chat-title">{privateUser?.displayName || privateUser?.username || chatTitle}</div>
+                                    </>
+                                )}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                                 <button 
