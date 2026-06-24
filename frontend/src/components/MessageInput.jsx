@@ -22,7 +22,8 @@ import {
     X,
     RefreshCw,
     Crop,
-    Plus
+    Plus,
+    Lock
 } from "lucide-react";
 import { SmoothInput } from "./SmoothInput";
 import { motion, useMotionValue, animate } from "framer-motion";
@@ -377,7 +378,28 @@ function MessageInput({
 
         if (rects && rects.length > 0) {
             caretRect = rects[0];
-        } else {
+        }
+
+        // If caretRect is null or has 0 dimensions, try the dummy node technique (e.g. for empty lines / Shift+Enter newlines)
+        if (!caretRect || caretRect.height === 0 || caretRect.width === 0) {
+            try {
+                const clonedRange = range.cloneRange();
+                const tempNode = document.createTextNode("\u200B");
+                clonedRange.insertNode(tempNode);
+                const tempRects = clonedRange.getClientRects();
+                if (tempRects && tempRects.length > 0) {
+                    caretRect = tempRects[0];
+                }
+                if (tempNode.parentNode) {
+                    tempNode.parentNode.removeChild(tempNode);
+                }
+            } catch (err) {
+                console.error("Caret calculation error:", err);
+            }
+        }
+
+        // Fallback if still not determined
+        if (!caretRect) {
             const computed = window.getComputedStyle(editor);
             const paddingLeft = parseFloat(computed.paddingLeft) || 0;
             const paddingTop = parseFloat(computed.paddingTop) || 0;
@@ -1226,6 +1248,17 @@ function MessageInput({
             }, 0);
         }
     }, [message]);
+
+    const isReadOnlyRoom = activeRoom === "Nexus Official" && username !== "Siddh";
+
+    if (isReadOnlyRoom) {
+        return (
+            <div className="input-area composer-readonly-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '78px', padding: '14px 28px 18px', gap: '10px', fontSize: '14px', color: 'var(--muted)', fontWeight: '500' }}>
+                <Lock size={16} style={{ color: 'var(--accent)', marginRight: '4px' }} />
+                <span>Only the administrator can post messages in this channel.</span>
+            </div>
+        );
+    }
 
     return (
         <div className="input-area">

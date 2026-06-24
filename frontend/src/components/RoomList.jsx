@@ -1,14 +1,36 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
-import savedMessagesLogo from "../assets/saved_messages.jpg";
+import savedMessagesLogo from "../assets/saved_messages.png";
 import { SmoothInput } from "./SmoothInput";
 import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity } from "react-icons/fi";
 
-const ROOMS = ["General chat", "Project chat", "Study chat"];
+const VerifiedRoomBadge = ({ size = 13, style = {} }) => (
+    <svg 
+        viewBox="0 0 16 16" 
+        width={size} 
+        height={size} 
+        style={{ flexShrink: 0, ...style }}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path 
+            d="M10.067.87a2.89 2.89 0 0 0-4.134 0l-.622.638-.89-.011a2.89 2.89 0 0 0-2.924 2.924l.01.89-.636.622a2.89 2.89 0 0 0 0 4.134l.637.622-.011.89a2.89 2.89 0 0 0 2.924 2.924l.89-.01.622.636a2.89 2.89 0 0 0 4.134 0l.622-.637.89.011a2.89 2.89 0 0 0 2.924-2.924l-.01-.89.636-.622a2.89 2.89 0 0 0 0-4.134l-.637-.622.011-.89a2.89 2.89 0 0 0-2.924-2.924l-.89.01z" 
+            fill="#12c7bd" 
+        />
+        <path 
+            d="M4.8 8.0 l2.2 2.2 l4.2 -4.2" 
+            fill="none" 
+            stroke="#ffffff" 
+            strokeWidth="1.8" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+        />
+    </svg>
+);
+
+
+const ROOMS = ["Nexus Official"];
 const ROOM_ICONS = {
-    "General chat": "💭",
-    "Project chat": "🚀",
-    "Study chat": "📝"
+    "Nexus Official": "🌐"
 };
 
 
@@ -433,44 +455,61 @@ function RoomList({
                         <div className="panel-header-section">
                             <h3 className="panel-header-title">Rooms</h3>
                         </div>
-                        <div className="panel-content-scroll">
-                            {/* Grid of rooms (public) */}
-                            <div className="grid-rooms-container" style={{ marginBottom: "18px" }}>
+                        <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
+                            {/* Public Rooms Section */}
+                            <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span>Public Rooms</span>
+                            </div>
+                            <div className="unified-rooms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '20px' }}>
                                 {ROOMS.filter(room => !deletedSystemRooms.includes(room)).map(room => {
                                     const isActive = activeRoom === room && !activePrivate;
                                     const unread = unreadCounts && unreadCounts[room] ? unreadCounts[room] : 0;
-                                    const isLocked = isGuest && room !== "General chat";
+                                    const isLocked = isGuest && room !== "Nexus Official";
                                     
                                     return (
                                         <div 
                                             key={room} 
-                                            className={`room-grid-card ${isActive ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
+                                            className={`dm-row-card ${isActive ? "active" : ""} ${isLocked ? "locked-room" : ""}`}
                                             onClick={() => !isLocked && onSelectRoom(room)}
-                                            title={isLocked ? "Login required" : undefined}
-                                            style={isActive ? { border: '1.5px solid var(--accent)', boxShadow: '0 0 10px rgba(18, 199, 189, 0.15)' } : undefined}
+                                            style={{ padding: '10px 12px', borderRadius: '10px' }}
                                         >
-                                            <div className="grid-card-top">
-                                                <div className="grid-card-icon-box">
-                                                    <span className="grid-card-emoji-icon">{ROOM_ICONS[room]}</span>
+                                            <div className="dm-row-left">
+                                                <div className="dm-avatar-wrapper">
+                                                    {room === "Nexus Official" ? (
+                                                        <img src={logo} alt="Nexus Logo" className="dm-row-avatar" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <div className="dm-row-avatar" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
+                                                            {ROOM_ICONS[room] || "🌐"}
+                                                        </div>
+                                                    )}
                                                 </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                    <span className="dm-row-name" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
+                                                        {room.replace(" chat", "")}
+                                                        {room === "Nexus Official" && (
+                                                            <VerifiedRoomBadge size={13} />
+                                                        )}
+                                                    </span>
+                                                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                                        {unread > 0 ? `${unread} unread` : "No unread"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="dm-row-right">
                                                 {isLocked ? (
-                                                    <FiLock className="grid-lock-icon" />
+                                                    <FiLock className="dm-lock-icon" />
                                                 ) : unread > 0 ? (
-                                                    <span className="grid-unread-badge">{unread}</span>
+                                                    <span className="dm-unread-badge">{unread}</span>
                                                 ) : null}
                                             </div>
-                                            <span className="grid-card-title">{room.replace(" chat", "")}</span>
-                                            <span className="grid-card-unread-text">
-                                                {unread > 0 ? `${unread} unread` : "No unread"}
-                                            </span>
                                         </div>
                                     );
                                 })}
                             </div>
 
-                            {/* Private rooms section */}
-                            <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>Your Rooms</span>
+                            {/* Private Rooms Section */}
+                            <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span>Private Rooms</span>
                                 {!isGuest && (
                                     <button 
                                         className="create-room-btn-plus" 
@@ -493,18 +532,19 @@ function RoomList({
                                     </button>
                                 )}
                             </div>
-
-                            <div className="grid-rooms-container" style={{ marginBottom: "18px" }}>
+                            <div className="unified-rooms-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                 {customRoomsLoading ? (
                                     Array.from({ length: 3 }).map((_, idx) => (
-                                        <div key={`shimmer-${idx}`} className="room-grid-card shimmer-card" style={{ height: '78px', pointerEvents: 'none', opacity: 0.5 }}>
-                                            <div className="shimmer-line" style={{ width: '40px', height: '20px', borderRadius: '4px', background: 'rgba(0,0,0,0.1)', marginBottom: '8px' }} />
-                                            <div className="shimmer-line" style={{ width: '80%', height: '14px', borderRadius: '4px', background: 'rgba(0,0,0,0.06)', marginBottom: '4px' }} />
-                                            <div className="shimmer-line" style={{ width: '50%', height: '10px', borderRadius: '4px', background: 'rgba(0,0,0,0.04)' }} />
+                                        <div key={`shimmer-${idx}`} className="dm-row-card shimmer-card" style={{ height: '48px', pointerEvents: 'none', opacity: 0.5, padding: '10px 12px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <div className="shimmer-line" style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(0,0,0,0.1)' }} />
+                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <div className="shimmer-line" style={{ width: '60%', height: '12px', borderRadius: '4px', background: 'rgba(0,0,0,0.06)' }} />
+                                                <div className="shimmer-line" style={{ width: '40%', height: '8px', borderRadius: '4px', background: 'rgba(0,0,0,0.04)' }} />
+                                            </div>
                                         </div>
                                     ))
                                 ) : customRooms.length === 0 ? (
-                                    <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '16px 8px', fontSize: '11px', color: 'var(--muted)', fontWeight: '500' }}>
+                                    <div style={{ textAlign: 'center', padding: '16px 8px', fontSize: '11px', color: 'var(--muted)', fontWeight: '500' }}>
                                         No private rooms yet.<br/>Click + to create/join one!
                                     </div>
                                 ) : (
@@ -515,30 +555,39 @@ function RoomList({
                                         return (
                                             <div 
                                                 key={room.code} 
-                                                className={`room-grid-card ${isActive ? "active" : ""}`}
+                                                className={`dm-row-card ${isActive ? "active" : ""}`}
                                                 onClick={() => onSelectRoom(room.name)}
-                                                style={isActive ? { border: '1.5px solid var(--accent)', boxShadow: '0 0 10px rgba(18, 199, 189, 0.15)' } : undefined}
+                                                style={{ padding: '10px 12px', borderRadius: '10px' }}
                                             >
-                                                <div className="grid-card-top">
-                                                    {room.avatar ? (
-                                                        <img 
-                                                            src={room.avatar} 
-                                                            alt={room.name} 
-                                                            style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'cover' }} 
-                                                        />
-                                                    ) : (
-                                                        <div className="grid-card-icon-box">
-                                                            <span className="grid-card-emoji-icon">🔒</span>
-                                                        </div>
-                                                    )}
-                                                    {unread > 0 ? (
-                                                        <span className="grid-unread-badge">{unread}</span>
-                                                    ) : null}
+                                                <div className="dm-row-left">
+                                                    <div className="dm-avatar-wrapper">
+                                                        {room.avatar ? (
+                                                            <img 
+                                                                src={room.avatar} 
+                                                                alt={room.name} 
+                                                                className="dm-row-avatar"
+                                                                style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
+                                                            />
+                                                        ) : (
+                                                            <div className="dm-row-avatar" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
+                                                                🔒
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                        <span className="dm-row-name" style={{ fontSize: '13px' }}>
+                                                            {room.name}
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                                            {unread > 0 ? `${unread} unread` : `Code: ${room.code}`}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <span className="grid-card-title">{room.name}</span>
-                                                <span className="grid-card-unread-text" style={{ fontSize: '10px' }}>
-                                                    {unread > 0 ? `${unread} unread` : `Code: ${room.code}`}
-                                                </span>
+                                                <div className="dm-row-right">
+                                                    {unread > 0 && (
+                                                        <span className="dm-unread-badge">{unread}</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         );
                                     })

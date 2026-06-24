@@ -23,7 +23,6 @@ function Register() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
 
@@ -136,21 +135,14 @@ function Register() {
 
           <div className="auth-field">
             <label>Password</label>
-            <div className="auth-password-wrap">
+            <div className="auth-input-wrap">
               <SmoothInput
-                type={showPassword ? "text" : "password"}
+                type="password"
                 placeholder="Create a password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleRegister()}
               />
-              <button
-                type="button"
-                className="auth-eye-btn"
-                onClick={() => setShowPassword(value => !value)}
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
             </div>
             <div className="password-strength" aria-hidden="true">
               {[1, 2, 3, 4].map(level => (

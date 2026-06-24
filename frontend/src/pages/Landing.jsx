@@ -178,7 +178,7 @@ export default function Landing() {
               }}
             >
               <HiOutlineChatBubbleLeftRight/>
-              General Chat
+              Nexus Official
             </button>
 
             <button
@@ -201,7 +201,7 @@ export default function Landing() {
             <form onSubmit={handleJoinChat}>
               <div className="modal-body-section">
                 <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '16px' }}>
-                  Choose a username to enter the General Chat as a guest.
+                  Choose a username to enter the Nexus Official channel as a guest.
                 </p>
                 <div className="guest-input-wrap">
                   <SmoothInput

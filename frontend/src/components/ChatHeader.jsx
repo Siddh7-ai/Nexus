@@ -1,7 +1,32 @@
 import { useState, useEffect, useRef } from "react";
 import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity } from "react-icons/fi";
+
+const VerifiedRoomBadge = ({ size = 15, style = {} }) => (
+    <svg 
+        viewBox="0 0 16 16" 
+        width={size} 
+        height={size} 
+        style={{ flexShrink: 0, ...style }}
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path 
+            d="M10.067.87a2.89 2.89 0 0 0-4.134 0l-.622.638-.89-.011a2.89 2.89 0 0 0-2.924 2.924l.01.89-.636.622a2.89 2.89 0 0 0 0 4.134l.637.622-.011.89a2.89 2.89 0 0 0 2.924 2.924l.89-.01.622.636a2.89 2.89 0 0 0 4.134 0l.622-.637.89.011a2.89 2.89 0 0 0 2.924-2.924l-.01-.89.636-.622a2.89 2.89 0 0 0 0-4.134l-.637-.622.011-.89a2.89 2.89 0 0 0-2.924-2.924l-.89.01z" 
+            fill="#12c7bd" 
+        />
+        <path 
+            d="M4.8 8.0 l2.2 2.2 l4.2 -4.2" 
+            fill="none" 
+            stroke="#ffffff" 
+            strokeWidth="1.8" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+        />
+    </svg>
+);
+
 import OnlineUsers from "./OnlineUsers";
-import savedMessagesLogo from "../assets/saved_messages.jpg";
+import savedMessagesLogo from "../assets/saved_messages.png";
+import logo from "../assets/logo.png";
 import { setThemeBrightness } from "../utils/theme";
 import { ThemeToggleIcon } from "./ThemeToggleButton";
 
@@ -187,15 +212,29 @@ function ChatHeader({
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                                {roomDetails && roomDetails.isPrivate && (
-                                    <Avatar 
-                                        username={roomDetails.name} 
-                                        avatarSrc={roomDetails.avatar} 
-                                        size={36} 
-                                        className="header-avatar" 
+                                {chatTitle === "Nexus Official" ? (
+                                    <img 
+                                        src={logo} 
+                                        alt="Nexus Logo" 
+                                        className="avatar header-avatar"
+                                        style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
                                     />
+                                ) : (
+                                    roomDetails && roomDetails.isPrivate && (
+                                        <Avatar 
+                                            username={roomDetails.name} 
+                                            avatarSrc={roomDetails.avatar} 
+                                            size={36} 
+                                            className="header-avatar" 
+                                        />
+                                    )
                                 )}
-                                <div className="chat-title">{chatTitle || "# General chat"}</div>
+                                <div className="chat-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {chatTitle || "Nexus Official"}
+                                    {chatTitle === "Nexus Official" && (
+                                        <VerifiedRoomBadge size={16} />
+                                    )}
+                                </div>
                             </div>
                             {roomDetails && roomDetails.isPrivate && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: (roomDetails.avatar ? '46px' : '0') }}>

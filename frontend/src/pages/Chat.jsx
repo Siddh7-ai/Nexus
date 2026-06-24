@@ -325,6 +325,10 @@ function Chat() {
     const [privacyAvatarVal, setPrivacyAvatarVal] = useState("Everyone");
     const [privacyPMVal, setPrivacyPMVal] = useState("Everyone");
     const [editUsernameVal, setEditUsernameVal] = useState("");
+    const [emailVal, setEmailVal] = useState("");
+    const [currentPasswordVal, setCurrentPasswordVal] = useState("");
+    const [newPasswordVal, setNewPasswordVal] = useState("");
+    const [newPasswordConfirmVal, setNewPasswordConfirmVal] = useState("");
     const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
     // Other user profile states
@@ -676,6 +680,18 @@ function Chat() {
         // Check if one-time prekeys are low on the server and replenish them
         if (token && !token.startsWith("guest:")) {
             replenishOneTimePrekeysIfNeeded(usernameRef.current, token);
+            
+            // Auto-redirect if E2EE secure keys or master key is missing
+            (async () => {
+                const myKeys = await loadDecryptedKeys(usernameRef.current);
+                if (!myKeys) {
+                    console.warn("Local E2EE keys or master key not found. Redirecting to login.");
+                    alert("Your secure session has expired or cryptographic keys are missing. Please log in again to restore your private chats.");
+                    sessionStorage.removeItem("token");
+                    localStorage.removeItem("token");
+                    navigate("/login");
+                }
+            })();
         }
 
         const newSocket = io(getBackendUrl(), { auth: { token } });
@@ -1060,14 +1076,14 @@ function Chat() {
 
         if (isGuest) {
             // Guest route protection on mount
-            if (roomUrl && roomUrl !== "General chat") {
+            if (roomUrl && roomUrl !== "Nexus Official") {
                 setShowLoginModal(true);
                 setSearchParams({});
                 setActiveRoom(null);
                 setActivePrivate(null);
                 setActiveSidebarTab("messages");
-            } else if (roomUrl === "General chat") {
-                setActiveRoom("General chat");
+            } else if (roomUrl === "Nexus Official") {
+                setActiveRoom("Nexus Official");
                 setActivePrivate(null);
                 setActiveSidebarTab("messages");
             } else {
@@ -1155,9 +1171,9 @@ function Chat() {
         const privateUser = searchParams.get("private");
 
         if (isGuest) {
-            if ((room && room !== "General chat") || privateUser) {
+            if ((room && room !== "Nexus Official") || privateUser) {
                 setShowLoginModal(true);
-                setSearchParams({ room: "General chat" });
+                setSearchParams({ room: "Nexus Official" });
             }
         }
     }, [searchParams, isGuest, setSearchParams]);
@@ -1165,7 +1181,7 @@ function Chat() {
 
 
     function selectRoom(room) {
-        if (isGuest && room !== "General chat") {
+        if (isGuest && room !== "Nexus Official") {
             setShowLoginModal(true);
             return;
         }
@@ -1315,7 +1331,7 @@ function Chat() {
 
         if (activeRoomRef.current) {
             // If the current activeRoom is one of the system rooms, check if it was deleted
-            const ROOMS = ["General chat", "Project chat", "Study chat"];
+            const ROOMS = ["Nexus Official"];
             if (ROOMS.includes(activeRoomRef.current)) {
                 if (!deletedList.includes(activeRoomRef.current)) {
                     // Current system room is not deleted, so keep it!
@@ -1328,7 +1344,7 @@ function Chat() {
         }
 
         // Otherwise, fall back to the first non-deleted system room
-        const ROOMS = ["General chat", "Project chat", "Study chat"];
+        const ROOMS = ["Nexus Official"];
         const remaining = ROOMS.filter(r => !deletedList.includes(r));
         if (remaining.length > 0) {
             const nextRoom = remaining[0];
@@ -1659,6 +1675,10 @@ function Chat() {
                 setPrivacyAvatarVal(data.privacyAvatar || "Everyone");
                 setPrivacyPMVal(data.privacyPrivateMessages || "Everyone");
                 setEditUsernameVal(data.username || "");
+                setEmailVal(data.email || "");
+                setCurrentPasswordVal("");
+                setNewPasswordVal("");
+                setNewPasswordConfirmVal("");
             } else {
                 setProfileError(data.message || "Failed to load profile.");
             }
@@ -1672,6 +1692,12 @@ function Chat() {
         if (e) e.preventDefault();
         setProfileLoading(true);
         setProfileError("");
+
+        if (newPasswordVal && newPasswordVal !== newPasswordConfirmVal) {
+            setProfileError("New passwords do not match.");
+            setProfileLoading(false);
+            return;
+        }
 
         try {
             const response = await fetch(`${getBackendUrl()}/api/user/profile`, {
@@ -1688,7 +1714,10 @@ function Chat() {
                     privacyLastSeen: privacyLastSeenVal,
                     privacyAvatar: privacyAvatarVal,
                     privacyPrivateMessages: privacyPMVal,
-                    username: editUsernameVal
+                    username: editUsernameVal,
+                    email: emailVal,
+                    currentPassword: currentPasswordVal,
+                    newPassword: newPasswordVal
                 })
             });
             const data = await response.json();
@@ -1712,10 +1741,13 @@ function Chat() {
                     status: data.user.status
                 });
 
-                if (data.user.username !== username) {
+                 if (data.user.username !== username) {
                     socketRef.current?.emit("changeUsername", { newUsername: data.user.username });
                 }
 
+                setCurrentPasswordVal("");
+                setNewPasswordVal("");
+                setNewPasswordConfirmVal("");
                 setProfileLoading(false);
                 setShowProfileSettings(false);
             } else {
@@ -2115,7 +2147,7 @@ function Chat() {
 
     const chatTitle = activePrivate
         ? `${activePrivateName}`
-        : `#${activeRoom}`;
+        : `${activeRoom}`;
 
 
 
@@ -2581,6 +2613,54 @@ function Chat() {
                                         </select>
                                     </div>
 
+                                    {/* Account Details: Email & Password */}
+                                    <div className="profile-privacy-card" style={{ marginTop: '10px' }}>
+                                        <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Settings</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            <div>
+                                                <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Email (Gmail)</label>
+                                                <SmoothInput
+                                                    type="email"
+                                                    value={emailVal}
+                                                    onChange={(e) => setEmailVal(e.target.value)}
+                                                    className="guest-username-input"
+                                                    placeholder="Enter new email"
+                                                />
+                                            </div>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '10px', marginTop: '4px' }}>
+                                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)' }}>Change Password</span>
+                                                <SmoothInput
+                                                    type="password"
+                                                    value={currentPasswordVal}
+                                                    onChange={(e) => setCurrentPasswordVal(e.target.value)}
+                                                    className="guest-username-input"
+                                                    placeholder="Current Password (required to change)"
+                                                />
+                                                <SmoothInput
+                                                    type="password"
+                                                    value={newPasswordVal}
+                                                    onChange={(e) => setNewPasswordVal(e.target.value)}
+                                                    className="guest-username-input"
+                                                    placeholder="New Password"
+                                                />
+                                                <SmoothInput
+                                                    type="password"
+                                                    value={newPasswordConfirmVal}
+                                                    onChange={(e) => setNewPasswordConfirmVal(e.target.value)}
+                                                    onPaste={(e) => e.preventDefault()}
+                                                    className="guest-username-input"
+                                                    placeholder="Confirm New Password"
+                                                />
+                                            </div>
+                                            {profileError && (profileError.toLowerCase().includes("password") || profileError.toLowerCase().includes("email")) && (
+                                                <div className="guest-error-alert" style={{ marginTop: '4px', marginBottom: '0' }}>
+                                                    {profileError}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     {/* Privacy Dropdowns */}
                                     <div className="profile-privacy-card">
                                         <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Privacy Settings</h4>
@@ -2696,7 +2776,7 @@ function Chat() {
                                         </div>
                                     </div>
 
-                                    {profileError && (
+                                    {profileError && !(profileError.toLowerCase().includes("password") || profileError.toLowerCase().includes("email")) && (
                                         <div className="guest-error-alert" style={{ margin: 0 }}>
                                             {profileError}
                                         </div>

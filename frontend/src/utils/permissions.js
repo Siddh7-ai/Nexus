@@ -1,7 +1,5 @@
 export const ROOM_PERMISSIONS = {
-  "General chat": ["user", "guest"],
-  "Project chat": ["user"],
-  "Study chat": ["user"],
+  "Nexus Official": ["user", "guest"],
 };
 
 export const FEATURE_PERMISSIONS = {

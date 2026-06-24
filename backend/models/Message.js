@@ -20,7 +20,7 @@ const messageSchema = new mongoose.Schema({
     },
     room: {
         type: String,
-        default: "General chat"
+        default: "Nexus Official"
     },
     // For private messages: "userId1_userId2" (sorted)
     privateChatId: {

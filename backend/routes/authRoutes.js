@@ -13,11 +13,17 @@ router.post("/register", async (req, res) => {
 
         const { username, email, password, identityPublicKey, signedPrekey, oneTimePrekeys } = req.body;
 
-        const existingUser = await User.findOne({ email });
-
-        if (existingUser) {
+        const existingEmail = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, "i") } });
+        if (existingEmail) {
             return res.status(400).json({
-                message: "User already exists"
+                message: "Email already registered"
+            });
+        }
+
+        const existingUsername = await User.findOne({ username: { $regex: new RegExp(`^${username.trim()}$`, "i") } });
+        if (existingUsername) {
+            return res.status(400).json({
+                message: "Username already taken"
             });
         }
 
@@ -57,7 +63,14 @@ router.post("/login", async (req, res) => {
 
         const { email, password } = req.body;
 
-        const user = await User.findOne({ email });
+        // Support login by email (case-insensitive) or username (case-sensitive)
+        let user;
+        if (email.includes("@")) {
+            user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, "i") } });
+        } else {
+            // Case-sensitive exact match for username
+            user = await User.findOne({ username: email });
+        }
 
         if (!user) {
             return res.status(400).json({ message: "User not found" });

@@ -5,6 +5,7 @@ const Message = require("../models/Message");
 const Report = require("../models/Report");
 const ClearedChat = require("../models/ClearedChat");
 const FriendRequest = require("../models/FriendRequest");
+const bcrypt = require("bcryptjs");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
@@ -184,7 +185,10 @@ router.put("/profile", authenticateToken, async (req, res) => {
             privacyLastSeen,
             privacyAvatar,
             privacyPrivateMessages,
-            username
+            username,
+            email,
+            currentPassword,
+            newPassword
         } = req.body;
 
         // Update fields if provided
@@ -195,6 +199,39 @@ router.put("/profile", authenticateToken, async (req, res) => {
         if (privacyLastSeen !== undefined) user.privacyLastSeen = privacyLastSeen;
         if (privacyAvatar !== undefined) user.privacyAvatar = privacyAvatar;
         if (privacyPrivateMessages !== undefined) user.privacyPrivateMessages = privacyPrivateMessages;
+
+        // Update email if provided and changed
+        if (email && email.trim() !== user.email) {
+            const trimmedEmail = email.trim();
+            if (!trimmedEmail.includes("@")) {
+                return res.status(400).json({ message: "Invalid email format." });
+            }
+
+            const existingEmail = await User.findOne({
+                email: { $regex: new RegExp(`^${trimmedEmail}$`, "i") },
+                _id: { $ne: user._id }
+            });
+            if (existingEmail) {
+                return res.status(400).json({ message: "Email is already registered by another account." });
+            }
+
+            user.email = trimmedEmail;
+        }
+
+        // Validate and update password
+        if (currentPassword && currentPassword.trim() !== "") {
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) {
+                return res.status(400).json({ message: "Incorrect current password." });
+            }
+
+            if (newPassword && newPassword.trim() !== "") {
+                const hashedPassword = await bcrypt.hash(newPassword, 10);
+                user.password = hashedPassword;
+            }
+        } else if (newPassword && newPassword.trim() !== "") {
+            return res.status(400).json({ message: "Current password is required to change password." });
+        }
 
         let newToken = null;
         if (username && username.trim() !== user.username) {
@@ -277,7 +314,8 @@ router.put("/profile", authenticateToken, async (req, res) => {
                 status: user.status,
                 privacyLastSeen: user.privacyLastSeen,
                 privacyAvatar: user.privacyAvatar,
-                privacyPrivateMessages: user.privacyPrivateMessages
+                privacyPrivateMessages: user.privacyPrivateMessages,
+                email: user.email
             }
         });
     } catch (err) {

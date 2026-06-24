@@ -1,5 +1,6 @@
 import { motion, useMotionValue, useReducedMotion, animate } from "framer-motion";
 import React, { useEffect, useRef, useState } from "react";
+import { FiEye, FiEyeOff } from "react-icons/fi";
 
 const PASSWORD_CHAR = navigator.userAgent.match(/firefox|fxios/i) ? "\u25CF" : "\u2022";
 
@@ -17,7 +18,9 @@ export const SmoothInput = ({
 }) => {
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
   const isEmail = type === "email";
-  const actualType = isEmail ? "text" : type;
+  const isPassword = type === "password";
+  const [showPassword, setShowPassword] = useState(false);
+  const actualType = isPassword ? (showPassword ? "text" : "password") : (isEmail ? "text" : type);
   const actualInputMode = isEmail ? "email" : props.inputMode;
   const caretX = useMotionValue(0);
   const caretOpacity = useMotionValue(0);
@@ -79,7 +82,7 @@ export const SmoothInput = ({
 
     const styles = getCachedStyles(input);
     if (!styles) return;
-    const isPassword = type === "password";
+    const isPassword = actualType === "password";
 
     let fontSize = styles.fontSize;
     if (
@@ -171,7 +174,7 @@ export const SmoothInput = ({
     const caretIndex = hasSelection
       ? (selectionDirection === "backward" ? selectionStart : selectionEnd)
       : selectionStart;
-    const isPassword = type === "password";
+    const isPassword = actualType === "password";
     const textBeforeCaret = isPassword
       ? PASSWORD_CHAR.repeat(caretIndex)
       : target.value.slice(0, caretIndex);
@@ -255,7 +258,7 @@ export const SmoothInput = ({
       cachedStylesRef.current = null;
       scheduleUpdateCaret(input);
     }
-  }, [type]);
+  }, [type, actualType]);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -313,7 +316,9 @@ export const SmoothInput = ({
         value={inputValue}
         style={{
           caretColor: "transparent",
-          width: "100%"
+          width: "100%",
+          paddingRight: isPassword ? "32px" : undefined,
+          ...props.style
         }}
         onChange={(e) => {
           if (!isControlled) setInternalValue(e.target.value);
@@ -365,6 +370,32 @@ export const SmoothInput = ({
           zIndex: 10
         }}
       />
+      {isPassword && (
+        <button
+          type="button"
+          onClick={() => setShowPassword(prev => !prev)}
+          style={{
+            position: "absolute",
+            right: "8px",
+            background: "none",
+            border: "none",
+            color: "var(--muted, #8e8e93)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "4px",
+            zIndex: 15,
+            opacity: 0.7,
+            transition: "opacity 0.2s"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = 0.7}
+          title={showPassword ? "Hide Password" : "Show Password"}
+        >
+          {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+        </button>
+      )}
     </div>
   );
 };

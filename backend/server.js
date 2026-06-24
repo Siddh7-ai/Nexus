@@ -276,7 +276,7 @@ app.get("/api/users/conversations", async (req, res) => {
     }
 });
 
-const ROOMS = ["General chat", "Project chat", "Study chat"];
+const ROOMS = ["Nexus Official"];
 
 // Map socketId -> { username, userId }
 const connectedUsers = new Map();
@@ -432,7 +432,7 @@ io.on("connection", async (socket) => {
             const unreadCounts = {};
             
             // Build list of accessible rooms for the user
-            let systemRooms = ["General chat", "Project chat", "Study chat"];
+            let systemRooms = ["Nexus Official"];
             const customRoomMap = {};
             if (socket.userId && !socket.userId.startsWith("guest_")) {
                 const userDoc = await User.findById(socket.userId);
@@ -659,7 +659,7 @@ io.on("connection", async (socket) => {
                 privateChatId
             });
         } else {
-            const targetRoom = room || "General chat";
+            const targetRoom = room || "Nexus Official";
             const userId = socket.request.user?.id;
             let roomDoc = null;
             if (socket.role !== "guest" && userId) {
@@ -708,7 +708,7 @@ io.on("connection", async (socket) => {
                 privateChatId
             });
         } else {
-            const targetRoom = room || "General chat";
+            const targetRoom = room || "Nexus Official";
             const userId = socket.request.user?.id;
             let roomDoc = null;
             if (socket.role !== "guest" && userId) {
@@ -738,9 +738,9 @@ io.on("connection", async (socket) => {
         try {
             let targetRoomName = data.privateChatId
                 ? `private_${data.privateChatId}`
-                : (data.room || "General chat");
-            let dbRoomValue = data.room || "General chat";
-            let roomNameValue = data.room || "General chat";
+                : (data.room || "Nexus Official");
+            let dbRoomValue = data.room || "Nexus Official";
+            let roomNameValue = data.room || "Nexus Official";
 
             if (data.privateChatId) {
                 if (socket.role === "guest") {
@@ -748,7 +748,11 @@ io.on("connection", async (socket) => {
                     return;
                 }
             } else {
-                const room = data.room || "General chat";
+                const room = data.room || "Nexus Official";
+                if (room === "Nexus Official" && socket.username !== "Siddh") {
+                    socket.emit("error", { message: "Only the administrator can post messages in this channel." });
+                    return;
+                }
                 const userId = socket.request.user?.id;
                 let roomDoc = null;
                 if (socket.role !== "guest" && userId) {
@@ -896,8 +900,8 @@ io.on("connection", async (socket) => {
             const msg = await Message.findById(messageId);
             if (!msg || msg.username !== socket.username) return;
 
-            // Block guests from editing message outside General chat
-            if (socket.role === "guest" && msg.room !== "General chat") {
+            // Block guests from editing message outside Nexus Official
+            if (socket.role === "guest" && msg.room !== "Nexus Official") {
                 return;
             }
 
@@ -920,8 +924,8 @@ io.on("connection", async (socket) => {
             const msg = await Message.findById(messageId);
             if (!msg) return;
 
-            // Block guests from deleting message outside General chat
-            if (socket.role === "guest" && msg.room !== "General chat") {
+            // Block guests from deleting message outside Nexus Official
+            if (socket.role === "guest" && msg.room !== "Nexus Official") {
                 return;
             }
 

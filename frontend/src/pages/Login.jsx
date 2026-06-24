@@ -29,7 +29,6 @@ function GoogleLogo() {
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
 
@@ -143,21 +142,14 @@ function Login() {
 
           <div className="auth-field">
             <label>Password</label>
-            <div className="auth-password-wrap">
+            <div className="auth-input-wrap">
               <SmoothInput
-                type={showPassword ? "text" : "password"}
+                type="password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               />
-              <button
-                type="button"
-                className="auth-eye-btn"
-                onClick={() => setShowPassword(value => !value)}
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
             </div>
           </div>
 
