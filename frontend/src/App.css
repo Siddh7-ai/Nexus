@@ -788,6 +788,11 @@ body.dark-theme .scroll-to-bottom-btn {
   color: #111214;
 }
 
+.emoji-option.active {
+  background: #eef0f3;
+  color: #111214;
+}
+
 .reaction-emoji-bar,
 .message-menu {
   position: absolute;
@@ -856,6 +861,11 @@ body.dark-theme .emoji-option {
 body.dark-theme .action-btn:hover,
 body.dark-theme .emoji-option:hover {
   background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+body.dark-theme .emoji-option.active {
+  background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
 }
 

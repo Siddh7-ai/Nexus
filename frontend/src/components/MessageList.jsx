@@ -171,9 +171,18 @@ function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
 function ReactionBar({ reactions, onShowDetail, currentUser }) {
     if (!reactions || reactions.length === 0) return null;
 
-    const firstEmoji = reactions[0]?.emoji;
-    const totalCount = reactions.length;
+    const uniqueEmojis = [];
+    reactions.forEach(r => {
+        if (r.emoji && !uniqueEmojis.includes(r.emoji)) {
+            uniqueEmojis.push(r.emoji);
+        }
+    });
+
+    const displayedUnique = uniqueEmojis.slice(0, 3);
+    const emojisToShow = displayedUnique.join(" ");
     const myReaction = reactions.find(r => r.username?.toLowerCase() === currentUser?.toLowerCase());
+    const showPlusAndCount = reactions.length > 3;
+    const remainingCount = reactions.length - displayedUnique.length;
 
     return (
         <div className="reaction-bar">
@@ -181,7 +190,7 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
                 className={`reaction-chip ${myReaction ? "mine" : ""}`}
                 onClick={onShowDetail}
             >
-                {firstEmoji} {totalCount}
+                {emojisToShow}{showPlusAndCount ? ` ${remainingCount} +` : ""}
             </button>
         </div>
     );
@@ -216,15 +225,20 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
 
             {showReactions && (
                 <div className="reaction-emoji-bar">
-                    {REACTION_EMOJIS.map(emoji => (
-                        <button
-                            key={emoji}
-                            className="emoji-option"
-                            onClick={() => { onReact(emoji); setShowReactions(false); }}
-                        >
-                            {emoji}
-                        </button>
-                    ))}
+                    {REACTION_EMOJIS.map(emoji => {
+                        const hasReacted = msg.reactions?.some(
+                            r => r.emoji === emoji && r.username?.toLowerCase() === currentUser?.toLowerCase()
+                        );
+                        return (
+                            <button
+                                key={emoji}
+                                className={`emoji-option ${hasReacted ? "active" : ""}`}
+                                onClick={() => { onReact(emoji); setShowReactions(false); }}
+                            >
+                                {emoji}
+                            </button>
+                        );
+                    })}
                     <button
                         className="emoji-option add-reaction-trigger"
                         onClick={() => {
