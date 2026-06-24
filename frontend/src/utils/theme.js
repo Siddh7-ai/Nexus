@@ -1,3 +1,5 @@
+import { flushSync } from "react-dom";
+
 const styleId = "theme-transition-styles";
 
 function updateStyles(css, name) {
@@ -152,6 +154,8 @@ export const createAnimation = (
             
             ::view-transition-new(root) {
                 animation-name: reveal-light-${start}${blur ? "-blur" : ""};
+                animation-duration: inherit;
+                animation-fill-mode: both;
                 ${blur ? "filter: blur(2px);" : ""}
             }
 
@@ -162,6 +166,8 @@ export const createAnimation = (
             }
             .dark-theme::view-transition-new(root) {
                 animation-name: reveal-dark-${start}${blur ? "-blur" : ""};
+                animation-duration: inherit;
+                animation-fill-mode: both;
                 ${blur ? "filter: blur(2px);" : ""}
             }
 
@@ -197,17 +203,18 @@ export const createAnimation = (
             name: `${variant}-${start}`,
             css: `
             ::view-transition-group(root) {
+                animation-duration: 3s;
                 animation-timing-function: var(--expo-in);
             }
 
             ::view-transition-new(root) {
                 mask: url('${url}') center / 0 no-repeat;
-                animation: scale-gif 3s;
+                animation: scale-gif 3s both;
             }
 
             ::view-transition-old(root),
             .dark-theme::view-transition-old(root) {
-                animation: scale-gif 3s;
+                animation: scale-gif 3s both;
             }
 
             @keyframes scale-gif {
@@ -233,19 +240,20 @@ export const createAnimation = (
                 name: `${variant}-${start}`,
                 css: `
                 ::view-transition-group(root) {
+                    animation-duration: 1s;
                     animation-timing-function: var(--expo-out);
                 }
 
                 ::view-transition-new(root) {
                     mask: url('${svg}') center / 0 no-repeat;
                     mask-origin: content-box;
-                    animation: scale-circle-blur 1s;
+                    animation: scale-circle-blur 1s both;
                     transform-origin: center;
                 }
 
                 ::view-transition-old(root),
                 .dark-theme::view-transition-old(root) {
-                    animation: scale-circle-blur 1s;
+                    animation: scale-circle-blur 1s both;
                     transform-origin: center;
                     z-index: -1;
                 }
@@ -263,19 +271,20 @@ export const createAnimation = (
             name: `${variant}-${start}`,
             css: `
             ::view-transition-group(root) {
+                animation-duration: 1s;
                 animation-timing-function: var(--expo-out);
             }
 
             ::view-transition-new(root) {
                 mask: url('${svg}') ${start.replace("-", " ")} / 0 no-repeat;
                 mask-origin: content-box;
-                animation: scale-circle-blur-${start} 1s;
+                animation: scale-circle-blur-${start} 1s both;
                 transform-origin: ${transformOrigin};
             }
 
             ::view-transition-old(root),
             .dark-theme::view-transition-old(root) {
-                animation: scale-circle-blur-${start} 1s;
+                animation: scale-circle-blur-${start} 1s both;
                 transform-origin: ${transformOrigin};
                 z-index: -1;
             }
@@ -329,6 +338,8 @@ export const createAnimation = (
             
             ::view-transition-new(root) {
                 animation-name: reveal-light-${start}${blur ? "-blur" : ""};
+                animation-duration: inherit;
+                animation-fill-mode: both;
                 ${blur ? "filter: blur(2px);" : ""}
             }
 
@@ -339,6 +350,8 @@ export const createAnimation = (
             }
             .dark-theme::view-transition-new(root) {
                 animation-name: reveal-dark-${start}${blur ? "-blur" : ""};
+                animation-duration: inherit;
+                animation-fill-mode: both;
                 ${blur ? "filter: blur(2px);" : ""}
             }
 
@@ -422,6 +435,8 @@ export const createAnimation = (
             
         ::view-transition-new(root) {
             animation-name: reveal-light-${start}${blur ? "-blur" : ""};
+            animation-duration: inherit;
+            animation-fill-mode: both;
             ${blur ? "filter: blur(2px);" : ""}
         }
 
@@ -432,6 +447,8 @@ export const createAnimation = (
         }
         .dark-theme::view-transition-new(root) {
             animation-name: reveal-dark-${start}${blur ? "-blur" : ""};
+            animation-duration: inherit;
+            animation-fill-mode: both;
             ${blur ? "filter: blur(2px);" : ""}
         }
 
@@ -481,7 +498,7 @@ export function initTheme() {
     }
 }
 
-export function toggleTheme(clickEvent) {
+export function toggleTheme(clickEvent, updateStateFn) {
     const currentTheme = localStorage.getItem("theme") || "light";
     const nextTheme = currentTheme === "light" ? "dark" : "light";
     localStorage.setItem("theme", nextTheme);
@@ -493,6 +510,9 @@ export function toggleTheme(clickEvent) {
         } else {
             document.body.classList.remove("dark-theme");
             document.documentElement.classList.remove("dark-theme");
+        }
+        if (updateStateFn) {
+            updateStateFn(nextTheme);
         }
     };
 
@@ -509,7 +529,13 @@ export function toggleTheme(clickEvent) {
     const animation = createAnimation(variant, start, blur, gifUrl, clickEvent);
     updateStyles(animation.css, animation.name);
 
-    document.startViewTransition(switchTheme);
+    document.startViewTransition(() => {
+        if (updateStateFn) {
+            flushSync(switchTheme);
+        } else {
+            switchTheme();
+        }
+    });
 
     return nextTheme;
 }

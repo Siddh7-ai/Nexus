@@ -198,7 +198,7 @@ export const SmoothInput = ({
     const prevCaretIndex = prevCaretIndexRef.current || 0;
     const prevTargetX = prevTargetXRef.current || 0;
 
-    if (currentValue === prevValue && caretIndex === prevCaretIndex && targetX === prevTargetX) {
+    if (currentValue === prevValue && caretIndex === prevCaretIndex && targetX === prevTargetX && caretOpacity.get() > 0) {
       return;
     }
 

@@ -240,10 +240,9 @@ function ChatHeader({
                     >
                         <FiMoreVertical />
                     </button>
-
                     {showDropdown && (
                         <div className="header-dropdown-menu">
-                            {/* 1. Username display (clean, no button box) */}
+                            {/* Username display (clean, no button box) */}
                             <div className="header-dropdown-user">
                                 <span className="header-dropdown-username">
                                     {username}
@@ -251,150 +250,148 @@ function ChatHeader({
                                 </span>
                             </div>
 
-                            {/* 2. View Profile */}
-                            <button 
-                                className="header-dropdown-item" 
-                                onClick={() => {
-                                    setShowDropdown(false);
-                                    if (isPrivate) {
-                                        if (onUserProfileClick) onUserProfileClick(privateUser?.username || chatTitle);
-                                    } else {
-                                        if (onShowOnlineListClick) onShowOnlineListClick();
-                                    }
-                                }}
-                            >
-                                <FiUser /> View Profile
-                            </button>
-
-                            {/* Copy Room Code & Link (only for custom private rooms) */}
-                            {roomDetails && roomDetails.isPrivate && (
+                            {isPrivate ? (
+                                /* Option list for private chat */
                                 <>
+                                    {/* 1. View Profile (Only if not self / Saved Messages) */}
+                                    {privateUser?.username?.toLowerCase() !== username?.toLowerCase() && (
+                                        <button 
+                                            className="header-dropdown-item" 
+                                            onClick={() => {
+                                                setShowDropdown(false);
+                                                if (onUserProfileClick) onUserProfileClick(privateUser?.username || chatTitle);
+                                            }}
+                                        >
+                                            <FiUser /> View Profile
+                                        </button>
+                                    )}
+
+                                    {/* 2. Dark Mode */}
                                     <button 
                                         className="header-dropdown-item" 
                                         onClick={(e) => {
-                                            handleCopyCode(e);
-                                            setTimeout(() => setShowDropdown(false), 800);
+                                            setShowDropdown(false);
+                                            if (onThemeToggle) onThemeToggle(e);
                                         }}
                                     >
-                                        <FiCopy /> {copiedCode ? "Copied!" : "Copy Code"}
+                                        <ThemeToggleIcon theme={theme} />
+                                        {theme === "dark" ? "Light Mode" : "Dark Mode"}
                                     </button>
+
+
+
+                                    {/* 4. Clear Chat (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onClearChatClick) onClearChatClick();
+                                        }}
+                                    >
+                                        <FiTrash2 /> Clear Chat
+                                    </button>
+
+                                    {/* 5. Block User (red, only if not guest) */}
+                                    {!isGuest && (
+                                        <button 
+                                            className="header-dropdown-item logout" 
+                                            onClick={() => {
+                                                setShowDropdown(false);
+                                                if (onToggleBlock) onToggleBlock();
+                                            }}
+                                        >
+                                            <FiSlash /> {isBlocked ? "Unblock User" : "Block User"}
+                                        </button>
+                                    )}
+
+                                    {/* 6. Sign Out (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onLogout) onLogout();
+                                        }}
+                                    >
+                                        {isGuest ? <FiLogIn /> : <FiLogOut />}
+                                        {isGuest ? "Sign In" : "Logout"}
+                                    </button>
+                                </>
+                            ) : (
+                                /* Option list for group chat */
+                                <>
+                                    {/* 1. Group info */}
+                                    <button 
+                                        className="header-dropdown-item" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onShowOnlineListClick) onShowOnlineListClick();
+                                        }}
+                                    >
+                                        <FiUser /> Group Info
+                                    </button>
+
+                                    {/* 2. Copy Code */}
+                                    {roomDetails && roomDetails.isPrivate && (
+                                        <button 
+                                            className="header-dropdown-item" 
+                                            onClick={(e) => {
+                                                handleCopyCode(e);
+                                                setTimeout(() => setShowDropdown(false), 800);
+                                            }}
+                                        >
+                                            <FiCopy /> {copiedCode ? "Copied!" : "Copy Code"}
+                                        </button>
+                                    )}
+
+                                    {/* 3. Dark Mode */}
                                     <button 
                                         className="header-dropdown-item" 
                                         onClick={(e) => {
-                                            handleCopyLink(e);
-                                            setTimeout(() => setShowDropdown(false), 800);
+                                            setShowDropdown(false);
+                                            if (onThemeToggle) onThemeToggle(e);
                                         }}
                                     >
-                                        <FiShare2 /> {copiedLink ? "Copied Link!" : "Copy Link"}
+                                        <ThemeToggleIcon theme={theme} />
+                                        {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                                    </button>
+
+
+
+                                    {/* 5. Clear Chat (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onClearChatClick) onClearChatClick();
+                                        }}
+                                    >
+                                        <FiTrash2 /> Clear Chat
+                                    </button>
+
+                                    {/* 6. Leave Room (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onLeaveRoom) onLeaveRoom();
+                                        }}
+                                    >
+                                        <FiTrash2 /> {(!roomDetails || !roomDetails.isPrivate) ? "Delete Room" : (isRoomAdmin ? "Delete Room" : "Leave Room")}
+                                    </button>
+
+                                    {/* 7. Sign Out (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onLogout) onLogout();
+                                        }}
+                                    >
+                                        {isGuest ? <FiLogIn /> : <FiLogOut />}
+                                        {isGuest ? "Sign In" : "Logout"}
                                     </button>
                                 </>
                             )}
-
-                            {/* 3. Block/Unblock (only in private chat and if not guest) */}
-                            {isPrivate && !isGuest && (
-                                <button 
-                                    className="header-dropdown-item" 
-                                    onClick={() => {
-                                        setShowDropdown(false);
-                                        if (onToggleBlock) onToggleBlock();
-                                    }}
-                                >
-                                    <FiSlash /> {isBlocked ? "Unblock User" : "Block User"}
-                                </button>
-                            )}
-
-                            {/* Edit Room Details (only for admin) */}
-                            {roomDetails && roomDetails.isPrivate && isRoomAdmin && (
-                                <button 
-                                    className="header-dropdown-item" 
-                                    onClick={() => {
-                                        setShowDropdown(false);
-                                        if (onEditRoomClick) onEditRoomClick();
-                                    }}
-                                >
-                                    <FiSettings /> Edit Room
-                                </button>
-                            )}
-
-                            {/* 4. Leave / Delete Custom Private Room */}
-                            {roomDetails && roomDetails.isPrivate && (
-                                <button 
-                                    className="header-dropdown-item logout" 
-                                    onClick={() => {
-                                        setShowDropdown(false);
-                                        if (onLeaveRoom) onLeaveRoom();
-                                    }}
-                                >
-                                    <FiTrash2 /> {isRoomAdmin ? "Delete Room" : "Leave Room"}
-                                </button>
-                            )}
-
-                            {/* Delete System Room */}
-                            {!isPrivate && (!roomDetails || !roomDetails.isPrivate) && (
-                                <button 
-                                    className="header-dropdown-item logout" 
-                                    onClick={() => {
-                                        setShowDropdown(false);
-                                        if (onLeaveRoom) onLeaveRoom();
-                                    }}
-                                >
-                                    <FiTrash2 /> Delete Room
-                                </button>
-                            )}
-
-                             {/* Theme Brightness Slider */}
-                            <div className="header-dropdown-brightness">
-                                <span className="brightness-label">
-                                    <FiSun /> Brightness: {brightness}%
-                                </span>
-                                <div className="brightness-slider-container">
-                                    <input 
-                                        type="range" 
-                                        min="40" 
-                                        max="130" 
-                                        value={brightness} 
-                                        onChange={(e) => handleBrightnessChange(e.target.value)}
-                                        className="brightness-slider"
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* 5. Theme Toggle */}
-                            <button 
-                                className="header-dropdown-item" 
-                                onClick={(e) => {
-                                    setShowDropdown(false);
-                                    if (onThemeToggle) onThemeToggle(e);
-                                }}
-                            >
-                                <ThemeToggleIcon theme={theme} />
-                                {theme === "dark" ? "Light Mode" : "Dark Mode"}
-                            </button>
-
-
-                            {/* 6. Clear Chat */}
-                            <button 
-                                className="header-dropdown-item" 
-                                onClick={() => {
-                                    setShowDropdown(false);
-                                    if (onClearChatClick) onClearChatClick();
-                                }}
-                            >
-                                <FiTrash2 /> Clear Chat
-                            </button>
-
-                            {/* 7. Logout / Sign In */}
-                            <button 
-                                className="header-dropdown-item logout" 
-                                onClick={() => {
-                                    setShowDropdown(false);
-                                    if (onLogout) onLogout();
-                                }}
-                            >
-                                {isGuest ? <FiLogIn /> : <FiLogOut />}
-                                {isGuest ? "Sign In" : "Logout"}
-                            </button>
                         </div>
                     )}
                 </div>

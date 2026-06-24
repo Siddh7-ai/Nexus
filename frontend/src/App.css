@@ -370,7 +370,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: url('/dpp.png') no-repeat center center;
+  background: url('/light-wallpaper.png') no-repeat center center;
   background-size: 100% 100%;
   filter: brightness(var(--theme-brightness, 100%));
   z-index: 0;
@@ -1319,12 +1319,12 @@ body.dark-theme .composer-textarea-editable:focus {
 }
 
 @keyframes caret-blink {
-  0%, 100% { opacity: 1 !important; }
-  50% { opacity: 0 !important; }
+  0%, 100% { visibility: visible; }
+  50% { visibility: hidden; }
 }
 
 .caret-blink {
-  animation: caret-blink 1s step-end infinite;
+  animation: caret-blink 1.06s steps(1) infinite;
 }
 
 /* WYSIWYG Editor Inner HTML Elements */
@@ -6573,5 +6573,15 @@ body.chat-page-body #root {
   overflow: hidden !important;
   position: fixed !important;
   width: 100% !important;
+}
+
+/* Disable all CSS transitions during view transitions to prevent theme-switching flicker/blinks */
+html:active-view-transition,
+html:active-view-transition body,
+html:active-view-transition *,
+html:active-view-transition *::before,
+html:active-view-transition *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
 }
 

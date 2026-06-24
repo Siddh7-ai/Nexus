@@ -40,7 +40,7 @@ function Login() {
   }, []);
 
   function handleThemeToggle(e) {
-    setTheme(toggleTheme(e));
+    toggleTheme(e, setTheme);
   }
 
   async function handleLogin() {

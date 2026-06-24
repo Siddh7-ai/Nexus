@@ -141,7 +141,7 @@ function Chat() {
     }, []);
 
     function handleThemeToggle(e) {
-        setTheme(toggleTheme(e));
+        toggleTheme(e, setTheme);
     }
 
     const [message, setMessage] = useState("");

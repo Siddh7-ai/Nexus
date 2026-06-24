@@ -400,7 +400,7 @@ function MessageInput({
             const prevX = prevXRef.current || 0;
             const prevY = prevYRef.current || 0;
 
-            if (currentText === prevText && x === prevX && y === prevY) {
+            if (currentText === prevText && x === prevX && y === prevY && editorCaretOpacity.get() > 0) {
                 return;
             }
 

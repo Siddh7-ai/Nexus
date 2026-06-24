@@ -43,7 +43,7 @@ export default function Features() {
   }, []);
 
   function handleThemeToggle(e) {
-    setTheme(toggleTheme(e));
+    toggleTheme(e, setTheme);
   }
   // Pre-initialize the revealed state to match the screenshot layout:
   // Card 01 (index 0), Card 07 (index 6), and Card 12 (index 11) are not revealed.

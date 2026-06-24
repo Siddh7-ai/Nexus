@@ -35,7 +35,7 @@ function Register() {
   }, []);
 
   function handleThemeToggle(e) {
-    setTheme(toggleTheme(e));
+    toggleTheme(e, setTheme);
   }
 
   async function handleRegister() {
