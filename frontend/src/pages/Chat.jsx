@@ -1477,7 +1477,8 @@ function Chat() {
 
         const replyToPayload = replyToMsg ? {
             messageId: replyToMsg._id,
-            text: replyToMsg.text,
+            // If replying to a locked message, never expose the real text in the payload
+            text: replyToMsg.isLocked ? "🔒 Locked Message" : replyToMsg.text,
             username: replyToMsg.username
         } : null;
 
@@ -2431,11 +2432,14 @@ function Chat() {
                                     setShowVisualizer(prev => {
                                         const nextState = !prev;
                                         if (nextState) {
-                                            // Load/populate with the last E2EE message in this chat
+                                            // Load/populate with the last E2EE message in this chat.
+                                            // Skip locked messages — they have no visible plaintext to show;
+                                            // fall back to the previous non-locked E2EE message instead.
                                             const lastE2EEMsg = [...messages].reverse().find(msg => 
                                                 msg.privateChatId && 
                                                 msg.ratchetHeader && 
-                                                !msg.isDeleted
+                                                !msg.isDeleted &&
+                                                !msg.isLocked
                                             );
                                             if (lastE2EEMsg) {
                                                 const decrypted = decryptedMessages[lastE2EEMsg._id];
@@ -2513,7 +2517,9 @@ function Chat() {
                                             {replyToMsg.username === username ? "You" : replyToMsg.displayName || replyToMsg.username}
                                         </span>
                                         <span className="reply-preview-text">
-                                            {replyToMsg.text || (replyToMsg.fileName ? `📁 ${replyToMsg.fileName}` : "Attachment")}
+                                            {replyToMsg.isLocked
+                                                ? "🔒 Locked Message"
+                                                : (replyToMsg.text || (replyToMsg.fileName ? `📁 ${replyToMsg.fileName}` : "Attachment"))}
                                         </span>
                                     </div>
                                     <button className="reply-preview-close" onClick={() => setReplyToMsg(null)}>

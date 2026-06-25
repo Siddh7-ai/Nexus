@@ -304,10 +304,12 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         <Copy size={16} className="menu-icon" />
                         <span>Copy</span>
                     </button>
-                    <button className="menu-item" onClick={() => { alert("Forwarding will be available soon!"); setShowMenu(false); }}>
-                        <CornerUpRight size={16} className="menu-icon" />
-                        <span>Forward</span>
-                    </button>
+                    {!msg.isLocked && (
+                        <button className="menu-item" onClick={() => { alert("Forwarding will be available soon!"); setShowMenu(false); }}>
+                            <CornerUpRight size={16} className="menu-icon" />
+                            <span>Forward</span>
+                        </button>
+                    )}
                     <button className="menu-item" onClick={() => { alert("Pinning will be available soon!"); setShowMenu(false); }}>
                         <Pin size={16} className="menu-icon" />
                         <span>Pin</span>
