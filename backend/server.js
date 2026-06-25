@@ -1153,6 +1153,36 @@ io.on("connection", async (socket) => {
         }
     });
 
+    // Lock message and save E2EE lock status
+    socket.on("lockMessage", async ({ messageId, lockedItemId }) => {
+        try {
+            const msg = await Message.findById(messageId);
+            if (!msg) return;
+
+            if (socket.role === "guest" && msg.room !== "Nexus Official") {
+                return;
+            }
+
+            msg.isLocked = true;
+            msg.lockedItemId = lockedItemId;
+            msg.text = "🔒 Locked message";
+            // If the message has attachments, clear them to prevent plaintext access
+            msg.fileUrl = null;
+            msg.fileName = null;
+            msg.fileSize = null;
+            msg.fileType = null;
+            msg.fileQuality = null;
+            await msg.save();
+
+            const room = msg.privateChatId
+                ? `private_${msg.privateChatId}`
+                : msg.room;
+            io.to(room).emit("messageUpdated", msg);
+        } catch (err) {
+            console.log(err);
+        }
+    });
+
     // Clear chat only for current user
     socket.on("clearChat", async ({ chatId }) => {
         try {

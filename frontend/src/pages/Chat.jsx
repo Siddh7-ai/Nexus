@@ -22,9 +22,11 @@ import {
   saveDecryptedMessage
 } from "../utils/crypto/manager";
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
-import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys } from "../utils/crypto/keydb";
+import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys, getVaultPinData } from "../utils/crypto/keydb";
 import Vault from "../components/Vault";
 import MessageInfoModal from "../components/MessageInfoModal";
+import LockMessageModal from "../components/LockMessageModal";
+import VaultPinEntryModal from "../components/VaultPinEntryModal";
 import sodium from "libsodium-wrappers-sumo";
 
 import "../App.css";
@@ -446,6 +448,11 @@ function Chat() {
     const deleteTimeoutRef = useRef(null);
     const [copyToastActive, setCopyToastActive] = useState(false);
     const copyToastTimeoutRef = useRef(null);
+
+    // Message locking states
+    const [lockingMessage, setLockingMessage] = useState(null);
+    const [unlockingMessage, setUnlockingMessage] = useState(null);
+    const [unlockingPinData, setUnlockingPinData] = useState(null);
 
     // Notification states and refs
     const [notificationActive, setNotificationActive] = useState(false);
@@ -1702,6 +1709,30 @@ function Chat() {
         }
     };
 
+    function handleLockMessage(msg) {
+        setLockingMessage(msg);
+    }
+
+    function handleLockMessageSuccess(messageId, lockedItemId) {
+        socketRef.current?.emit("lockMessage", { messageId, lockedItemId });
+        setLockingMessage(null);
+    }
+
+    async function handleUnlockLockedMessage(msg) {
+        try {
+            const pinId = `vault_pin_${username.toLowerCase()}_${activePrivate.toLowerCase()}`;
+            const pinData = await getVaultPinData(pinId);
+            if (pinData) {
+                setUnlockingPinData(pinData);
+                setUnlockingMessage(msg);
+            } else {
+                alert("No Shared Vault PIN configured for this chat. Please configure it first.");
+            }
+        } catch (e) {
+            console.error("Failed to load vault PIN data:", e);
+        }
+    }
+
     const handleCopySuccess = () => {
         if (copyToastTimeoutRef.current) {
             clearTimeout(copyToastTimeoutRef.current);
@@ -2452,6 +2483,8 @@ function Chat() {
                                         onReply={(m) => setReplyToMsg(m)}
                                         onShowMessageInfo={(m) => setInfoMsg(m)}
                                         onCopySuccess={handleCopySuccess}
+                                        onLockMessage={handleLockMessage}
+                                        onUnlockLockedMessage={handleUnlockLockedMessage}
                                     />
                                 );
                             })()}
@@ -2568,6 +2601,41 @@ function Chat() {
                     currentUser={username}
                     onClose={() => setInfoMsg(null)}
                     isPrivate={!!activePrivate}
+                />
+            )}
+
+            {lockingMessage && (
+                <LockMessageModal
+                    msg={lockingMessage}
+                    onClose={() => setLockingMessage(null)}
+                    privateChatId={activePrivate}
+                    myUsername={username}
+                    token={getAuthToken()}
+                    onLockSuccess={handleLockMessageSuccess}
+                />
+            )}
+
+            {unlockingMessage && unlockingPinData && (
+                <VaultPinEntryModal
+                    onClose={() => {
+                        setUnlockingMessage(null);
+                        setUnlockingPinData(null);
+                    }}
+                    pinData={unlockingPinData}
+                    onUnlock={(key) => {
+                        setVaultKey(key);
+                        setShowVault(true); // Open the vault panel!
+                        setUnlockingMessage(null);
+                        setUnlockingPinData(null);
+                    }}
+                    onResetPin={(key) => {
+                        setVaultKey(key);
+                        setShowVault(true);
+                        setUnlockingMessage(null);
+                        setUnlockingPinData(null);
+                    }}
+                    privateChatId={activePrivate}
+                    myUsername={username}
                 />
             )}
 

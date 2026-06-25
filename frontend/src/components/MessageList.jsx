@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 
 const customSchema = {
@@ -196,13 +196,13 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [openUp, setOpenUp] = useState(false);
     const isOwn = msg.username?.toLowerCase() === currentUser?.toLowerCase();
 
-    if (msg.isDeleted || msg.username === "System") return null;
+    if (msg.isDeleted || msg.isLocked || msg.username === "System") return null;
 
     const handleCopy = () => {
         if (!msg.text) return;
@@ -319,6 +319,12 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Edit</span>
                         </button>
                     )}
+                    {isPrivate && (
+                        <button className="menu-item" onClick={() => { onLockMessage(msg); setShowMenu(false); }}>
+                            <Lock size={16} className="menu-icon" />
+                            <span>Lock message</span>
+                        </button>
+                    )}
                     <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
                         <Trash2 size={16} className="menu-icon" />
                         <span>Delete for me</span>
@@ -335,7 +341,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     );
 }
 
-function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [], onReply, onShowMessageInfo, onCopySuccess }) {
+function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [], onReply, onShowMessageInfo, onCopySuccess, onLockMessage, onUnlockLockedMessage }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
@@ -463,118 +469,139 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                     onReply={onReply}
                                     onShowMessageInfo={onShowMessageInfo}
                                     onCopySuccess={onCopySuccess}
+                                    isPrivate={isPrivate}
+                                    onLockMessage={onLockMessage}
                                 />
 
-                                <div className={`message-bubble ${isOwn ? "own" : "other"} ${msg.isDeleted ? "deleted" : ""}`}>
-                                    {msg.replyTo && msg.replyTo.messageId && (
-                                        <div className="message-reply-preview">
-                                            <div className="reply-preview-body">
-                                                <span className="reply-preview-user">
-                                                    {msg.replyTo.username === currentUser ? "You" : msg.replyTo.username}
-                                                </span>
-                                                <p className="reply-preview-msg">
-                                                    {msg.replyTo.text}
-                                                </p>
-                                            </div>
+                                {msg.isLocked ? (
+                                    <div 
+                                        className={`message-bubble ${isOwn ? "own" : "other"} locked-message`}
+                                        onClick={() => onUnlockLockedMessage(msg)}
+                                        style={{ cursor: 'pointer' }}
+                                        title="Locked message. Click to unlock."
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px' }}>
+                                            <Lock size={16} className="lock-symbol" />
+                                            <span style={{ fontSize: '13.5px', fontWeight: '600', fontStyle: 'italic' }}>Locked Message</span>
                                         </div>
-                                    )}
-                                    {!isOwn && (
-                                        <span 
-                                            className="message-username" 
-                                            onClick={() => onUserProfileClick(msg.username)}
-                                            style={{ cursor: "pointer", textDecoration: 'underline' }}
-                                            title="View Profile"
-                                        >
-                                            {msg.displayName || msg.username}
-                                            {msg.isGuest && <span className="guest-badge">[Guest]</span>}
-                                        </span>
-                                    )}
-                                    {msg.fileUrl && !msg.isDeleted && (
-                                        <div className="message-attachment-container">
-                                            {msg.fileType.startsWith("image/") ? (
-                                                <div className="attachment-image-wrapper">
-                                                    <img 
-                                                        src={`${getBackendUrl()}${msg.fileUrl}`} 
-                                                        alt={msg.fileName || "Image"} 
-                                                        className="attachment-img"
-                                                        onClick={() => setActiveLightbox({ url: `${getBackendUrl()}${msg.fileUrl}`, name: msg.fileName })}
-                                                    />
-                                                    {msg.fileQuality === "HD" && (
-                                                        <div className="hd-badge-corner" title="High Definition Quality">
-                                                            HD
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : msg.fileType.startsWith("video/") ? (
-                                                <div className="attachment-video-wrapper">
-                                                    <video 
-                                                        src={`${getBackendUrl()}${msg.fileUrl}`} 
-                                                        controls 
-                                                        className="attachment-video"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="attachment-document-card">
-                                                    <div className="doc-icon-section">
-                                                        <FileText size={24} className="purple-text" />
-                                                    </div>
-                                                    <div className="doc-info-section">
-                                                        <span className="doc-filename" title={msg.fileName}>
-                                                            {msg.fileName}
-                                                        </span>
-                                                        <span className="doc-filesize">
-                                                            {formatFileSize(msg.fileSize)}
-                                                        </span>
-                                                    </div>
-                                                    <a 
-                                                        href={`${getBackendUrl()}${msg.fileUrl}`} 
-                                                        download={msg.fileName} 
-                                                        className="doc-download-btn"
-                                                        title="Download file"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                    >
-                                                        <Download size={16} />
-                                                    </a>
-                                                </div>
-                                            )}
+                                        <div className="message-meta">
+                                            <span className="message-time">
+                                                {formatTimestamp(msg.createdAt)}
+                                            </span>
                                         </div>
-                                    )}
-
-                                    {msg.isDeleted ? (
-                                        <p className="message-text">{msg.text}</p>
-                                    ) : (msg.isDecrypting || (msg.text && (msg.text === "[Decrypting E2EE message...]" || msg.text.includes("Decrypting")))) ? (
-                                        <div className="skeleton-loader">
-                                            <div className="skeleton-line first"></div>
-                                            <div className="skeleton-line second"></div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {msg.text && (
-                                                <div className="message-text markdown-content">
-                                                    <ReactMarkdown 
-                                                        remarkPlugins={[remarkGfm]} 
-                                                        rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-                                                        components={{
-                                                            a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
-                                                            p: ({ node, ...props }) => <span {...props} />
-                                                        }}
-                                                    >
-                                                        {msg.text}
-                                                    </ReactMarkdown>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-
-                                    <div className="message-meta">
-                                        <span className="message-time">
-                                            {formatTimestamp(msg.createdAt)}
-                                            {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
-                                        </span>
-                                        <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} />
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className={`message-bubble ${isOwn ? "own" : "other"} ${msg.isDeleted ? "deleted" : ""}`}>
+                                        {msg.replyTo && msg.replyTo.messageId && (
+                                            <div className="message-reply-preview">
+                                                <div className="reply-preview-body">
+                                                    <span className="reply-preview-user">
+                                                        {msg.replyTo.username === currentUser ? "You" : msg.replyTo.username}
+                                                    </span>
+                                                    <p className="reply-preview-msg">
+                                                        {msg.replyTo.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {!isOwn && (
+                                            <span 
+                                                className="message-username" 
+                                                onClick={() => onUserProfileClick(msg.username)}
+                                                style={{ cursor: "pointer", textDecoration: 'underline' }}
+                                                title="View Profile"
+                                            >
+                                                {msg.displayName || msg.username}
+                                                {msg.isGuest && <span className="guest-badge">[Guest]</span>}
+                                            </span>
+                                        )}
+                                        {msg.fileUrl && !msg.isDeleted && (
+                                            <div className="message-attachment-container">
+                                                {msg.fileType.startsWith("image/") ? (
+                                                    <div className="attachment-image-wrapper">
+                                                        <img 
+                                                            src={`${getBackendUrl()}${msg.fileUrl}`} 
+                                                            alt={msg.fileName || "Image"} 
+                                                            className="attachment-img"
+                                                            onClick={() => setActiveLightbox({ url: `${getBackendUrl()}${msg.fileUrl}`, name: msg.fileName })}
+                                                        />
+                                                        {msg.fileQuality === "HD" && (
+                                                            <div className="hd-badge-corner" title="High Definition Quality">
+                                                                HD
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : msg.fileType.startsWith("video/") ? (
+                                                    <div className="attachment-video-wrapper">
+                                                        <video 
+                                                            src={`${getBackendUrl()}${msg.fileUrl}`} 
+                                                            controls 
+                                                            className="attachment-video"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="attachment-document-card">
+                                                        <div className="doc-icon-section">
+                                                            <FileText size={24} className="purple-text" />
+                                                        </div>
+                                                        <div className="doc-info-section">
+                                                            <span className="doc-filename" title={msg.fileName}>
+                                                                {msg.fileName}
+                                                            </span>
+                                                            <span className="doc-filesize">
+                                                                {formatFileSize(msg.fileSize)}
+                                                            </span>
+                                                        </div>
+                                                        <a 
+                                                            href={`${getBackendUrl()}${msg.fileUrl}`} 
+                                                            download={msg.fileName} 
+                                                            className="doc-download-btn"
+                                                            title="Download file"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                        >
+                                                            <Download size={16} />
+                                                        </a>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {msg.isDeleted ? (
+                                            <p className="message-text">{msg.text}</p>
+                                        ) : (msg.isDecrypting || (msg.text && (msg.text === "[Decrypting E2EE message...]" || msg.text.includes("Decrypting")))) ? (
+                                            <div className="skeleton-loader">
+                                                <div className="skeleton-line first"></div>
+                                                <div className="skeleton-line second"></div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {msg.text && (
+                                                    <div className="message-text markdown-content">
+                                                        <ReactMarkdown 
+                                                            remarkPlugins={[remarkGfm]} 
+                                                            rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+                                                            components={{
+                                                                a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
+                                                                p: ({ node, ...props }) => <span {...props} />
+                                                            }}
+                                                        >
+                                                            {msg.text}
+                                                        </ReactMarkdown>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
+                                        <div className="message-meta">
+                                            <span className="message-time">
+                                                {formatTimestamp(msg.createdAt)}
+                                                {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
+                                            </span>
+                                            <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} />
+                                        </div>
+                                    </div>
+                                )}
 
                                 <ReactionBar
                                     reactions={msg.reactions}

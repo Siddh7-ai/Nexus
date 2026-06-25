@@ -119,6 +119,14 @@ const messageSchema = new mongoose.Schema({
         },
         default: null
     },
+    isLocked: {
+        type: Boolean,
+        default: false
+    },
+    lockedItemId: {
+        type: String,
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now
