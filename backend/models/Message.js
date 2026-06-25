@@ -135,6 +135,15 @@ const messageSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    voiceMessage: {
+        type: {
+            duration: { type: Number, default: 0 },
+            waveform: { type: [Number], default: [] },
+            hasTranscript: { type: Boolean, default: false },
+            transcriptLanguage: { type: String, default: null }
+        },
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now

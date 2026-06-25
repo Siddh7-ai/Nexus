@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import VoiceMessageBubble from "./VoiceMessageBubble";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock } from "lucide-react";
@@ -544,7 +545,29 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                                             className="attachment-video"
                                                         />
                                                     </div>
-                                                ) : (
+                                                ) : msg.fileType === "audio/e2ee" || msg.fileType.startsWith("audio/") ? (() => {
+                                                    let voiceData = null;
+                                                    try { voiceData = JSON.parse(msg.text); } catch(e) {}
+                                                    if (voiceData && typeof voiceData.duration !== 'undefined') {
+                                                        return (
+                                                            <VoiceMessageBubble
+                                                                fileUrl={`${getBackendUrl()}${msg.fileUrl}`}
+                                                                encryptedPayload={msg.fileType === "audio/e2ee" ? voiceData : null}
+                                                                isE2EE={msg.fileType === "audio/e2ee"}
+                                                                isOwnMessage={isOwn}
+                                                                duration={voiceData.duration}
+                                                                waveform={voiceData.waveform}
+                                                                transcript={voiceData.transcript}
+                                                            />
+                                                        );
+                                                    }
+                                                    // Fallback for non-voice-recorder audio
+                                                    return (
+                                                        <div className="attachment-audio-wrapper" style={{ padding: '8px' }}>
+                                                            <audio src={`${getBackendUrl()}${msg.fileUrl}`} controls />
+                                                        </div>
+                                                    );
+                                                })() : (
                                                     <div className="attachment-document-card">
                                                         <div className="doc-icon-section">
                                                             <FileText size={24} className="purple-text" />
@@ -581,7 +604,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                             </div>
                                         ) : (
                                             <>
-                                                {msg.text && (
+                                                {msg.text && (!msg.fileType || (msg.fileType !== "audio/e2ee" && !msg.fileType.startsWith("audio/"))) && (
                                                     <div className="message-text markdown-content">
                                                         <ReactMarkdown 
                                                             remarkPlugins={[remarkGfm]} 

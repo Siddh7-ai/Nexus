@@ -26,6 +26,7 @@ import {
     Lock
 } from "lucide-react";
 import { SmoothInput } from "./SmoothInput";
+import VoiceRecorder from "./VoiceRecorder";
 import { motion, useMotionValue, animate } from "framer-motion";
 
 // Lazy load the full emoji picker for performance
@@ -312,7 +313,8 @@ function MessageInput({
     isEditing,
     onCancelEdit,
     isGuest,
-    onLockTrigger
+    onLockTrigger,
+    onVoiceMessageSend
 }) {
     const [hoveredButton, setHoveredButton] = useState(null);
     const [tooltipPos, setTooltipPos] = useState({ left: 0, bottom: 0 });
@@ -1649,6 +1651,9 @@ function MessageInput({
                             zIndex: 10
                         }}
                     />
+                </div>
+                <div className="voice-recorder-wrapper" style={{ marginRight: '8px' }}>
+                    <VoiceRecorder onVoiceMessageReady={onVoiceMessageSend} />
                 </div>
                 <button className="send-btn" onClick={sendMessage} disabled={!message.trim()} aria-label="Send Message">
                     {isEditing ? "Save" : <SendHorizontal size={17} />}

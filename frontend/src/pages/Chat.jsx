@@ -22,6 +22,7 @@ import {
   saveDecryptedMessage
 } from "../utils/crypto/manager";
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
+import { encryptVoiceMessage } from "../utils/voiceMessage";
 import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys, getVaultPinData } from "../utils/crypto/keydb";
 import Vault from "../components/Vault";
 import MessageInfoModal from "../components/MessageInfoModal";
@@ -1457,6 +1458,61 @@ function Chat() {
     };
 
 
+    const handleVoiceMessageSend = async (payload) => {
+        if (!username || !socketRef.current) return;
+        
+        try {
+            let finalBlob = payload.audioBlob;
+            let textToEncrypt = null;
+
+            if (activePrivate) {
+                // E2EE mode: Encrypt audio blob and generate inner metadata payload
+                const encryptedData = await encryptVoiceMessage(
+                    payload.audioBlob,
+                    payload.transcript,
+                    payload.waveform,
+                    payload.durationSeconds
+                );
+                finalBlob = encryptedData.encryptedAudioBlob;
+                textToEncrypt = encryptedData.textToEncrypt;
+            } else {
+                // Public room mode: plain JSON text
+                textToEncrypt = JSON.stringify({
+                    transcript: payload.transcript,
+                    waveform: payload.waveform,
+                    duration: payload.durationSeconds
+                });
+            }
+
+            // Upload the blob (encrypted or raw) to GridFS
+            const formData = new FormData();
+            formData.append("file", finalBlob, activePrivate ? "voice_message.enc" : "voice_message.webm");
+
+            const res = await fetch(`${getBackendUrl()}/api/upload`, {
+                method: "POST",
+                body: formData
+            });
+
+            if (!res.ok) throw new Error("Voice message upload failed");
+            const uploadData = await res.json();
+
+            // Send via existing sendMessage flow
+            const attachmentMsg = {
+                fileUrl: uploadData.fileUrl,
+                fileName: uploadData.fileName,
+                fileSize: uploadData.fileSize,
+                fileType: activePrivate ? "audio/e2ee" : uploadData.fileType,
+                fileQuality: "Normal",
+                overrideText: textToEncrypt // Will be used as the actual text payload
+            };
+
+            sendMessage(attachmentMsg);
+        } catch (err) {
+            console.error("Error sending voice message:", err);
+            alert("Failed to send voice message");
+        }
+    };
+
     async function sendMessage(attachment = null) {
         if (!username || !socketRef.current) return;
 
@@ -1486,7 +1542,7 @@ function Chat() {
             _id: tempId,
             username: username,
             displayName: currentUserProfile?.displayName || username,
-            text: realAttachment ? "" : originalMessage,
+            text: realAttachment?.overrideText || (realAttachment ? "" : originalMessage),
             room: activeRoom,
             privateChatId: activePrivate,
             createdAt: new Date().toISOString(),
@@ -1502,7 +1558,7 @@ function Chat() {
 
         if (activePrivate) {
             const decPayload = {
-                text: realAttachment ? "" : originalMessage,
+                text: realAttachment?.overrideText || (realAttachment ? "" : originalMessage),
                 fileUrl: realAttachment ? realAttachment.fileUrl : null,
                 fileName: realAttachment ? realAttachment.fileName : null,
                 fileSize: realAttachment ? realAttachment.fileSize : null,
@@ -1543,7 +1599,7 @@ function Chat() {
                     const encryptedPayload = await encryptOutgoingMessage(
                         activePrivateNameRef.current,
                         activePrivateRef.current,
-                        realAttachment ? "" : originalMessage,
+                        realAttachment?.overrideText || (realAttachment ? "" : originalMessage),
                         realAttachment,
                         token
                     );
@@ -2540,6 +2596,7 @@ function Chat() {
                                 onCancelEdit={cancelEdit}
                                 isGuest={isGuest}
                                 onLockTrigger={() => setShowLoginModal(true)}
+                                onVoiceMessageSend={handleVoiceMessageSend}
                             />
 
                             {activePrivate && (
