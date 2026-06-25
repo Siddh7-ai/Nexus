@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
 import { SmoothInput } from "./SmoothInput";
 
@@ -8,6 +8,16 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
     const [confirmPin, setConfirmPin] = useState("");
 
     const limit = pinType === "4digit" ? 4 : 6;
+
+    // Refs to hold current lengths — lets the keydown handler read the
+    // latest values synchronously without capturing stale closure values.
+    const pinRef = useRef(pin);
+    const confirmPinRef = useRef(confirmPin);
+    const limitRef = useRef(limit);
+
+    useEffect(() => { pinRef.current = pin; }, [pin]);
+    useEffect(() => { confirmPinRef.current = confirmPin; }, [confirmPin]);
+    useEffect(() => { limitRef.current = limit; }, [limit]);
 
     const handleNumericKeyPress = (val) => {
         if (pin.length < limit) {
@@ -29,42 +39,41 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
         setConfirmPin(prev => prev.slice(0, -1));
     };
 
-    // Keyboard support for numeric entry (typing enter and confirm keys sequentially)
+    // Keyboard support — uses refs so we never nest one setState inside another.
+    // Nesting setState updaters causes React Strict Mode to double-invoke them,
+    // which was the root cause of the double-digit bug on Confirm PIN.
     useEffect(() => {
         if (pinType === "custom") return;
 
         const handleKeyDown = (e) => {
             if (/^[0-9]$/.test(e.key)) {
                 e.preventDefault();
-                setPin(prevPin => {
-                    if (prevPin.length < limit) {
-                        return prevPin + e.key;
-                    } else {
-                        setConfirmPin(prevConfirm => {
-                            if (prevConfirm.length < limit) {
-                                return prevConfirm + e.key;
-                            }
-                            return prevConfirm;
-                        });
-                        return prevPin;
-                    }
-                });
+                const curPin = pinRef.current;
+                const curConfirm = confirmPinRef.current;
+                const lim = limitRef.current;
+
+                if (curPin.length < lim) {
+                    // Still filling Enter PIN
+                    setPin(prev => prev.length < lim ? prev + e.key : prev);
+                } else if (curConfirm.length < lim) {
+                    // Enter PIN is full — fill Confirm PIN
+                    setConfirmPin(prev => prev.length < lim ? prev + e.key : prev);
+                }
+                // Both full — ignore
             } else if (e.key === "Backspace") {
                 e.preventDefault();
-                setConfirmPin(prevConfirm => {
-                    if (prevConfirm.length > 0) {
-                        return prevConfirm.slice(0, -1);
-                    } else {
-                        setPin(prevPin => prevPin.slice(0, -1));
-                        return prevConfirm;
-                    }
-                });
+                const curConfirm = confirmPinRef.current;
+                if (curConfirm.length > 0) {
+                    setConfirmPin(prev => prev.slice(0, -1));
+                } else {
+                    setPin(prev => prev.slice(0, -1));
+                }
             }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [pinType, limit]);
+    }, [pinType]);
 
     const getPinStrength = (val) => {
         if (!val) return "";
@@ -178,11 +187,11 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                                     <span className="keypad-panel-label">Enter PIN Keypad</span>
                                     <div className="vault-keypad">
                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                                            <button key={num} type="button" className="keypad-btn" onClick={() => handleNumericKeyPress(num.toString())}>{num}</button>
+                                            <button key={num} type="button" className="keypad-btn" onKeyDown={(e) => e.preventDefault()} onClick={() => handleNumericKeyPress(num.toString())}>{num}</button>
                                         ))}
-                                        <button type="button" className="keypad-btn danger-clear" onClick={() => setPin("")}>C</button>
-                                        <button type="button" className="keypad-btn" onClick={() => handleNumericKeyPress("0")}>0</button>
-                                        <button type="button" className="keypad-btn backspace" onClick={handleNumericBackspace}>⌫</button>
+                                        <button type="button" className="keypad-btn danger-clear" onKeyDown={(e) => e.preventDefault()} onClick={() => setPin("")}>C</button>
+                                        <button type="button" className="keypad-btn" onKeyDown={(e) => e.preventDefault()} onClick={() => handleNumericKeyPress("0")}>0</button>
+                                        <button type="button" className="keypad-btn backspace" onKeyDown={(e) => e.preventDefault()} onClick={handleNumericBackspace}>⌫</button>
                                     </div>
                                 </div>
 
@@ -190,11 +199,11 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                                     <span className="keypad-panel-label">Confirm PIN Keypad</span>
                                     <div className="vault-keypad">
                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                                            <button key={num} type="button" className="keypad-btn" onClick={() => handleConfirmNumericKeyPress(num.toString())}>{num}</button>
+                                            <button key={num} type="button" className="keypad-btn" onKeyDown={(e) => e.preventDefault()} onClick={() => handleConfirmNumericKeyPress(num.toString())}>{num}</button>
                                         ))}
-                                        <button type="button" className="keypad-btn danger-clear" onClick={() => setConfirmPin("")}>C</button>
-                                        <button type="button" className="keypad-btn" onClick={() => handleConfirmNumericKeyPress("0")}>{0}</button>
-                                        <button type="button" className="keypad-btn backspace" onClick={handleConfirmNumericBackspace}>⌫</button>
+                                        <button type="button" className="keypad-btn danger-clear" onKeyDown={(e) => e.preventDefault()} onClick={() => setConfirmPin("")}>C</button>
+                                        <button type="button" className="keypad-btn" onKeyDown={(e) => e.preventDefault()} onClick={() => handleConfirmNumericKeyPress("0")}>0</button>
+                                        <button type="button" className="keypad-btn backspace" onKeyDown={(e) => e.preventDefault()} onClick={handleConfirmNumericBackspace}>⌫</button>
                                     </div>
                                 </div>
                             </div>
