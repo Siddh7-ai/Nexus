@@ -75,11 +75,13 @@ export async function initiateSession(aliceKeys, bobBundle) {
     // 7. Derive the shared secret via KDF (crypto_generichash)
     const sharedSecret = sodium.crypto_generichash(32, concat);
 
+    // Derive static E2EE vault key from long-term identity keys to ensure it remains identical on both sides
+    const staticSharedSecret = sodium.crypto_scalarmult(aliceIK_X25519_sec, bobIK_X25519);
     const vaultKey = sodium.crypto_kdf_derive_from_key(
         32,
         1,
         "vaultkey", // exactly 8 chars
-        sharedSecret
+        staticSharedSecret
     );
 
     // 8. Construct the handshake initialization payload
@@ -146,11 +148,13 @@ export async function receiveSession(bobKeys, handshakePayload, opkSecretKeyBase
     // 5. Derive the shared secret via KDF (crypto_generichash)
     const sharedSecret = sodium.crypto_generichash(32, concat);
 
+    // Derive static E2EE vault key from long-term identity keys to ensure it remains identical on both sides
+    const staticSharedSecret = sodium.crypto_scalarmult(bobIK_X25519_sec, aliceIK_X25519);
     const vaultKey = sodium.crypto_kdf_derive_from_key(
         32,
         1,
         "vaultkey", // exactly 8 chars
-        sharedSecret
+        staticSharedSecret
     );
 
     return { sharedSecret, vaultKey };

@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { FiX, FiCheck } from "react-icons/fi";
 import { SmoothInput } from "./SmoothInput";
 import { getVaultPinData } from "../utils/crypto/keydb";
-import { verifyVaultPin, decryptVaultKeyWithPin, encryptVaultItem } from "../utils/crypto/vault";
+import { verifyVaultPin, decryptVaultKeyWithPin, encryptVaultItem, setupVaultPin } from "../utils/crypto/vault";
+import { getOrCreateVaultKey } from "../utils/crypto/manager";
 import { getBackendUrl } from "../utils/config";
+import sodium from "libsodium-wrappers-sumo";
 
 export default function LockMessageModal({ msg, onClose, privateChatId, myUsername, token, onLockSuccess }) {
     const [step, setStep] = useState("pin"); // "pin" | "label"
@@ -82,7 +84,6 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
         setShake(true);
         setTimeout(() => setShake(false), 500);
     };
-
     const verifyAndTransition = async (e) => {
         if (e) e.preventDefault();
         setErrorMsg("");
@@ -93,6 +94,23 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
         if (isPinCorrect) {
             const rawVaultKey = await decryptVaultKeyWithPin(enteredPin, pinData);
             if (rawVaultKey) {
+                // Auto-healing check
+                try {
+                    const partnerUsername = privateChatId.split("_").find(u => u.toLowerCase() !== myUsername.toLowerCase());
+                    const staticVaultKey = await getOrCreateVaultKey(privateChatId, partnerUsername, token);
+                    
+                    if (!sodium.memcmp(rawVaultKey, staticVaultKey)) {
+                        console.log("Vault key mismatch in LockMessageModal! Auto-healing vault PIN with the correct static vault key...");
+                        await setupVaultPin(enteredPin, staticVaultKey, pinData.pinType || "4digit", myUsername, privateChatId);
+                        setVaultKey(staticVaultKey);
+                        setStep("label");
+                        setErrorMsg("");
+                        return;
+                    }
+                } catch (healErr) {
+                    console.error("Auto-healing vault key in LockMessageModal failed, continuing with current key:", healErr);
+                }
+
                 setVaultKey(rawVaultKey);
                 setStep("label");
                 setErrorMsg("");
@@ -105,7 +123,6 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
         setEnteredPin("");
         setErrorMsg("Incorrect Password / PIN");
     };
-
     const handleLockConfirm = async (e) => {
         if (e) e.preventDefault();
         if (!label.trim()) {
@@ -199,12 +216,13 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                         <form onSubmit={verifyAndTransition} className="vault-form">
                             {pinType === "custom" ? (
                                 <div className={`auth-field ${shake ? "shake-animate" : ""}`}>
-                                    <div className="auth-input-wrap">
+                                    <div className="auth-input-wrap" style={{ position: 'relative' }}>
                                         <SmoothInput
                                             type="password"
                                             placeholder="Enter your vault password"
                                             value={enteredPin}
                                             onChange={e => setEnteredPin(e.target.value)}
+                                            allowEmoji={true}
                                         />
                                     </div>
                                     <button type="submit" className="auth-btn vault-setup-btn" style={{ marginTop: '15px', width: '100%' }}>
@@ -213,10 +231,16 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                                 </div>
                             ) : (
                                 <div className={`numeric-entry-container ${shake ? "shake-animate" : ""}`}>
-                                    <div className="dot-indicators center" style={{ marginBottom: '15px' }}>
-                                        {Array.from({ length: limit }).map((_, i) => (
-                                            <div key={i} className={`dot ${i < enteredPin.length ? "active" : ""}`} />
-                                        ))}
+                                    <div className="auth-field" style={{ marginBottom: '15px' }}>
+                                        <div className="auth-input-wrap" style={{ position: 'relative' }}>
+                                            <SmoothInput
+                                                type="password"
+                                                placeholder={`Enter your ${limit}-digit PIN`}
+                                                value={enteredPin}
+                                                onChange={e => setEnteredPin(e.target.value)}
+                                                allowEmoji={true}
+                                            />
+                                        </div>
                                     </div>
                                     <div className="vault-keypad">
                                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (

@@ -7879,3 +7879,12 @@ body.dark-theme .message-bubble.locked-message {
     opacity: 1;
   }
 }
+
+/* Fix for SmoothInput emoji picker search bar overlapping text */
+.smooth-input-emoji-picker input {
+  padding: 0 16px 0 42px !important;
+  height: 40px !important;
+  box-sizing: border-box !important;
+  border-radius: 8px !important;
+}
+

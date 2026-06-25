@@ -138,10 +138,21 @@ function Chat() {
         // Lock body viewport scrolling for the chat page shell to prevent iOS keyboard/scroll displacement
         document.body.classList.add("chat-page-body");
         document.documentElement.classList.add("chat-page-html");
+
+        // Auto-lock vault on tab switch, app switch, or page close/refresh
+        const handleAutoLock = () => {
+            clearVaultState();
+        };
+        window.addEventListener("blur", handleAutoLock);
+        document.addEventListener("visibilitychange", handleAutoLock);
+        window.addEventListener("beforeunload", handleAutoLock);
         
         return () => {
             document.body.classList.remove("chat-page-body");
             document.documentElement.classList.remove("chat-page-html");
+            window.removeEventListener("blur", handleAutoLock);
+            document.removeEventListener("visibilitychange", handleAutoLock);
+            window.removeEventListener("beforeunload", handleAutoLock);
             clearVaultState();
         };
     }, []);
@@ -2409,7 +2420,13 @@ function Chat() {
                                     }
                                 }}
                                 onVerifyClick={() => setShowVerifyModal(true)}
-                                onVaultClick={() => setShowVault(v => !v)}
+                                onVaultClick={() => {
+                                    if (showVault) {
+                                        clearVaultState();
+                                    } else {
+                                        setShowVault(true);
+                                    }
+                                }}
                                 onToggleVisualizer={() => {
                                     setShowVisualizer(prev => {
                                         const nextState = !prev;

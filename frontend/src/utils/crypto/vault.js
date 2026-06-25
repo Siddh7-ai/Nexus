@@ -81,6 +81,25 @@ export async function setupVaultPin(pinString, vaultKey, pinType, myUsername, pr
     };
 
     await saveVaultPinData(pinId, pinData);
+
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (token && !token.startsWith("guest:")) {
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/vault-pin/${pinId}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(pinData)
+            });
+            if (!response.ok) {
+                console.error("Failed to synchronize vault PIN to server");
+            }
+        } catch (e) {
+            console.error("Error synchronizing vault PIN to server:", e);
+        }
+    }
 }
 
 /**

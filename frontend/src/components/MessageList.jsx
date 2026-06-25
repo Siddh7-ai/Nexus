@@ -202,11 +202,12 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     const [openUp, setOpenUp] = useState(false);
     const isOwn = msg.username?.toLowerCase() === currentUser?.toLowerCase();
 
-    if (msg.isDeleted || msg.isLocked || msg.username === "System") return null;
+    if (msg.isDeleted || msg.username === "System") return null;
 
     const handleCopy = () => {
-        if (!msg.text) return;
-        navigator.clipboard.writeText(msg.text);
+        const textToCopy = msg.isLocked ? (msg.text || "Locked Message") : msg.text;
+        if (!textToCopy) return;
+        navigator.clipboard.writeText(textToCopy);
         if (onCopySuccess) {
             onCopySuccess();
         }
@@ -219,6 +220,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                     className="action-btn"
                     title="React"
                     onClick={(e) => {
+                        e.stopPropagation();
                         const rect = e.currentTarget.getBoundingClientRect();
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
@@ -238,6 +240,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                     className="action-btn"
                     title="More"
                     onClick={(e) => {
+                        e.stopPropagation();
                         const rect = e.currentTarget.getBoundingClientRect();
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
@@ -313,13 +316,13 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         <Star size={16} className="menu-icon" />
                         <span>Star</span>
                     </button>
-                    {isOwn && (
+                    {isOwn && !msg.isLocked && (
                         <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
                             <Pencil size={16} className="menu-icon" />
                             <span>Edit</span>
                         </button>
                     )}
-                    {isPrivate && (
+                    {isPrivate && !msg.isLocked && (
                         <button className="menu-item" onClick={() => { onLockMessage(msg); setShowMenu(false); }}>
                             <Lock size={16} className="menu-icon" />
                             <span>Lock message</span>

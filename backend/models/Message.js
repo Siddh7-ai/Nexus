@@ -127,6 +127,14 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    lockedBy: {
+        type: String,
+        default: null
+    },
+    lockedAt: {
+        type: Date,
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now

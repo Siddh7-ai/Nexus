@@ -7,15 +7,15 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
     const [pin, setPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
 
+    const limit = pinType === "4digit" ? 4 : 6;
+
     const handleNumericKeyPress = (val) => {
-        const limit = pinType === "4digit" ? 4 : 6;
         if (pin.length < limit) {
             setPin(prev => prev + val);
         }
     };
 
     const handleConfirmNumericKeyPress = (val) => {
-        const limit = pinType === "4digit" ? 4 : 6;
         if (confirmPin.length < limit) {
             setConfirmPin(prev => prev + val);
         }
@@ -94,8 +94,6 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
         onSave(pin, pinType);
     };
 
-    const limit = pinType === "4digit" ? 4 : 6;
-
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content vault-pin-modal" onClick={e => e.stopPropagation()}>
@@ -125,6 +123,7 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                                         value={pin}
                                         onChange={e => setPin(e.target.value)}
                                         maxLength={100}
+                                        allowEmoji={true}
                                     />
                                 </div>
                                 <span className="vault-char-count">{pin.length} characters</span>
@@ -144,6 +143,7 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                                         value={confirmPin}
                                         onChange={e => setConfirmPin(e.target.value)}
                                         maxLength={100}
+                                        allowEmoji={true}
                                     />
                                 </div>
                             </div>

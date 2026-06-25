@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FiX, FiPlus, FiLock, FiUnlock, FiKey, FiFile, FiTrash2, FiEye, FiEyeOff, FiCopy, FiDownload, FiCheck } from "react-icons/fi";
 import { getVaultPinData } from "../utils/crypto/keydb";
+import { getOrCreateVaultKey } from "../utils/crypto/manager";
 import { getBackendUrl } from "../utils/config";
 import { decryptVaultItem, encryptVaultItem, setupVaultPin, getVaultKeyFromSession } from "../utils/crypto/vault";
 import VaultPinSetupModal from "./VaultPinSetupModal";
@@ -129,19 +130,8 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
     // Save PIN (Initial Setup or Recovery Reset)
     const handleSavePin = async (pinStr, pinType) => {
         try {
-            let activeVaultKey = vaultKey;
-            
-            // If we don't have vaultKey in memory, try to load it from session
-            if (!activeVaultKey) {
-                activeVaultKey = await getVaultKeyFromSession(privateChatId);
-            }
-
-            if (!activeVaultKey) {
-                // If there's no vault key in session, derive it or show warning
-                setErrorMsg("No E2EE session found. Please send a message first to establish encryption.");
-                setShowSetupModal(false);
-                return;
-            }
+            const partnerUsername = privateChatId.split("_").find(u => u.toLowerCase() !== myUsername.toLowerCase());
+            const activeVaultKey = await getOrCreateVaultKey(privateChatId, partnerUsername, token);
 
             await setupVaultPin(pinStr, activeVaultKey, pinType, myUsername, privateChatId);
             setVaultKey(activeVaultKey);

@@ -2,6 +2,7 @@ import { motion, useMotionValue, useReducedMotion, animate } from "framer-motion
 import React, { useEffect, useRef, useState } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 
+const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
 const PASSWORD_CHAR = navigator.userAgent.match(/firefox|fxios/i) ? "\u25CF" : "\u2022";
 
 export const SmoothInput = ({
@@ -14,9 +15,14 @@ export const SmoothInput = ({
   type = "text",
   placeholder,
   style,
+  allowEmoji = false,
   ...props
 }) => {
   const [internalValue, setInternalValue] = useState(defaultValue ?? "");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiContainerRef = useRef(null);
+  const emojiButtonRef = useRef(null);
+
   const isEmail = type === "email";
   const isPassword = type === "password";
   const [showPassword, setShowPassword] = useState(false);
@@ -39,6 +45,59 @@ export const SmoothInput = ({
   const caretIdleTimeoutRef = useRef(null);
   const activeAnimationRef = useRef(null);
   const prevTargetXRef = useRef(0);
+
+  const handleEmojiSelect = (emojiData) => {
+    const emoji = emojiData.emoji;
+    const input = inputRef.current;
+    if (!input) return;
+
+    const start = input.selectionStart ?? inputValue.length;
+    const end = input.selectionEnd ?? inputValue.length;
+    const newValue = inputValue.substring(0, start) + emoji + inputValue.substring(end);
+
+    if (!isControlled) {
+      setInternalValue(newValue);
+    }
+    
+    if (onChange) {
+      const simulatedEvent = {
+        target: {
+          ...input,
+          value: newValue
+        },
+        currentTarget: {
+          ...input,
+          value: newValue
+        },
+        preventDefault: () => {},
+        stopPropagation: () => {}
+      };
+      onChange(simulatedEvent);
+    }
+
+    setTimeout(() => {
+      input.focus();
+      const newCursorPos = start + emoji.length;
+      input.setSelectionRange(newCursorPos, newCursorPos);
+      scheduleUpdateCaret(input);
+    }, 50);
+  };
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleClickOutside = (e) => {
+      if (
+        emojiContainerRef.current && 
+        !emojiContainerRef.current.contains(e.target) &&
+        emojiButtonRef.current &&
+        !emojiButtonRef.current.contains(e.target)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
 
   const cachedStylesRef = useRef(null);
   const updateScheduledRef = useRef(false);
@@ -309,7 +368,7 @@ export const SmoothInput = ({
       <input
         {...props}
         ref={inputRef}
-        type={actualType}
+        type={isPassword ? (showPassword ? "text" : (navigator.userAgent.match(/firefox|fxios/i) ? "password" : "text")) : actualType}
         inputMode={actualInputMode}
         placeholder={placeholder}
         className={className}
@@ -317,7 +376,8 @@ export const SmoothInput = ({
         style={{
           caretColor: "transparent",
           width: "100%",
-          paddingRight: isPassword ? "32px" : undefined,
+          paddingRight: (isPassword && allowEmoji) ? "58px" : (isPassword ? "32px" : (allowEmoji ? "32px" : undefined)),
+          WebkitTextSecurity: isPassword && !showPassword ? "disc" : "none",
           ...props.style
         }}
         onChange={(e) => {
@@ -370,6 +430,33 @@ export const SmoothInput = ({
           zIndex: 10
         }}
       />
+      {allowEmoji && (
+        <button
+          ref={emojiButtonRef}
+          type="button"
+          onClick={() => setShowEmojiPicker(prev => !prev)}
+          style={{
+            position: "absolute",
+            right: isPassword ? "34px" : "8px",
+            background: "none",
+            border: "none",
+            color: "var(--muted, #8e8e93)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "4px",
+            zIndex: 15,
+            opacity: 0.7,
+            transition: "opacity 0.2s"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = 0.7}
+          title="Insert Emoji"
+        >
+          😀
+        </button>
+      )}
       {isPassword && (
         <button
           type="button"
@@ -395,6 +482,33 @@ export const SmoothInput = ({
         >
           {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
         </button>
+      )}
+      {allowEmoji && showEmojiPicker && (
+        <div
+          ref={emojiContainerRef}
+          className="smooth-input-emoji-picker"
+          style={{
+            position: "absolute",
+            bottom: "100%",
+            right: 0,
+            zIndex: 1000,
+            marginBottom: "8px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+            borderRadius: "12px",
+            overflow: "hidden",
+            background: "var(--bg-modal, #ffffff)"
+          }}
+        >
+          <React.Suspense fallback={<div style={{ padding: "20px", color: "var(--text)" }}>Loading picker...</div>}>
+            <EmojiPicker
+              onEmojiClick={handleEmojiSelect}
+              autoFocusSearch={false}
+              skinTonesDisabled={false}
+              width="280px"
+              height="320px"
+            />
+          </React.Suspense>
+        </div>
       )}
     </div>
   );

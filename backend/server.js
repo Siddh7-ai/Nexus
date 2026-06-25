@@ -3,6 +3,7 @@ const Message = require("./models/Message");
 const ClearedChat = require("./models/ClearedChat");
 const Room = require("./models/Room");
 const VaultItem = require("./models/VaultItem");
+const VaultPin = require("./models/VaultPin");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -207,6 +208,69 @@ app.delete("/api/vault/:privateChatId/:itemId", userRoutes.authenticateToken, as
     } catch (err) {
         console.error("Delete vault item error:", err);
         res.status(500).json({ error: "Server error deleting vault item." });
+    }
+});
+
+// GET /api/vault-pin/:pinId (synchronized E2EE Vault setup recovery)
+app.get("/api/vault-pin/:pinId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot access the vault PIN." });
+        }
+        const { pinId } = req.params;
+
+        // Security check: Make sure user owns this pinId
+        const prefix = `vault_pin_${req.user.username.toLowerCase()}_`;
+        if (!pinId.startsWith(prefix)) {
+            return res.status(403).json({ error: "Access denied. You do not own this vault PIN configuration." });
+        }
+
+        const pinData = await VaultPin.findOne({ pinId });
+        if (!pinData) {
+            return res.status(404).json({ error: "Vault PIN not found" });
+        }
+        res.json({
+            salt: pinData.salt,
+            encryptedVaultKey: pinData.encryptedVaultKey,
+            pinType: pinData.pinType,
+            pinHash: pinData.pinHash
+        });
+    } catch (err) {
+        console.error("Fetch vault PIN error:", err);
+        res.status(500).json({ error: "Server error fetching vault PIN." });
+    }
+});
+
+// POST /api/vault-pin/:pinId (synchronized E2EE Vault setup backup)
+app.post("/api/vault-pin/:pinId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot configure the vault PIN." });
+        }
+        const { pinId } = req.params;
+        
+        // Security check: Make sure user owns this pinId
+        const prefix = `vault_pin_${req.user.username.toLowerCase()}_`;
+        if (!pinId.startsWith(prefix)) {
+            return res.status(403).json({ error: "Access denied. You do not own this vault PIN configuration." });
+        }
+
+        const { salt, encryptedVaultKey, pinType, pinHash } = req.body;
+        if (!salt || !encryptedVaultKey || !encryptedVaultKey.nonce || !encryptedVaultKey.ciphertext || !pinType || !pinHash) {
+            return res.status(400).json({ error: "Invalid vault PIN payload." });
+        }
+
+        // Upsert VaultPin
+        await VaultPin.findOneAndUpdate(
+            { pinId },
+            { salt, encryptedVaultKey, pinType, pinHash },
+            { upsert: true, new: true }
+        );
+
+        res.json({ message: "Vault PIN configuration saved successfully." });
+    } catch (err) {
+        console.error("Save vault PIN error:", err);
+        res.status(500).json({ error: "Server error saving vault PIN." });
     }
 });
 
@@ -1165,8 +1229,26 @@ io.on("connection", async (socket) => {
 
             msg.isLocked = true;
             msg.lockedItemId = lockedItemId;
+            msg.lockedBy = socket.username;
+            msg.lockedAt = new Date();
             msg.text = "🔒 Locked message";
-            // If the message has attachments, clear them to prevent plaintext access
+
+            // If the message has attachments, securely delete them from GridFS server
+            if (msg.fileUrl) {
+                const parts = msg.fileUrl.split("/");
+                const fileIdStr = parts[parts.length - 1];
+                if (fileIdStr && mongoose.Types.ObjectId.isValid(fileIdStr)) {
+                    const db = mongoose.connection.db;
+                    const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+                    try {
+                        await bucket.delete(new ObjectId(fileIdStr));
+                    } catch (fileErr) {
+                        console.error("Error deleting file from GridFS in lockMessage:", fileErr);
+                    }
+                }
+            }
+
+            // Clear metadata fields to prevent plaintext access
             msg.fileUrl = null;
             msg.fileName = null;
             msg.fileSize = null;

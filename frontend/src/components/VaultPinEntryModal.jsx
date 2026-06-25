@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import { FiX, FiEye, FiEyeOff } from "react-icons/fi";
 import { SmoothInput } from "./SmoothInput";
 import { getBackendUrl } from "../utils/config";
-import { verifyVaultPin, decryptVaultKeyWithPin, getVaultKeyFromSession } from "../utils/crypto/vault";
+import { verifyVaultPin, decryptVaultKeyWithPin, getVaultKeyFromSession, setupVaultPin } from "../utils/crypto/vault";
+import { getOrCreateVaultKey } from "../utils/crypto/manager";
+import sodium from "libsodium-wrappers-sumo";
 
 export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onResetPin, privateChatId, myUsername }) {
     const [enteredPin, setEnteredPin] = useState("");
@@ -37,6 +40,37 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
         return () => clearInterval(timer);
     }, [lockoutTime]);
 
+    // Combined Verification & Unlock helper with Auto-healing support
+    const verifyAndUnlock = useCallback(async (pin) => {
+        const isPinCorrect = await verifyVaultPin(pin, pinData);
+        if (isPinCorrect) {
+            const rawVaultKey = await decryptVaultKeyWithPin(pin, pinData);
+            if (rawVaultKey) {
+                // Auto-healing check
+                try {
+                    const partnerUsername = privateChatId.split("_").find(u => u.toLowerCase() !== myUsername.toLowerCase());
+                    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+                    const staticVaultKey = await getOrCreateVaultKey(privateChatId, partnerUsername, token);
+                    
+                    if (!sodium.memcmp(rawVaultKey, staticVaultKey)) {
+                        console.log("Vault key mismatch detected! Auto-healing vault PIN with the correct static vault key...");
+                        await setupVaultPin(pin, staticVaultKey, pinData.pinType || "4digit", myUsername, privateChatId);
+                        onUnlock(staticVaultKey);
+                        return true;
+                    }
+                } catch (healErr) {
+                    console.error("Auto-healing vault key failed, continuing with current key:", healErr);
+                }
+
+                onUnlock(rawVaultKey);
+                return true;
+            } else {
+                setErrorMsg("Decryption failed. Please try again.");
+            }
+        }
+        return false;
+    }, [pinData, privateChatId, myUsername, onUnlock]);
+
     // Auto-unlock logic
     useEffect(() => {
         if (lockoutTime > 0) return;
@@ -45,24 +79,13 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
             if (pinType === "custom") {
                 // For custom password, check on every keystroke if it's correct
                 if (enteredPin.length < 4) return;
-                const isPinCorrect = await verifyVaultPin(enteredPin, pinData);
-                if (isPinCorrect) {
-                    const rawVaultKey = await decryptVaultKeyWithPin(enteredPin, pinData);
-                    if (rawVaultKey) {
-                        onUnlock(rawVaultKey);
-                    }
-                }
+                await verifyAndUnlock(enteredPin);
             } else {
                 // For numeric PINs, when length matches limit, automatically verify
                 if (enteredPin.length === limit) {
-                    const isPinCorrect = await verifyVaultPin(enteredPin, pinData);
-                    if (isPinCorrect) {
-                        const rawVaultKey = await decryptVaultKeyWithPin(enteredPin, pinData);
-                        if (rawVaultKey) {
-                            onUnlock(rawVaultKey);
-                            return;
-                        }
-                    }
+                    const success = await verifyAndUnlock(enteredPin);
+                    if (success) return;
+
                     // Wrong numeric PIN: increment attempts, shake, clear input, set error
                     const nextAttempts = attempts + 1;
                     setAttempts(nextAttempts);
@@ -80,43 +103,14 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
         };
 
         autoCheck();
-    }, [enteredPin, pinType, limit, pinData, lockoutTime, onUnlock, attempts]);
+    }, [enteredPin, pinType, limit, lockoutTime, verifyAndUnlock, attempts]);
 
-    const handleNumericKeyPress = (val) => {
-        if (lockoutTime > 0) return;
-        if (enteredPin.length < limit) {
-            setEnteredPin(prev => prev + val);
-        }
-    };
 
-    const handleNumericBackspace = () => {
-        if (lockoutTime > 0) return;
-        setEnteredPin(prev => prev.slice(0, -1));
-    };
-
-    // Keyboard support for numeric entry
-    useEffect(() => {
-        if (pinType === "custom" || showRecover || lockoutTime > 0) return;
-
-        const handleKeyDown = (e) => {
-            if (/^[0-9]$/.test(e.key)) {
-                e.preventDefault();
-                setEnteredPin(prev => (prev.length < limit ? prev + e.key : prev));
-            } else if (e.key === "Backspace") {
-                e.preventDefault();
-                setEnteredPin(prev => prev.slice(0, -1));
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [pinType, showRecover, lockoutTime, limit]);
 
     const triggerShake = () => {
         setShake(true);
         setTimeout(() => setShake(false), 500);
     };
-
     const handleUnlockSubmit = async (e) => {
         if (e) e.preventDefault();
         if (lockoutTime > 0) return;
@@ -125,17 +119,8 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
         const isLengthValid = pinType === "4digit" ? enteredPin.length === 4 : (pinType === "6digit" ? enteredPin.length === 6 : enteredPin.length > 0);
         if (!isLengthValid) return;
 
-        const isPinCorrect = await verifyVaultPin(enteredPin, pinData);
-        if (isPinCorrect) {
-            // Decrypt the vault key using the PIN derived key
-            const rawVaultKey = await decryptVaultKeyWithPin(enteredPin, pinData);
-            if (rawVaultKey) {
-                onUnlock(rawVaultKey);
-                return;
-            } else {
-                setErrorMsg("Decryption failed. Please try again.");
-            }
-        }
+        const success = await verifyAndUnlock(enteredPin);
+        if (success) return;
 
         // Wrong attempt handling for custom password (triggered on form submit/enter)
         const nextAttempts = attempts + 1;
@@ -217,35 +202,18 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
                         </div>
 
                         <form onSubmit={handleUnlockSubmit} className="vault-form">
-                            {pinType === "custom" ? (
-                                <div className={`auth-field ${shake ? "shake-animate" : ""}`}>
-                                    <div className="auth-input-wrap" style={{ position: 'relative' }}>
-                                        <SmoothInput
-                                            type="password"
-                                            placeholder="Enter your vault password"
-                                            value={enteredPin}
-                                            onChange={e => setEnteredPin(e.target.value)}
-                                            disabled={lockoutTime > 0}
-                                        />
-                                    </div>
+                            <div className={`auth-field ${shake ? "shake-animate" : ""}`}>
+                                <div className="auth-input-wrap" style={{ position: 'relative' }}>
+                                    <SmoothInput
+                                        type="password"
+                                        placeholder="Enter your vault password"
+                                        value={enteredPin}
+                                        onChange={e => setEnteredPin(e.target.value)}
+                                        disabled={lockoutTime > 0}
+                                        allowEmoji={true}
+                                    />
                                 </div>
-                            ) : (
-                                <div className={`numeric-entry-container ${shake ? "shake-animate" : ""}`}>
-                                    <div className="dot-indicators center">
-                                        {Array.from({ length: limit }).map((_, i) => (
-                                            <div key={i} className={`dot ${i < enteredPin.length ? "active" : ""}`} />
-                                        ))}
-                                    </div>
-                                    <div className="vault-keypad">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                                            <button key={num} type="button" className="keypad-btn" onClick={() => handleNumericKeyPress(num.toString())} disabled={lockoutTime > 0}>{num}</button>
-                                        ))}
-                                        <button type="button" className="keypad-btn danger-clear" onClick={() => setEnteredPin("")} disabled={lockoutTime > 0}>C</button>
-                                        <button type="button" className="keypad-btn" onClick={() => handleNumericKeyPress("0")} disabled={lockoutTime > 0}>0</button>
-                                        <button type="button" className="keypad-btn backspace" onClick={handleNumericBackspace} disabled={lockoutTime > 0}>⌫</button>
-                                    </div>
-                                </div>
-                            )}
+                            </div>
 
                             {errorMsg && (
                                 <div className="vault-error-inline center">{errorMsg}</div>

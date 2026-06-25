@@ -1,3 +1,5 @@
+import { getBackendUrl } from '../config';
+
 const DB_NAME = "nexus_crypto_db";
 const DB_VERSION = 3;
 
@@ -310,7 +312,7 @@ export async function saveVaultPinData(pinId, data) {
  */
 export async function getVaultPinData(pinId) {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    const localData = await new Promise((resolve, reject) => {
         const transaction = db.transaction("vault_pins", "readonly");
         const store = transaction.objectStore("vault_pins");
         const request = store.get(pinId);
@@ -318,4 +320,32 @@ export async function getVaultPinData(pinId) {
         request.onsuccess = (event) => resolve(event.target.result || null);
         request.onerror = () => reject(request.error);
     });
+
+    if (localData) {
+        return localData;
+    }
+
+    // Fallback: fetch from server
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (token && !token.startsWith("guest:")) {
+        try {
+            const response = await fetch(`${getBackendUrl()}/api/vault-pin/${pinId}`, {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const serverData = await response.json();
+                if (serverData) {
+                    // Cache in IndexedDB for subsequent requests
+                    await saveVaultPinData(pinId, serverData);
+                    return { pinId, ...serverData };
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching vault PIN from server:", e);
+        }
+    }
+
+    return null;
 }

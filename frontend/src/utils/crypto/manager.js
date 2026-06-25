@@ -701,3 +701,54 @@ export async function decryptAndCacheMessage(msg, myUsername, token) {
         ongoingDecryptions.delete(msg._id);
     }
 }
+
+/**
+ * Retrieves the vault key from the existing E2EE session.
+ * If no session exists, it establishes it using the partner's prekey bundle (X3DH handshake)
+ * and initializes the Double Ratchet state in IndexedDB.
+ * This ensures that a vault key is always available when configuring the Shared Vault PIN.
+ * 
+ * @param {string} privateChatId 
+ * @param {string} partnerUsername 
+ * @param {string} token 
+ * @returns {Promise<Uint8Array>} The 32-byte E2EE vault key
+ */
+export async function getOrCreateVaultKey(privateChatId, partnerUsername, token) {
+    await cryptoReady;
+    const myUsername = getCurrentUsername();
+    if (!myUsername) throw new Error("Local username not set");
+
+    console.log(`Deriving static shared vault key for ${partnerUsername}...`);
+    
+    // Fetch partner's bundle
+    const response = await fetch(`${getBackendUrl()}/api/keys/bundle/${partnerUsername}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to fetch prekey bundle for ${partnerUsername}`);
+    }
+    const partnerBundle = await response.json();
+    const partnerIK_raw = fromBase64(partnerBundle.identityPublicKey);
+    const partnerIK_X25519 = sodium.crypto_sign_ed25519_pk_to_curve25519(partnerIK_raw);
+
+    // Load my keys
+    const myKeys = await loadDecryptedKeys(myUsername);
+    if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
+
+    const myIK_sec_raw = fromBase64(myKeys.identitySecretKey);
+    const myIK_X25519_sec = sodium.crypto_sign_ed25519_sk_to_curve25519(myIK_sec_raw);
+
+    // Compute static ECDH shared secret: DH(IK_my, IK_partner)
+    const staticSharedSecret = sodium.crypto_scalarmult(myIK_X25519_sec, partnerIK_X25519);
+
+    // Derive vault key via KDF
+    const vaultKey = sodium.crypto_kdf_derive_from_key(
+        32,
+        1,
+        "vaultkey", // exactly 8 chars
+        staticSharedSecret
+    );
+
+    return vaultKey;
+}
+

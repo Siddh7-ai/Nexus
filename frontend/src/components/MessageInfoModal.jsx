@@ -1,5 +1,6 @@
 import React from "react";
 import { FiArrowLeft, FiCheck } from "react-icons/fi";
+import { Lock } from "lucide-react";
 
 export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate }) {
     if (!msg) return null;
@@ -34,6 +35,14 @@ export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate 
 
     const formattedTime = formatRelativeTime(msg.createdAt);
 
+    const formatLockTimeAndUser = (msg) => {
+        const lockTime = msg.lockedAt || msg.createdAt;
+        const relativeTime = formatRelativeTime(lockTime);
+        const locker = msg.lockedBy || msg.username || "Someone";
+        const lockerDisplay = locker.toLowerCase() === currentUser?.toLowerCase() ? "You" : locker;
+        return `${relativeTime} by ${lockerDisplay}`;
+    };
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content vault-pin-modal message-info-modal" onClick={e => e.stopPropagation()}>
@@ -46,18 +55,49 @@ export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate 
 
                 <div className="info-preview-section">
                     <div className={`message-row ${isOwn ? "own" : "other"}`} style={{ width: '100%' }}>
-                        <div className={`message-bubble ${isOwn ? "own" : "other"}`} style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>
-                            <p className="message-text" style={{ margin: 0 }}>{msg.text}</p>
-                            <div className="message-meta">
-                                <span className="message-time">
-                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                        {msg.isLocked ? (
+                            <div 
+                                className={`message-bubble ${isOwn ? "own" : "other"} locked-message`} 
+                                style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px' }}>
+                                    <Lock size={16} className="lock-symbol" />
+                                    <span style={{ fontSize: '13.5px', fontWeight: '600', fontStyle: 'italic' }}>Locked Message</span>
+                                </div>
+                                <div className="message-meta">
+                                    <span className="message-time">
+                                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className={`message-bubble ${isOwn ? "own" : "other"}`} style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>
+                                <p className="message-text" style={{ margin: 0 }}>{msg.text}</p>
+                                <div className="message-meta">
+                                    <span className="message-time">
+                                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 <div className="info-status-list">
+                    {msg.isLocked && (
+                        <div className="info-status-item">
+                            <div className="info-status-left">
+                                <span className="status-icon-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Lock size={16} className="lock-symbol" />
+                                </span>
+                                <div className="status-details">
+                                    <span className="status-label">Locked</span>
+                                    <span className="status-time">{formatLockTimeAndUser(msg)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="info-status-item">
                         <div className="info-status-left">
                             <span className="status-icon-wrap">
