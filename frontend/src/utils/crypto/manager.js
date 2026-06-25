@@ -219,6 +219,7 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
         let handshakePayload = null;
         let partnerIdentityPublicKey = null;
         let myIdentityPublicKey = null;
+        let vaultKey = null;
 
         if (sessionBlob) {
             session = DoubleRatchet.initSessionStateBlob(sessionBlob);
@@ -242,6 +243,7 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
             // 3. Initiate handshake
             const handshakeResult = await initiateSession(myKeys, partnerBundle);
             const { sharedSecret } = handshakeResult;
+            vaultKey = handshakeResult.vaultKey;
             handshakePayload = handshakeResult.handshakePayload;
 
             // 4. Capture keys for verification
@@ -269,7 +271,14 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
 
         // Save updated session state
         const newSessionBlob = DoubleRatchet.sessionStateBlob(session.sessionState);
-        await saveSessionState(privateChatId, newSessionBlob, partnerIdentityPublicKey, myIdentityPublicKey);
+        let encryptedVaultKey = null;
+        if (vaultKey) {
+            const masterKey = getMasterKey();
+            if (masterKey) {
+                encryptedVaultKey = encryptData(vaultKey, masterKey);
+            }
+        }
+        await saveSessionState(privateChatId, newSessionBlob, partnerIdentityPublicKey, myIdentityPublicKey, encryptedVaultKey);
 
         // Encrypt a copy for the sender using their own master key
         let senderCiphertext = null;
@@ -291,6 +300,39 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
         };
     } finally {
         release();
+    }
+}
+
+/**
+ * Asynchronously backs up the decrypted incoming message plaintext by re-encrypting it
+ * with the user's master key and sending it to the server's backup endpoint.
+ */
+function backupReceiverCiphertext(msg, decryptedPayload, token) {
+    if (!msg || !msg._id || msg.receiverCiphertext) return;
+    const masterKey = getMasterKey();
+    if (!masterKey) return;
+
+    try {
+        const payloadBytes = sodium.from_string(JSON.stringify(decryptedPayload));
+        const encrypted = encryptData(payloadBytes, masterKey);
+
+        // Non-blocking fire-and-forget request
+        fetch(`${getBackendUrl()}/api/messages/${msg._id}/backup`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ receiverCiphertext: encrypted })
+        }).then(res => {
+            if (!res.ok) {
+                console.error(`Failed to save receiver backup: status ${res.status}`);
+            }
+        }).catch(err => {
+            console.error("Error saving receiver backup to API:", err);
+        });
+    } catch (err) {
+        console.error("Error preparing receiver backup ciphertext:", err);
     }
 }
 
@@ -369,6 +411,10 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
                 
                 // Save updated session
                 await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState));
+
+                // Perform receiver backup (non-blocking)
+                backupReceiverCiphertext(msg, decryptedPayload, token);
+
                 return decryptedPayload;
             } catch (error) {
                 console.warn("Decryption failed with existing session, checking for handshake payload...", error);
@@ -379,11 +425,7 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
 
         // No session or decryption failed: check if a handshake payload exists
         if (!msg.handshakePayload) {
-            if (sessionBlob) {
-                console.warn("Session is permanently corrupted. Deleting local session state.");
-                await deleteSessionState(privateChatId);
-            }
-            throw new Error("Decryption failed: Session out of sync. The corrupted session has been reset. The next message sent will establish a new secure session.");
+            throw new Error("Decryption failed: Session out of sync.");
         }
 
         console.log(`Receiving E2EE handshake from ${partnerUsername}...`);
@@ -414,7 +456,7 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
         }
 
         // Calculate the identical shared secret
-        const sharedSecret = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
+        const { sharedSecret, vaultKey } = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
 
         // Initialize my Double Ratchet receiver session
         const spkPrivateKey = fromBase64(myKeys.signedPrekeySecretKey);
@@ -429,9 +471,33 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
         const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
 
         // Save the new session state
-        await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState), msg.handshakePayload.aliceIdentityPublicKey, myKeys.identityPublicKey);
+        let encryptedVaultKey = null;
+        if (vaultKey) {
+            const masterKey = getMasterKey();
+            if (masterKey) {
+                encryptedVaultKey = encryptData(vaultKey, masterKey);
+            }
+        }
+        await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState), msg.handshakePayload.aliceIdentityPublicKey, myKeys.identityPublicKey, encryptedVaultKey);
+
+        // Perform receiver backup (non-blocking)
+        backupReceiverCiphertext(msg, decryptedPayload, token);
 
         return decryptedPayload;
+    } catch (err) {
+        // Fallback: Try to decrypt using receiverCiphertext backup if it exists
+        if (msg.receiverCiphertext) {
+            const masterKey = getMasterKey();
+            if (masterKey) {
+                try {
+                    const decryptedBytes = decryptData(msg.receiverCiphertext, masterKey);
+                    return JSON.parse(sodium.to_string(decryptedBytes));
+                } catch (fallbackErr) {
+                    console.error("Fallback receiverCiphertext decryption failed:", fallbackErr);
+                }
+            }
+        }
+        throw err;
     } finally {
         release();
     }
@@ -507,9 +573,9 @@ export async function replenishOneTimePrekeysIfNeeded(username, token) {
     }
 }
 
-function getDecryptedMessageKey(messageId) {
-    const myUsername = getCurrentUsername();
-    const prefix = myUsername ? `${myUsername.toLowerCase()}_` : "";
+function getDecryptedMessageKey(messageId, myUsername) {
+    const username = myUsername || getCurrentUsername();
+    const prefix = username ? `${username.toLowerCase()}_` : "";
     return prefix + messageId;
 }
 
@@ -517,16 +583,17 @@ function getDecryptedMessageKey(messageId) {
  * Saves a decrypted message payload (encrypted with the master key) to IndexedDB decrypted_messages cache.
  * @param {string} messageId 
  * @param {object} decryptedPayload 
+ * @param {string} [myUsername]
  * @returns {Promise<void>}
  */
-export async function saveDecryptedMessage(messageId, decryptedPayload) {
+export async function saveDecryptedMessage(messageId, decryptedPayload, myUsername) {
     await cryptoReady;
     const masterKey = getMasterKey();
     if (!masterKey) return;
 
     const payloadBytes = sodium.from_string(JSON.stringify(decryptedPayload));
     const encrypted = encryptData(payloadBytes, masterKey);
-    const key = getDecryptedMessageKey(messageId);
+    const key = getDecryptedMessageKey(messageId, myUsername);
 
     const db = await openDatabase();
     return new Promise((resolve, reject) => {
@@ -542,14 +609,15 @@ export async function saveDecryptedMessage(messageId, decryptedPayload) {
 /**
  * Retrieves and decrypts a cached message payload from IndexedDB.
  * @param {string} messageId 
+ * @param {string} [myUsername]
  * @returns {Promise<object|null>}
  */
-export async function getDecryptedMessage(messageId) {
+export async function getDecryptedMessage(messageId, myUsername) {
     await cryptoReady;
     const masterKey = getMasterKey();
     if (!masterKey) return null;
 
-    const key = getDecryptedMessageKey(messageId);
+    const key = getDecryptedMessageKey(messageId, myUsername);
     try {
         const db = await openDatabase();
         const record = await new Promise((resolve, reject) => {
@@ -610,7 +678,7 @@ export async function decryptAndCacheMessage(msg, myUsername, token) {
 
     const decryptPromise = (async () => {
         // 2. Check IndexedDB decrypted message cache
-        const cached = await getDecryptedMessage(msg._id);
+        const cached = await getDecryptedMessage(msg._id, myUsername);
         if (cached) {
             return cached;
         }
@@ -618,8 +686,10 @@ export async function decryptAndCacheMessage(msg, myUsername, token) {
         // 3. Perform the actual cryptographic decryption
         const decryptedPayload = await decryptIncomingMessage(msg, myUsername, token);
 
-        // 4. Save to IndexedDB cache
-        await saveDecryptedMessage(msg._id, decryptedPayload);
+        // 4. Save to IndexedDB cache (fire-and-forget)
+        saveDecryptedMessage(msg._id, decryptedPayload, myUsername).catch(err => {
+            console.error("Failed to save to IndexedDB cache:", err);
+        });
         return decryptedPayload;
     })();
 

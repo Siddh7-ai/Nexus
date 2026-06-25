@@ -1,9 +1,9 @@
 const DB_NAME = "nexus_crypto_db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 /**
  * Open or initialize the IndexedDB database.
- * Creates stores: 'key_material', 'sessions', and 'decrypted_messages'.
+ * Creates stores: 'key_material', 'sessions', 'decrypted_messages', and 'vault_pins'.
  * @returns {Promise<IDBDatabase>}
  */
 export function openDatabase() {
@@ -20,6 +20,9 @@ export function openDatabase() {
             }
             if (!db.objectStoreNames.contains("decrypted_messages")) {
                 db.createObjectStore("decrypted_messages", { keyPath: "messageId" });
+            }
+            if (!db.objectStoreNames.contains("vault_pins")) {
+                db.createObjectStore("vault_pins", { keyPath: "pinId" });
             }
         };
 
@@ -124,7 +127,7 @@ function getSessionKey(chatId) {
  * @param {string} [myIdentityPublicKey]
  * @returns {Promise<void>}
  */
-export async function saveSessionState(chatId, sessionBlob, partnerIdentityPublicKey = null, myIdentityPublicKey = null) {
+export async function saveSessionState(chatId, sessionBlob, partnerIdentityPublicKey = null, myIdentityPublicKey = null, encryptedVaultKey = null) {
     const db = await openDatabase();
     const key = getSessionKey(chatId);
     return new Promise((resolve, reject) => {
@@ -138,7 +141,8 @@ export async function saveSessionState(chatId, sessionBlob, partnerIdentityPubli
                 chatId: key,
                 sessionBlob,
                 partnerIdentityPublicKey: partnerIdentityPublicKey || existing.partnerIdentityPublicKey || null,
-                myIdentityPublicKey: myIdentityPublicKey || existing.myIdentityPublicKey || null
+                myIdentityPublicKey: myIdentityPublicKey || existing.myIdentityPublicKey || null,
+                encryptedVaultKey: encryptedVaultKey || existing.encryptedVaultKey || null
             };
             const putRequest = store.put(record);
             putRequest.onsuccess = () => resolve();
@@ -278,5 +282,40 @@ export async function cacheSessionIdentityKeys(chatId, partnerIdentityPublicKey,
             }
         };
         getRequest.onerror = () => reject(getRequest.error);
+    });
+}
+
+/**
+ * Saves E2EE Vault PIN data for a private chat in IndexedDB.
+ * @param {string} pinId - e.g. "vault_pin_${myUsername}_${chatId}"
+ * @param {object} data - { salt, encryptedVaultKey: { nonce, ciphertext }, pinType, pinHash }
+ * @returns {Promise<void>}
+ */
+export async function saveVaultPinData(pinId, data) {
+    const db = await openDatabase();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("vault_pins", "readwrite");
+        const store = transaction.objectStore("vault_pins");
+        const request = store.put({ pinId, ...data });
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+/**
+ * Retrieves E2EE Vault PIN data from IndexedDB.
+ * @param {string} pinId
+ * @returns {Promise<object|null>}
+ */
+export async function getVaultPinData(pinId) {
+    const db = await openDatabase();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction("vault_pins", "readonly");
+        const store = transaction.objectStore("vault_pins");
+        const request = store.get(pinId);
+
+        request.onsuccess = (event) => resolve(event.target.result || null);
+        request.onerror = () => reject(request.error);
     });
 }

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Message = require("./models/Message");
 const ClearedChat = require("./models/ClearedChat");
 const Room = require("./models/Room");
+const VaultItem = require("./models/VaultItem");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -32,6 +33,182 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/keys", keyRoutes);
+
+// Endpoint for E2EE receiver ciphertext backup (reuses userRoutes middleware)
+app.post("/api/messages/:messageId/backup", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot backup messages." });
+        }
+
+        const { messageId } = req.params;
+        const { receiverCiphertext } = req.body;
+
+        if (!receiverCiphertext || !receiverCiphertext.nonce || !receiverCiphertext.ciphertext) {
+            return res.status(400).json({ error: "Invalid backup payload." });
+        }
+
+        const msg = await Message.findById(messageId);
+        if (!msg) {
+            return res.status(404).json({ error: "Message not found." });
+        }
+
+        if (!msg.privateChatId) {
+            return res.status(400).json({ error: "Not a private chat message." });
+        }
+
+        const sender = msg.username.toLowerCase();
+        const requester = req.user.username.toLowerCase();
+
+        // 1. Verify sender cannot use receiver backup endpoint on their own messages
+        if (sender === requester) {
+            return res.status(403).json({ error: "Sender cannot backup receiver ciphertext on their own message." });
+        }
+
+        // 2. Verify requesting user is actually a recipient of that message
+        const chatUsers = msg.privateChatId.split("_");
+        const isRecipient = chatUsers.includes(requester);
+        if (!isRecipient) {
+            return res.status(403).json({ error: "Access denied. You are not a recipient of this message." });
+        }
+
+        // 3. Save receiverCiphertext to that message document
+        msg.receiverCiphertext = receiverCiphertext;
+        await msg.save();
+
+        res.json({ message: "Backup saved successfully." });
+    } catch (err) {
+        console.error("Backup error:", err);
+        res.status(500).json({ error: "Server error saving backup." });
+    }
+});
+
+// GET /api/vault/:privateChatId (re-uses userRoutes middleware)
+app.get("/api/vault/:privateChatId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
+        }
+        const { privateChatId } = req.params;
+        const members = privateChatId.split("_");
+        if (!members.includes(req.user.username.toLowerCase())) {
+            return res.status(403).json({ error: "Not a member of this chat" });
+        }
+
+        const items = await VaultItem.find({ privateChatId }).sort({ createdAt: -1 });
+        res.json(items);
+    } catch (err) {
+        console.error("Fetch vault items error:", err);
+        res.status(500).json({ error: "Server error fetching vault items." });
+    }
+});
+
+// POST /api/vault/:privateChatId (re-uses userRoutes middleware)
+app.post("/api/vault/:privateChatId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
+        }
+        const { privateChatId } = req.params;
+        const members = privateChatId.split("_");
+        if (!members.includes(req.user.username.toLowerCase())) {
+            return res.status(403).json({ error: "Not a member of this chat" });
+        }
+
+        const { encryptedData, itemType } = req.body;
+        if (!encryptedData || !encryptedData.nonce || !encryptedData.ciphertext || itemType !== "text") {
+            return res.status(400).json({ error: "Invalid text item payload." });
+        }
+
+        const newItem = new VaultItem({
+            privateChatId,
+            uploadedBy: req.user.username,
+            itemType,
+            encryptedData
+        });
+        await newItem.save();
+        res.json(newItem);
+    } catch (err) {
+        console.error("Save vault text item error:", err);
+        res.status(500).json({ error: "Server error saving vault item." });
+    }
+});
+
+// POST /api/vault/:privateChatId/file (re-uses userRoutes middleware)
+app.post("/api/vault/:privateChatId/file", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
+        }
+        const { privateChatId } = req.params;
+        const members = privateChatId.split("_");
+        if (!members.includes(req.user.username.toLowerCase())) {
+            return res.status(403).json({ error: "Not a member of this chat" });
+        }
+
+        const { encryptedData, fileName, fileSize, fileType, fileRef } = req.body;
+        if (!encryptedData || !encryptedData.nonce || !encryptedData.ciphertext || !fileRef) {
+            return res.status(400).json({ error: "Invalid file item payload." });
+        }
+
+        const newItem = new VaultItem({
+            privateChatId,
+            uploadedBy: req.user.username,
+            itemType: "file",
+            encryptedData,
+            fileRef,
+            fileName,
+            fileSize,
+            fileType
+        });
+        await newItem.save();
+        res.json(newItem);
+    } catch (err) {
+        console.error("Save vault file item error:", err);
+        res.status(500).json({ error: "Server error saving vault item." });
+    }
+});
+
+// DELETE /api/vault/:privateChatId/:itemId (re-uses userRoutes middleware)
+app.delete("/api/vault/:privateChatId/:itemId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
+        }
+        const { privateChatId, itemId } = req.params;
+        const members = privateChatId.split("_");
+        if (!members.includes(req.user.username.toLowerCase())) {
+            return res.status(403).json({ error: "Not a member of this chat" });
+        }
+
+        const item = await VaultItem.findById(itemId);
+        if (!item) {
+            return res.status(404).json({ error: "Vault item not found" });
+        }
+
+        // Verify item belongs to this private chat
+        if (item.privateChatId !== privateChatId) {
+            return res.status(400).json({ error: "Vault item does not belong to this chat" });
+        }
+
+        // Delete associated file in GridFS if it's a file item
+        if (item.itemType === "file" && item.fileRef) {
+            const db = mongoose.connection.db;
+            const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+            try {
+                await bucket.delete(new ObjectId(item.fileRef));
+            } catch (fileErr) {
+                console.error("Error deleting vault file from GridFS:", fileErr);
+            }
+        }
+
+        await VaultItem.findByIdAndDelete(itemId);
+        res.json({ message: "Vault item deleted successfully." });
+    } catch (err) {
+        console.error("Delete vault item error:", err);
+        res.status(500).json({ error: "Server error deleting vault item." });
+    }
+});
 
 // Upload endpoint (stores files in MongoDB GridFS)
 app.post("/api/upload", upload.single("file"), async (req, res) => {
@@ -810,7 +987,8 @@ io.on("connection", async (socket) => {
                 fileQuality: data.fileQuality || null,
                 ratchetHeader: data.ratchetHeader || null,
                 handshakePayload: data.handshakePayload || null,
-                senderCiphertext: data.senderCiphertext || null
+                senderCiphertext: data.senderCiphertext || null,
+                replyTo: data.replyTo || null
             };
 
             if (data.privateChatId) {

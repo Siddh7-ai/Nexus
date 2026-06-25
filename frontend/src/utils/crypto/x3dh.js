@@ -75,6 +75,13 @@ export async function initiateSession(aliceKeys, bobBundle) {
     // 7. Derive the shared secret via KDF (crypto_generichash)
     const sharedSecret = sodium.crypto_generichash(32, concat);
 
+    const vaultKey = sodium.crypto_kdf_derive_from_key(
+        32,
+        1,
+        "vaultkey", // exactly 8 chars
+        sharedSecret
+    );
+
     // 8. Construct the handshake initialization payload
     const handshakePayload = {
         aliceIdentityPublicKey: aliceKeys.identityPublicKey, // Ed25519 public key base64
@@ -82,7 +89,7 @@ export async function initiateSession(aliceKeys, bobBundle) {
         oneTimePrekeyId: hasOPK ? bobBundle.oneTimePrekey.keyId : null
     };
 
-    return { sharedSecret, handshakePayload };
+    return { sharedSecret, handshakePayload, vaultKey };
 }
 
 /**
@@ -137,7 +144,16 @@ export async function receiveSession(bobKeys, handshakePayload, opkSecretKeyBase
     }
 
     // 5. Derive the shared secret via KDF (crypto_generichash)
-    return sodium.crypto_generichash(32, concat);
+    const sharedSecret = sodium.crypto_generichash(32, concat);
+
+    const vaultKey = sodium.crypto_kdf_derive_from_key(
+        32,
+        1,
+        "vaultkey", // exactly 8 chars
+        sharedSecret
+    );
+
+    return { sharedSecret, vaultKey };
 }
 
 /**

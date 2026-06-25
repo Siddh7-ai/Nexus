@@ -23,11 +23,14 @@ import {
 } from "../utils/crypto/manager";
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
 import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys } from "../utils/crypto/keydb";
+import Vault from "../components/Vault";
+import MessageInfoModal from "../components/MessageInfoModal";
+import sodium from "libsodium-wrappers-sumo";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
-import { FiLock, FiTrash2 } from "react-icons/fi";
+import { FiLock, FiTrash2, FiMessageSquare, FiX } from "react-icons/fi";
 import ThemeTransitionOptions from "../components/ThemeTransitionOptions";
 
 // Lazy-load emoji picker library to optimize bundle load times
@@ -137,6 +140,7 @@ function Chat() {
         return () => {
             document.body.classList.remove("chat-page-body");
             document.documentElement.classList.remove("chat-page-html");
+            clearVaultState();
         };
     }, []);
 
@@ -147,10 +151,35 @@ function Chat() {
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [decryptedMessages, setDecryptedMessages] = useState({});
+
+    // Reply and message info states
+    const [replyToMsg, setReplyToMsg] = useState(null);
+    const [infoMsg, setInfoMsg] = useState(null);
     
     const [activeRoom, setActiveRoom] = useState(null);
     const [activePrivate, setActivePrivate] = useState(null); // privateChatId
     const [activePrivateName, setActivePrivateName] = useState(""); // other username
+
+    const [vaultKey, setVaultKeyState] = useState(null);
+    const [showVault, setShowVault] = useState(false);
+
+    const setVaultKey = (newKey) => {
+        setVaultKeyState(prevKey => {
+            if (prevKey && prevKey !== newKey) {
+                try {
+                    sodium.memzero(prevKey);
+                } catch (e) {
+                    console.error("Failed to memzero old vault key:", e);
+                }
+            }
+            return newKey;
+        });
+    };
+
+    const clearVaultState = () => {
+        setShowVault(false);
+        setVaultKey(null);
+    };
 
     const [showVerifyModal, setShowVerifyModal] = useState(false);
     const [showVisualizer, setShowVisualizer] = useState(false);
@@ -200,11 +229,12 @@ function Chat() {
                     if (isCancelled) break;
                     setDecryptedMessages(prev => ({
                         ...prev,
-                        [msg._id]: { text: "[Decryption Error: Session out of sync]", isError: true }
+                        [msg._id]: { text: "[Message unavailable — sent before session was established]", isError: true }
                     }));
                     if (newlyReceivedMessageIdsRef.current.has(msg._id)) {
                         newlyReceivedMessageIdsRef.current.delete(msg._id);
                         if (socketRef.current && msg.privateChatId) {
+                            await deleteSessionState(msg.privateChatId);
                             socketRef.current.emit("requestSessionReset", { privateChatId: msg.privateChatId });
                         }
                     }
@@ -414,6 +444,8 @@ function Chat() {
     });
     const [undoDeleteInfo, setUndoDeleteInfo] = useState(null);
     const deleteTimeoutRef = useRef(null);
+    const [copyToastActive, setCopyToastActive] = useState(false);
+    const copyToastTimeoutRef = useRef(null);
 
     // Notification states and refs
     const [notificationActive, setNotificationActive] = useState(false);
@@ -1185,6 +1217,7 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
+        clearVaultState();
         setSearchParams({ room });
         setActiveRoom(room);
         setActivePrivate(null);
@@ -1202,6 +1235,7 @@ function Chat() {
             setShowLoginModal(true);
             return;
         }
+        clearVaultState();
         setSearchParams({ private: otherUsername });
         setActivePrivate(privateChatId);
         setActivePrivateName(otherUsername);
@@ -1358,6 +1392,7 @@ function Chat() {
     };
 
     const clearActiveChat = () => {
+        clearVaultState();
         setSearchParams({});
         setActiveRoom(null);
         setActiveRoomDetails(null);
@@ -1422,6 +1457,12 @@ function Chat() {
         const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
         const originalMessage = message;
 
+        const replyToPayload = replyToMsg ? {
+            messageId: replyToMsg._id,
+            text: replyToMsg.text,
+            username: replyToMsg.username
+        } : null;
+
         const tempMsg = {
             _id: tempId,
             username: username,
@@ -1436,7 +1477,8 @@ function Chat() {
             fileName: realAttachment ? realAttachment.fileName : null,
             fileSize: realAttachment ? realAttachment.fileSize : null,
             fileType: realAttachment ? realAttachment.fileType : null,
-            fileQuality: realAttachment ? realAttachment.fileQuality : null
+            fileQuality: realAttachment ? realAttachment.fileQuality : null,
+            replyTo: replyToPayload
         };
 
         if (activePrivate) {
@@ -1489,7 +1531,8 @@ function Chat() {
                     msgData = {
                         ...encryptedPayload,
                         privateChatId: activePrivateRef.current,
-                        tempId: tempId
+                        tempId: tempId,
+                        replyTo: replyToPayload
                     };
 
                     // Trigger live data-flow visualizer for sent messages
@@ -1510,8 +1553,10 @@ function Chat() {
                 msgData = realAttachment ? { ...realAttachment } : { text: originalMessage };
                 msgData.room = activeRoomRef.current;
                 msgData.tempId = tempId;
+                msgData.replyTo = replyToPayload;
             }
 
+            setReplyToMsg(null); // Clear reply state
             socketRef.current.emit("message", msgData);
         })();
     }
@@ -1656,6 +1701,25 @@ function Chat() {
             setUndoDeleteInfo(null);
         }
     };
+
+    const handleCopySuccess = () => {
+        if (copyToastTimeoutRef.current) {
+            clearTimeout(copyToastTimeoutRef.current);
+        }
+        setCopyToastActive(true);
+        copyToastTimeoutRef.current = setTimeout(() => {
+            setCopyToastActive(false);
+            copyToastTimeoutRef.current = null;
+        }, 3000);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (copyToastTimeoutRef.current) {
+                clearTimeout(copyToastTimeoutRef.current);
+            }
+        };
+    }, []);
 
     async function openOwnProfileSettings() {
         setShowProfileSettings(true);
@@ -2314,6 +2378,7 @@ function Chat() {
                                     }
                                 }}
                                 onVerifyClick={() => setShowVerifyModal(true)}
+                                onVaultClick={() => setShowVault(v => !v)}
                                 onToggleVisualizer={() => {
                                     setShowVisualizer(prev => {
                                         const nextState = !prev;
@@ -2384,9 +2449,28 @@ function Chat() {
                                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                                         allUsers={allUsers}
                                         onlineUserList={onlineUserList}
+                                        onReply={(m) => setReplyToMsg(m)}
+                                        onShowMessageInfo={(m) => setInfoMsg(m)}
+                                        onCopySuccess={handleCopySuccess}
                                     />
                                 );
                             })()}
+
+                            {replyToMsg && (
+                                <div className="reply-preview-container">
+                                    <div className="reply-preview-content">
+                                        <span className="reply-preview-username">
+                                            {replyToMsg.username === username ? "You" : replyToMsg.displayName || replyToMsg.username}
+                                        </span>
+                                        <span className="reply-preview-text">
+                                            {replyToMsg.text || (replyToMsg.fileName ? `📁 ${replyToMsg.fileName}` : "Attachment")}
+                                        </span>
+                                    </div>
+                                    <button className="reply-preview-close" onClick={() => setReplyToMsg(null)}>
+                                        <FiX size={16} />
+                                    </button>
+                                </div>
+                            )}
 
                             <MessageInput
                                 message={message}
@@ -2401,6 +2485,18 @@ function Chat() {
                                 isGuest={isGuest}
                                 onLockTrigger={() => setShowLoginModal(true)}
                             />
+
+                            {activePrivate && (
+                                <Vault 
+                                    isOpen={showVault}
+                                    onClose={() => setShowVault(false)}
+                                    privateChatId={activePrivate}
+                                    myUsername={username}
+                                    token={getAuthToken()}
+                                    vaultKey={vaultKey}
+                                    setVaultKey={setVaultKey}
+                                />
+                            )}
                         </>
                     )}
                 </div>
@@ -2464,6 +2560,15 @@ function Chat() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {infoMsg && (
+                <MessageInfoModal
+                    msg={infoMsg}
+                    currentUser={username}
+                    onClose={() => setInfoMsg(null)}
+                    isPrivate={!!activePrivate}
+                />
             )}
 
             <VerifyModal
@@ -3443,12 +3548,41 @@ function Chat() {
                                                 </span>
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '11px', fontWeight: '700', color: 
-                                            userStatus === "Online" ? '#17d67e' :
-                                            userStatus === "Away" ? '#ffb020' :
-                                            userStatus === "Busy" ? '#ef4444' : '#6b7280'
-                                        }}>
-                                            {userStatus}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            {!isCurrentUser && (
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const pChatId = [username.toLowerCase(), user.username.toLowerCase()].sort().join("_");
+                                                        selectPrivate(pChatId, user.username);
+                                                        setShowOnlineList(false);
+                                                    }}
+                                                    title={`Chat with ${user.displayName || user.username}`}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'var(--accent, #a855f7)',
+                                                        cursor: 'pointer',
+                                                        padding: '6px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderRadius: '50%',
+                                                        transition: 'background 0.2s, color 0.2s',
+                                                        marginRight: '2px'
+                                                    }}
+                                                    className="online-member-chat-btn"
+                                                >
+                                                    <FiMessageSquare size={16} />
+                                                </button>
+                                            )}
+                                            <div style={{ fontSize: '11px', fontWeight: '700', color: 
+                                                userStatus === "Online" ? '#17d67e' :
+                                                userStatus === "Away" ? '#ffb020' :
+                                                userStatus === "Busy" ? '#ef4444' : '#6b7280'
+                                            }}>
+                                                {userStatus}
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -3577,6 +3711,14 @@ function Chat() {
                     >
                         Undo
                     </button>
+                </div>
+            )}
+
+            {/* COPY TOAST BANNER */}
+            {copyToastActive && (
+                <div className="copy-toast">
+                    <span className="copy-toast-icon">✓</span>
+                    <span className="copy-toast-text">Message copied to clipboard</span>
                 </div>
             )}
 

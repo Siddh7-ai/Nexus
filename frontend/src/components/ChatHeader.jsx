@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity } from "react-icons/fi";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity, FiBriefcase } from "react-icons/fi";
 
 const VerifiedRoomBadge = ({ size = 15, style = {} }) => (
     <svg 
@@ -77,7 +77,8 @@ function ChatHeader({
     onLeaveRoom,
     onEditRoomClick,
     onVerifyClick,
-    onToggleVisualizer
+    onToggleVisualizer,
+    onVaultClick
 }) {
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -206,6 +207,26 @@ function ChatHeader({
                                     }}
                                 >
                                     <FiActivity size={16} />
+                                </button>
+                                <button 
+                                    className="header-vault-btn" 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onVaultClick && onVaultClick();
+                                    }}
+                                    title="Open Shared Vault"
+                                    style={{ 
+                                        background: 'none', 
+                                        border: 'none', 
+                                        color: 'var(--accent, #a855f7)', 
+                                        cursor: 'pointer', 
+                                        padding: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        opacity: 0.8
+                                    }}
+                                >
+                                    <FiBriefcase size={16} />
                                 </button>
                             </div>
                         </div>

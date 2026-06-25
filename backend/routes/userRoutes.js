@@ -647,4 +647,5 @@ router.get("/friend-requests/pending", authenticateToken, async (req, res) => {
     }
 });
 
+router.authenticateToken = authenticateToken;
 module.exports = router;

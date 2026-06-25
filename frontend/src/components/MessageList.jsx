@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film, X } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2 } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 
 const customSchema = {
@@ -196,12 +196,21 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [openUp, setOpenUp] = useState(false);
     const isOwn = msg.username?.toLowerCase() === currentUser?.toLowerCase();
 
     if (msg.isDeleted || msg.username === "System") return null;
+
+    const handleCopy = () => {
+        if (!msg.text) return;
+        navigator.clipboard.writeText(msg.text);
+        if (onCopySuccess) {
+            onCopySuccess();
+        }
+    };
 
     return (
         <div className={`message-actions ${isOwn ? "own" : "other"}`}>
@@ -209,7 +218,18 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                 <button
                     className="action-btn"
                     title="React"
-                    onClick={() => { setShowReactions(v => !v); setShowMenu(false); }}
+                    onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const spaceBelow = window.innerHeight - rect.bottom;
+                        const spaceAbove = rect.top;
+                        if (spaceBelow < 120 && spaceAbove > spaceBelow) {
+                            setOpenUp(true);
+                        } else {
+                            setOpenUp(false);
+                        }
+                        setShowReactions(v => !v);
+                        setShowMenu(false);
+                    }}
                 >
                     ☺
                 </button>
@@ -217,14 +237,25 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                 <button
                     className="action-btn"
                     title="More"
-                    onClick={() => { setShowMenu(v => !v); setShowReactions(false); }}
+                    onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const spaceBelow = window.innerHeight - rect.bottom;
+                        const spaceAbove = rect.top;
+                        if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+                            setOpenUp(true);
+                        } else {
+                            setOpenUp(false);
+                        }
+                        setShowMenu(v => !v);
+                        setShowReactions(false);
+                    }}
                 >
                     ...
                 </button>
             </div>
 
             {showReactions && (
-                <div className="reaction-emoji-bar">
+                <div className={`reaction-emoji-bar ${openUp ? "open-up" : ""}`}>
                     {REACTION_EMOJIS.map(emoji => {
                         const hasReacted = msg.reactions?.some(
                             r => r.emoji === emoji && r.username?.toLowerCase() === currentUser?.toLowerCase()
@@ -255,24 +286,47 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
             )}
 
             {showMenu && (
-                <div className="message-menu">
-                    {isOwn ? (
-                        <>
-                            {!msg.privateChatId && (
-                                <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
-                                    Edit
-                                </button>
-                            )}
-                            <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
-                                Delete for me
-                            </button>
-                            <button className="menu-item danger" onClick={() => { onDelete("everyone"); setShowMenu(false); }}>
-                                Delete for everyone
-                            </button>
-                        </>
-                    ) : (
-                        <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
-                            Delete for me
+                <div className={`message-menu ${openUp ? "open-up" : ""}`}>
+                    {isOwn && (
+                        <button className="menu-item" onClick={() => { onShowMessageInfo(msg); setShowMenu(false); }}>
+                            <Info size={16} className="menu-icon" />
+                            <span>Message info</span>
+                        </button>
+                    )}
+                    <button className="menu-item" onClick={() => { onReply(msg); setShowMenu(false); }}>
+                        <CornerUpLeft size={16} className="menu-icon" />
+                        <span>Reply</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { handleCopy(); setShowMenu(false); }}>
+                        <Copy size={16} className="menu-icon" />
+                        <span>Copy</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { alert("Forwarding will be available soon!"); setShowMenu(false); }}>
+                        <CornerUpRight size={16} className="menu-icon" />
+                        <span>Forward</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { alert("Pinning will be available soon!"); setShowMenu(false); }}>
+                        <Pin size={16} className="menu-icon" />
+                        <span>Pin</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { alert("Starring will be available soon!"); setShowMenu(false); }}>
+                        <Star size={16} className="menu-icon" />
+                        <span>Star</span>
+                    </button>
+                    {isOwn && (
+                        <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
+                            <Pencil size={16} className="menu-icon" />
+                            <span>Edit</span>
+                        </button>
+                    )}
+                    <button className="menu-item danger" onClick={() => { onDelete("me"); setShowMenu(false); }}>
+                        <Trash2 size={16} className="menu-icon" />
+                        <span>Delete for me</span>
+                    </button>
+                    {isOwn && (
+                        <button className="menu-item danger" onClick={() => { onDelete("everyone"); setShowMenu(false); }}>
+                            <Trash2 size={16} className="menu-icon" />
+                            <span>Delete for everyone</span>
                         </button>
                     )}
                 </div>
@@ -281,7 +335,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     );
 }
 
-function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [] }) {
+function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [], onReply, onShowMessageInfo, onCopySuccess }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
@@ -361,7 +415,15 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
     if (messages.length === 0) {
         return (
             <div className="messages-wrapper">
-                <div className="messages" ref={scrollContainerRef} onScroll={handleScroll}>
+                <div className="messages empty-chat-view" ref={scrollContainerRef} onScroll={handleScroll}>
+                    <div className="empty-chat-illustration-container">
+                        <img 
+                            src="/mailbox-empty.png" 
+                            alt="No messages" 
+                            className="empty-chat-illustration" 
+                        />
+                        <p className="empty-chat-text">No messages here yet. Start the conversation!</p>
+                    </div>
                     <div ref={messagesEndRef}></div>
                 </div>
             </div>
@@ -398,9 +460,24 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                     onEdit={() => onEdit(msg)}
                                     onDelete={(scope) => onDelete(msg._id, scope)}
                                     onAddReactionClick={onAddReactionClick}
+                                    onReply={onReply}
+                                    onShowMessageInfo={onShowMessageInfo}
+                                    onCopySuccess={onCopySuccess}
                                 />
 
                                 <div className={`message-bubble ${isOwn ? "own" : "other"} ${msg.isDeleted ? "deleted" : ""}`}>
+                                    {msg.replyTo && msg.replyTo.messageId && (
+                                        <div className="message-reply-preview">
+                                            <div className="reply-preview-body">
+                                                <span className="reply-preview-user">
+                                                    {msg.replyTo.username === currentUser ? "You" : msg.replyTo.username}
+                                                </span>
+                                                <p className="reply-preview-msg">
+                                                    {msg.replyTo.text}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
                                     {!isOwn && (
                                         <span 
                                             className="message-username" 

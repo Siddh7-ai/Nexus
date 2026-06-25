@@ -104,6 +104,21 @@ const messageSchema = new mongoose.Schema({
         },
         default: null
     },
+    receiverCiphertext: {
+        type: {
+            nonce: { type: String },
+            ciphertext: { type: String }
+        },
+        default: null
+    },
+    replyTo: {
+        type: {
+            messageId: { type: String, default: null },
+            text: { type: String, default: "" },
+            username: { type: String, default: "" }
+        },
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now
