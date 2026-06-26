@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity, FiBriefcase } from "react-icons/fi";
+import { FiSun, FiMoon, FiMoreVertical, FiUser, FiSlash, FiTrash2, FiLogOut, FiLogIn, FiCopy, FiShare2, FiSettings, FiMenu, FiChevronLeft, FiLock, FiActivity, FiBriefcase, FiCheckSquare, FiX, FiStar, FiCornerUpRight, FiDownload } from "react-icons/fi";
 
 const VerifiedRoomBadge = ({ size = 15, style = {} }) => (
     <svg 
@@ -78,7 +78,16 @@ function ChatHeader({
     onEditRoomClick,
     onVerifyClick,
     onToggleVisualizer,
-    onVaultClick
+    onVaultClick,
+    isSelectionMode = false,
+    selectedMessageIds = new Set(),
+    onStartSelectionMode,
+    onCancelSelection,
+    onBulkDelete,
+    onBulkDownload,
+    onBulkStar,
+    onBulkForward,
+    messages = []
 }) {
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -126,6 +135,43 @@ function ChatHeader({
     const isRoomAdmin = roomDetails?.admin?._id === username || 
                         roomDetails?.admin?.username === username || 
                         roomDetails?.admin === username;
+
+    const selectedMessages = messages.filter(m => selectedMessageIds.has(m._id));
+    const canDownload = selectedMessages.length > 0 && selectedMessages.every(msg => {
+        const isVoice = msg.fileType === "audio/e2ee" || msg.fileType?.startsWith("audio/");
+        return msg.fileUrl && !isVoice;
+    });
+
+    if (isSelectionMode) {
+        return (
+            <div className="chat-header">
+                <div className="selection-header-container">
+                    <div className="selection-header-left">
+                        <button className="selection-cancel-btn" onClick={onCancelSelection} aria-label="Cancel selection" title="Cancel Selection">
+                            <FiX size={20} />
+                        </button>
+                        <span className="selection-count-text">{selectedMessageIds.size} Selected</span>
+                    </div>
+                    <div className="selection-header-actions">
+                        <button className="selection-action-btn" onClick={onBulkStar} title="Star selected messages">
+                            <FiStar size={18} />
+                        </button>
+                        <button className="selection-action-btn" onClick={onBulkForward} title="Forward selected messages">
+                            <FiCornerUpRight size={18} />
+                        </button>
+                        {canDownload && (
+                            <button className="selection-action-btn" onClick={onBulkDownload} title="Download selected files">
+                                <FiDownload size={18} />
+                            </button>
+                        )}
+                        <button className="selection-action-btn danger" onClick={onBulkDelete} title="Delete selected messages">
+                            <FiTrash2 size={18} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="chat-header">
@@ -326,6 +372,16 @@ function ChatHeader({
                                         </button>
                                     )}
 
+                                    <button 
+                                        className="header-dropdown-item" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            onStartSelectionMode && onStartSelectionMode();
+                                        }}
+                                    >
+                                        <FiCheckSquare /> Select messages
+                                    </button>
+
                                     {/* 2. Dark Mode */}
                                     <button 
                                         className="header-dropdown-item" 
@@ -388,6 +444,16 @@ function ChatHeader({
                                         }}
                                     >
                                         <FiUser /> Group Info
+                                    </button>
+
+                                    <button 
+                                        className="header-dropdown-item" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            onStartSelectionMode && onStartSelectionMode();
+                                        }}
+                                    >
+                                        <FiCheckSquare /> Select messages
                                     </button>
 
                                     {/* 2. Copy Code */}

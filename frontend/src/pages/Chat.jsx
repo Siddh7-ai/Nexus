@@ -452,11 +452,28 @@ function Chat() {
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         isOpen: false,
         messageId: null,
+        messageIds: [],
         deleteFor: 'me',
         hasFile: false,
         deleteFileFromServer: true
     });
     const [undoDeleteInfo, setUndoDeleteInfo] = useState(null);
+    const [undoClearInfo, setUndoClearInfo] = useState(null);
+    const clearTimeoutRef = useRef(null);
+
+    const undoDeleteInfoRef = useRef(undoDeleteInfo);
+    useEffect(() => {
+        undoDeleteInfoRef.current = undoDeleteInfo;
+    }, [undoDeleteInfo]);
+
+    const undoClearInfoRef = useRef(undoClearInfo);
+    useEffect(() => {
+        undoClearInfoRef.current = undoClearInfo;
+    }, [undoClearInfo]);
+
+    // Message multi-selection states
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedMessageIds, setSelectedMessageIds] = useState(new Set());
     const deleteTimeoutRef = useRef(null);
     const [copyToastActive, setCopyToastActive] = useState(false);
     const copyToastTimeoutRef = useRef(null);
@@ -490,6 +507,40 @@ function Chat() {
     useEffect(() => {
         activePrivateNameRef.current = activePrivateName;
     }, [activePrivateName]);
+
+    useEffect(() => {
+        setIsSelectionMode(false);
+        setSelectedMessageIds(new Set());
+
+        // Commit pending deletes immediately on room change
+        if (deleteTimeoutRef.current) {
+            clearTimeout(deleteTimeoutRef.current);
+            deleteTimeoutRef.current = null;
+            const info = undoDeleteInfoRef.current;
+            if (info) {
+                const prevTargets = info.messageIds || [info.messageId];
+                prevTargets.forEach(id => {
+                    socketRef.current?.emit("deleteMessage", {
+                        messageId: id,
+                        deleteFor: info.deleteFor,
+                        deleteFileFromServer: info.deleteFileFromServer
+                    });
+                });
+                setUndoDeleteInfo(null);
+            }
+        }
+
+        // Commit pending clears immediately on room change
+        if (clearTimeoutRef.current) {
+            clearTimeout(clearTimeoutRef.current);
+            clearTimeoutRef.current = null;
+            const info = undoClearInfoRef.current;
+            if (info) {
+                socketRef.current?.emit("clearChat", { chatId: info.chatId });
+                setUndoClearInfo(null);
+            }
+        }
+    }, [activeRoom, activePrivate]);
 
     const allUsersRef = useRef(allUsers);
     useEffect(() => {
@@ -557,9 +608,34 @@ function Chat() {
         }, 3600);
     };
 
+    const formatNotificationText = (data) => {
+        const isVoiceMessage = data.fileType === "audio/e2ee" || data.fileType?.startsWith("audio/");
+        if (isVoiceMessage) {
+            let voiceData = null;
+            try {
+                voiceData = JSON.parse(data.text);
+            } catch(e) {}
+            if (voiceData) {
+                let transcriptText = voiceData.transcript || "";
+                if (transcriptText.length > 10) {
+                    transcriptText = transcriptText.substring(0, 10) + "...";
+                }
+                const secs = voiceData.duration;
+                let durationStr = "";
+                if (typeof secs !== "undefined" && secs !== null) {
+                    const m = Math.floor(secs / 60);
+                    const s = Math.floor(secs % 60);
+                    durationStr = `(${m}:${s < 10 ? "0" : ""}${s})`;
+                }
+                return `Sent voice message\n${transcriptText} ${durationStr}`.trim();
+            }
+        }
+        return data.text || "Sent an attachment";
+    };
+
     const triggerDesktopNotification = (data) => {
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-            const bodyText = data.text || "Sent an attachment";
+            const bodyText = formatNotificationText(data);
             const senderName = data.displayName || data.username;
             const title = data.room ? `New message in #${data.room}` : `New message from ${senderName}`;
             const notification = new Notification(title, {
@@ -911,7 +987,15 @@ function Chat() {
                         try {
                             const token = getAuthToken();
                             const decryptedPayload = await decryptAndCacheMessage(data, usernameRef.current, token);
-                            displayData.text = decryptedPayload.text;
+                            displayData = {
+                                ...displayData,
+                                text: decryptedPayload.text,
+                                fileUrl: decryptedPayload.fileUrl,
+                                fileName: decryptedPayload.fileName,
+                                fileSize: decryptedPayload.fileSize,
+                                fileType: decryptedPayload.fileType,
+                                fileQuality: decryptedPayload.fileQuality
+                            };
                         } catch (err) {
                             console.error("Failed to decrypt incoming message for notification:", err);
                             displayData.text = "[Decrypted Message]";
@@ -935,7 +1019,7 @@ function Chat() {
                             id: displayData._id || Date.now(),
                             sender: displayName,
                             senderUsername: partnerUsername,
-                            text: displayData.text || "Sent an attachment",
+                            text: formatNotificationText(displayData),
                             avatarUrl: displayData.avatarUrl || displayData.senderAvatar,
                             room: displayData.room,
                             privateChatId: displayData.privateChatId,
@@ -1666,10 +1750,59 @@ function Chat() {
         const chatId = activePrivate ? activePrivate : activeRoom;
         if (!chatId) return;
 
-        socketRef.current?.emit("clearChat", { chatId });
+        // If there's an active clear timer, commit it immediately before starting a new one
+        if (clearTimeoutRef.current) {
+            clearTimeout(clearTimeoutRef.current);
+            if (undoClearInfo) {
+                socketRef.current?.emit("clearChat", { chatId: undoClearInfo.chatId });
+            }
+        }
+
+        // If there's an active delete timer, commit it immediately
+        if (deleteTimeoutRef.current) {
+            clearTimeout(deleteTimeoutRef.current);
+            deleteTimeoutRef.current = null;
+            if (undoDeleteInfo) {
+                const prevTargets = undoDeleteInfo.messageIds || [undoDeleteInfo.messageId];
+                prevTargets.forEach(id => {
+                    socketRef.current?.emit("deleteMessage", {
+                        messageId: id,
+                        deleteFor: undoDeleteInfo.deleteFor,
+                        deleteFileFromServer: undoDeleteInfo.deleteFileFromServer
+                    });
+                });
+                setUndoDeleteInfo(null);
+            }
+        }
+
+        const originalMsgs = [...messages];
+
+        setUndoClearInfo({
+            chatId,
+            originalMsgs
+        });
         setMessages([]);
         setShowClearConfirm(false);
+
+        clearTimeoutRef.current = setTimeout(() => {
+            socketRef.current?.emit("clearChat", { chatId });
+            setUndoClearInfo(null);
+            clearTimeoutRef.current = null;
+        }, 3000);
     }
+
+    const executeUndoClear = () => {
+        if (clearTimeoutRef.current) {
+            clearTimeout(clearTimeoutRef.current);
+            clearTimeoutRef.current = null;
+        }
+
+        if (undoClearInfo) {
+            // Restore messages locally
+            setMessages(undoClearInfo.originalMsgs || []);
+            setUndoClearInfo(null);
+        }
+    };
 
     function handleEdit(msg) {
         setEditingMsg({ _id: msg._id, text: msg.text });
@@ -1688,12 +1821,70 @@ function Chat() {
         setMessage("");
     }
 
+    const toggleMessageSelection = (messageId) => {
+        setSelectedMessageIds(prev => {
+            const next = new Set(prev);
+            if (next.has(messageId)) {
+                next.delete(messageId);
+            } else {
+                next.add(messageId);
+            }
+            return next;
+        });
+    };
+
+    const handleBulkDeleteClick = () => {
+        const selectedMsgs = messages.filter(m => selectedMessageIds.has(m._id));
+        if (selectedMsgs.length === 0) return;
+
+        const hasFile = selectedMsgs.some(m => !!m.fileUrl);
+
+        setDeleteConfirmModal({
+            isOpen: true,
+            messageId: null,
+            messageIds: selectedMsgs.map(m => m._id),
+            deleteFor: 'me',
+            hasFile,
+            deleteFileFromServer: true
+        });
+    };
+
+    const handleBulkDownload = () => {
+        const selectedMsgs = messages.filter(m => selectedMessageIds.has(m._id));
+        selectedMsgs.forEach(msg => {
+            if (msg.fileUrl) {
+                const link = document.createElement('a');
+                link.href = `${getBackendUrl()}${msg.fileUrl}`;
+                link.download = msg.fileName || 'download';
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        });
+    };
+
+    const handleBulkStar = () => {
+        alert("Bulk starring will be available soon!");
+    };
+
+    const handleBulkForward = () => {
+        alert("Bulk forwarding will be available soon!");
+    };
+
     function handleDelete(messageId, deleteFor) {
+        if (deleteFor === "me") {
+            setIsSelectionMode(true);
+            setSelectedMessageIds(new Set([messageId]));
+            return;
+        }
         // Intercept delete and trigger warning modal
         const msg = messages.find(m => m._id === messageId);
         setDeleteConfirmModal({
             isOpen: true,
             messageId,
+            messageIds: [],
             deleteFor,
             hasFile: !!(msg && msg.fileUrl),
             deleteFileFromServer: true
@@ -1704,6 +1895,7 @@ function Chat() {
         setDeleteConfirmModal({
             isOpen: false,
             messageId: null,
+            messageIds: [],
             deleteFor: 'me',
             hasFile: false,
             deleteFileFromServer: true
@@ -1711,49 +1903,73 @@ function Chat() {
     };
 
     const confirmDelete = () => {
-        const { messageId, deleteFor, deleteFileFromServer } = deleteConfirmModal;
-        const originalMsg = messages.find(m => m._id === messageId);
+        const { messageId, messageIds, deleteFor, deleteFileFromServer } = deleteConfirmModal;
 
         // Close modal
         setDeleteConfirmModal({
             isOpen: false,
             messageId: null,
+            messageIds: [],
             deleteFor: 'me',
             hasFile: false,
             deleteFileFromServer: true
         });
 
-        if (!originalMsg) return;
+        const targets = messageIds && messageIds.length > 0 ? messageIds : (messageId ? [messageId] : []);
+        if (targets.length === 0) return;
+
+        // If there's an active clear timer, commit it immediately before starting a delete
+        if (clearTimeoutRef.current) {
+            clearTimeout(clearTimeoutRef.current);
+            clearTimeoutRef.current = null;
+            const info = undoClearInfoRef.current;
+            if (info) {
+                socketRef.current?.emit("clearChat", { chatId: info.chatId });
+                setUndoClearInfo(null);
+            }
+        }
 
         // If there's an active undo timer, commit it immediately before starting the next one
         if (deleteTimeoutRef.current) {
             clearTimeout(deleteTimeoutRef.current);
             if (undoDeleteInfo) {
-                socketRef.current?.emit("deleteMessage", {
-                    messageId: undoDeleteInfo.messageId,
-                    deleteFor: undoDeleteInfo.deleteFor,
-                    deleteFileFromServer: undoDeleteInfo.deleteFileFromServer
+                const prevTargets = undoDeleteInfo.messageIds || [undoDeleteInfo.messageId];
+                prevTargets.forEach(id => {
+                    socketRef.current?.emit("deleteMessage", {
+                        messageId: id,
+                        deleteFor: undoDeleteInfo.deleteFor,
+                        deleteFileFromServer: undoDeleteInfo.deleteFileFromServer
+                    });
                 });
             }
         }
 
-        // Hide message locally
-        setMessages(prev => prev.filter(m => m._id !== messageId));
+        const originalMsgs = messages.filter(m => targets.includes(m._id));
+
+        // Hide messages locally
+        setMessages(prev => prev.filter(m => !targets.includes(m._id)));
 
         // Set undo state details
         setUndoDeleteInfo({
-            messageId,
+            messageId: targets.length === 1 ? targets[0] : null,
+            messageIds: targets,
             deleteFor,
-            originalMsg,
+            originalMsg: targets.length === 1 ? originalMsgs[0] : null,
+            originalMsgs,
             deleteFileFromServer
         });
 
+        setIsSelectionMode(false);
+        setSelectedMessageIds(new Set());
+
         // Start 3 second commit timer
         deleteTimeoutRef.current = setTimeout(() => {
-            socketRef.current?.emit("deleteMessage", {
-                messageId,
-                deleteFor,
-                deleteFileFromServer
+            targets.forEach(id => {
+                socketRef.current?.emit("deleteMessage", {
+                    messageId: id,
+                    deleteFor,
+                    deleteFileFromServer
+                });
             });
             setUndoDeleteInfo(null);
             deleteTimeoutRef.current = null;
@@ -1767,12 +1983,19 @@ function Chat() {
         }
 
         if (undoDeleteInfo) {
-            // Restore message locally
-            setMessages(prev => {
-                if (prev.some(m => m._id === undoDeleteInfo.messageId)) return prev;
-                const list = [...prev, undoDeleteInfo.originalMsg];
-                return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-            });
+            // Restore messages locally
+            const toRestore = undoDeleteInfo.originalMsgs || (undoDeleteInfo.originalMsg ? [undoDeleteInfo.originalMsg] : []);
+            if (toRestore.length > 0) {
+                setMessages(prev => {
+                    const nextList = [...prev];
+                    toRestore.forEach(msg => {
+                        if (!nextList.some(m => m._id === msg._id)) {
+                            nextList.push(msg);
+                        }
+                    });
+                    return nextList.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                });
+            }
             setUndoDeleteInfo(null);
         }
     };
@@ -2513,6 +2736,18 @@ function Chat() {
                                         return nextState;
                                     });
                                 }}
+                                isSelectionMode={isSelectionMode}
+                                selectedMessageIds={selectedMessageIds}
+                                onStartSelectionMode={() => setIsSelectionMode(true)}
+                                onCancelSelection={() => {
+                                    setIsSelectionMode(false);
+                                    setSelectedMessageIds(new Set());
+                                }}
+                                onBulkDelete={handleBulkDeleteClick}
+                                onBulkDownload={handleBulkDownload}
+                                onBulkStar={handleBulkStar}
+                                onBulkForward={handleBulkForward}
+                                messages={messages}
                             />
 
                             {(() => {
@@ -2562,11 +2797,14 @@ function Chat() {
                                         onCopySuccess={handleCopySuccess}
                                         onLockMessage={handleLockMessage}
                                         onUnlockLockedMessage={handleUnlockLockedMessage}
+                                        isSelectionMode={isSelectionMode}
+                                        selectedMessageIds={selectedMessageIds}
+                                        onToggleMessageSelection={toggleMessageSelection}
                                     />
                                 );
                             })()}
 
-                            {replyToMsg && (
+                            {!isSelectionMode && replyToMsg && (
                                 <div className="reply-preview-container">
                                     <div className="reply-preview-content">
                                         <span className="reply-preview-username">
@@ -2584,20 +2822,22 @@ function Chat() {
                                 </div>
                             )}
 
-                            <MessageInput
-                                message={message}
-                                setMessage={setMessage}
-                                sendMessage={editingMsg ? submitEdit : sendMessage}
-                                username={username}
-                                activeRoom={activeRoom}
-                                activePrivate={activePrivate}
-                                onTyping={emitTyping}
-                                isEditing={!!editingMsg}
-                                onCancelEdit={cancelEdit}
-                                isGuest={isGuest}
-                                onLockTrigger={() => setShowLoginModal(true)}
-                                onVoiceMessageSend={handleVoiceMessageSend}
-                            />
+                            {!isSelectionMode && (
+                                <MessageInput
+                                    message={message}
+                                    setMessage={setMessage}
+                                    sendMessage={editingMsg ? submitEdit : sendMessage}
+                                    username={username}
+                                    activeRoom={activeRoom}
+                                    activePrivate={activePrivate}
+                                    onTyping={emitTyping}
+                                    isEditing={!!editingMsg}
+                                    onCancelEdit={cancelEdit}
+                                    isGuest={isGuest}
+                                    onLockTrigger={() => setShowLoginModal(true)}
+                                    onVoiceMessageSend={handleVoiceMessageSend}
+                                />
+                            )}
 
                             {activePrivate && (
                                 <Vault 
@@ -3805,7 +4045,11 @@ function Chat() {
             {deleteConfirmModal.isOpen && (
                 <div className="delete-confirm-overlay" onClick={cancelDeleteRequest}>
                     <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="delete-confirm-title">Delete message?</h3>
+                        <h3 className="delete-confirm-title">
+                            {deleteConfirmModal.messageIds && deleteConfirmModal.messageIds.length > 0
+                                ? `Delete ${deleteConfirmModal.messageIds.length} messages?`
+                                : "Delete message?"}
+                        </h3>
                         
                         {deleteConfirmModal.hasFile && (
                             <label className="delete-confirm-checkbox-label">
@@ -3839,7 +4083,9 @@ function Chat() {
                                 className="delete-confirm-btn delete" 
                                 onClick={confirmDelete}
                             >
-                                {deleteConfirmModal.deleteFor === "everyone" ? "Delete for everyone" : "Delete for me"}
+                                {deleteConfirmModal.messageIds && deleteConfirmModal.messageIds.length > 0
+                                    ? "Delete for me"
+                                    : (deleteConfirmModal.deleteFor === "everyone" ? "Delete for everyone" : "Delete for me")}
                             </button>
                         </div>
                     </div>
@@ -3856,6 +4102,21 @@ function Chat() {
                         type="button" 
                         className="undo-delete-toast-btn" 
                         onClick={executeUndoDelete}
+                    >
+                        Undo
+                    </button>
+                </div>
+            )}
+
+            {undoClearInfo && (
+                <div className="undo-delete-toast">
+                    <span className="undo-delete-toast-text">
+                        &bull; Chat cleared
+                    </span>
+                    <button 
+                        type="button" 
+                        className="undo-delete-toast-btn" 
+                        onClick={executeUndoClear}
                     >
                         Undo
                     </button>

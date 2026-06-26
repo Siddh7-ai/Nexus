@@ -197,12 +197,14 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [openUp, setOpenUp] = useState(false);
     const isOwn = msg.username?.toLowerCase() === currentUser?.toLowerCase();
+    const isVoice = msg.fileType === "audio/e2ee" || msg.fileType?.startsWith("audio/");
 
+    if (isSelectionMode) return null;
     if (msg.isDeleted || msg.username === "System") return null;
 
     const handleCopy = () => {
@@ -225,7 +227,8 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         const rect = e.currentTarget.getBoundingClientRect();
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
-                        if (spaceBelow < 120 && spaceAbove > spaceBelow) {
+                        const isNearBottom = totalCount - index <= 2;
+                        if ((isNearBottom && spaceAbove > 120) || (spaceBelow < 120 && spaceAbove > spaceBelow)) {
                             setOpenUp(true);
                         } else {
                             setOpenUp(false);
@@ -245,7 +248,8 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         const rect = e.currentTarget.getBoundingClientRect();
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
-                        if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+                        const isNearBottom = totalCount - index <= 4;
+                        if ((isNearBottom && spaceAbove > 320) || (spaceBelow < 320 && spaceAbove > spaceBelow)) {
                             setOpenUp(true);
                         } else {
                             setOpenUp(false);
@@ -301,10 +305,12 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         <CornerUpLeft size={16} className="menu-icon" />
                         <span>Reply</span>
                     </button>
-                    <button className="menu-item" onClick={() => { handleCopy(); setShowMenu(false); }}>
-                        <Copy size={16} className="menu-icon" />
-                        <span>Copy</span>
-                    </button>
+                    {!isVoice && !msg.isLocked && (
+                        <button className="menu-item" onClick={() => { handleCopy(); setShowMenu(false); }}>
+                            <Copy size={16} className="menu-icon" />
+                            <span>Copy</span>
+                        </button>
+                    )}
                     {!msg.isLocked && (
                         <button className="menu-item" onClick={() => { alert("Forwarding will be available soon!"); setShowMenu(false); }}>
                             <CornerUpRight size={16} className="menu-icon" />
@@ -319,7 +325,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         <Star size={16} className="menu-icon" />
                         <span>Star</span>
                     </button>
-                    {isOwn && !msg.isLocked && (
+                    {isOwn && !msg.isLocked && !isVoice && (
                         <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
                             <Pencil size={16} className="menu-icon" />
                             <span>Edit</span>
@@ -347,7 +353,28 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     );
 }
 
-function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, onDelete, isPrivate, onAddReactionClick, typingUser, onUserProfileClick, allUsers = [], onlineUserList = [], onReply, onShowMessageInfo, onCopySuccess, onLockMessage, onUnlockLockedMessage }) {
+function MessageList({ 
+    messages, 
+    currentUser, 
+    messagesEndRef, 
+    onReact, 
+    onEdit, 
+    onDelete, 
+    isPrivate, 
+    onAddReactionClick, 
+    typingUser, 
+    onUserProfileClick, 
+    allUsers = [], 
+    onlineUserList = [], 
+    onReply, 
+    onShowMessageInfo, 
+    onCopySuccess, 
+    onLockMessage, 
+    onUnlockLockedMessage,
+    isSelectionMode = false,
+    selectedMessageIds = new Set(),
+    onToggleMessageSelection
+}) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
@@ -388,6 +415,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
     };
 
     const lastMessagesLengthRef = useRef(messages.length);
+    const prevFirstMsgIdRef = useRef(null);
 
     useEffect(() => {
         setShowScrollBottom(false);
@@ -398,6 +426,11 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
         const isNewMessage = messages.length > lastMessagesLengthRef.current;
         lastMessagesLengthRef.current = messages.length;
 
+        const firstMsg = messages[0];
+        const firstMsgId = firstMsg?._id || firstMsg?.createdAt || null;
+        const isRoomSwitch = firstMsgId !== prevFirstMsgIdRef.current;
+        prevFirstMsgIdRef.current = firstMsgId;
+
         if (isNewMessage) {
             const lastMsg = messages[messages.length - 1];
             const isOwn = lastMsg?.username?.toLowerCase() === currentUser?.toLowerCase();
@@ -407,7 +440,7 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
             if (isOwn || isNearBottom) {
                 messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             }
-        } else {
+        } else if (isRoomSwitch) {
             // On initial load or room switch, scroll instantly to avoid smooth scroll jank
             messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
         }
@@ -455,11 +488,70 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                     }
 
                     const isOwn = msg.username?.toLowerCase() === currentUser?.toLowerCase();
+                    const isSelected = selectedMessageIds.has(msg._id);
+                    const selectionClass = isSelectionMode ? "selection-active" : "";
+                    const selectedClass = isSelected ? "selected-row" : "";
 
                     return (
-                        <div className={`message-row ${isOwn ? "own" : "other"}`} key={msg._id || index}>
+                        <div 
+                            className={`message-row ${isOwn ? "own" : "other"} ${selectionClass} ${selectedClass}`} 
+                            key={msg._id || index}
+                            onClick={() => {
+                                if (isSelectionMode && onToggleMessageSelection) {
+                                    onToggleMessageSelection(msg._id);
+                                }
+                            }}
+                        >
+                            {isSelectionMode && (
+                                <div className="message-selection-checkbox-container">
+                                    <div className={`message-selection-checkbox-unique ${isSelected ? "checked" : ""}`}>
+                                        <svg viewBox="0 0 24 24" className="checkbox-bubble-svg">
+                                            {/* Back bubble */}
+                                            <path 
+                                                d="M 9.5 6.5 C 6.2 6.5 3.5 9.2 3.5 12.5 C 3.5 14.5 4.5 16.3 6.1 17.4 L 4.5 21 L 8.5 19 C 8.8 19 9.2 19 9.5 19 C 12.8 19 15.5 16.3 15.5 12.5 C 15.5 9.2 12.8 6.5 9.5 6.5 Z" 
+                                                className="checkbox-bubble-back"
+                                            />
+                                            {/* Mask to cut overlap gap */}
+                                            <path 
+                                                d="M 14.5 3 C 10.9 3 8 5.9 8 9.5 C 8 11.7 9.1 13.7 10.9 14.9 L 9.1 18.9 L 13.5 16.7 C 13.8 16.8 14.1 16.8 14.5 16.8 C 18.1 16.8 21 13.9 21 9.5 C 21 5.9 18.1 3 14.5 3 Z" 
+                                                className="checkbox-bubble-front-mask"
+                                            />
+                                            {/* Front bubble */}
+                                            <path 
+                                                d="M 14.5 3 C 10.9 3 8 5.9 8 9.5 C 8 11.7 9.1 13.7 10.9 14.9 L 9.1 18.9 L 13.5 16.7 C 13.8 16.8 14.1 16.8 14.5 16.8 C 18.1 16.8 21 13.9 21 9.5 C 21 5.9 18.1 3 14.5 3 Z" 
+                                                className="checkbox-bubble-front"
+                                            />
+                                            {/* Inside elements (dots or checkmark) */}
+                                            {isSelected ? (
+                                                <polyline 
+                                                    points="11.5 9.5 13.5 11.5 17.5 7.5" 
+                                                    className="checkbox-bubble-checkmark"
+                                                />
+                                            ) : (
+                                                <g className="checkbox-bubble-dots">
+                                                    <circle cx="11.5" cy="9.5" r="1" />
+                                                    <circle cx="14.5" cy="9.5" r="1" />
+                                                    <circle cx="17.5" cy="9.5" r="1" />
+                                                </g>
+                                            )}
+                                        </svg>
+                                    </div>
+                                </div>
+                            )}
+
                             {!isOwn && (
-                                <div onClick={() => onUserProfileClick(msg.username)} style={{ cursor: "pointer" }} title="View Profile">
+                                <div 
+                                    onClick={(e) => {
+                                        if (isSelectionMode) {
+                                            e.stopPropagation();
+                                            onToggleMessageSelection && onToggleMessageSelection(msg._id);
+                                            return;
+                                        }
+                                        onUserProfileClick(msg.username);
+                                    }} 
+                                    style={{ cursor: isSelectionMode ? "default" : "pointer" }} 
+                                    title={isSelectionMode ? "" : "View Profile"}
+                                >
                                     <Avatar username={msg.username} avatarSrc={msg.avatar} />
                                 </div>
                             )}
@@ -477,6 +569,9 @@ function MessageList({ messages, currentUser, messagesEndRef, onReact, onEdit, o
                                     onCopySuccess={onCopySuccess}
                                     isPrivate={isPrivate}
                                     onLockMessage={onLockMessage}
+                                    isSelectionMode={isSelectionMode}
+                                    index={index}
+                                    totalCount={messages.length}
                                 />
 
                                 {msg.isLocked ? (

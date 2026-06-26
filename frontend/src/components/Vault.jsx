@@ -9,6 +9,24 @@ import VaultPinEntryModal from "./VaultPinEntryModal";
 import VaultAddTextModal from "./VaultAddTextModal";
 import VaultAddFileModal from "./VaultAddFileModal";
 import sodium from "libsodium-wrappers-sumo";
+import { formatDuration } from "../utils/voiceMessage";
+
+function formatSecretIfVoiceJson(secretVal, returnRawForCopy = false) {
+    try {
+        if (secretVal && secretVal.trim().startsWith("{")) {
+            const parsed = JSON.parse(secretVal);
+            if (parsed && typeof parsed.transcript !== 'undefined' && typeof parsed.duration !== 'undefined') {
+                const durationStr = formatDuration(parsed.duration);
+                const transcriptText = parsed.transcript || "[No Speech]";
+                if (returnRawForCopy) {
+                    return transcriptText;
+                }
+                return `Voice Message (${durationStr}): "${transcriptText}"`;
+            }
+        }
+    } catch (e) {}
+    return secretVal;
+}
 
 export default function Vault({ isOpen, onClose, privateChatId, myUsername, token, vaultKey, setVaultKey }) {
     const [pinData, setPinData] = useState(null);
@@ -401,7 +419,7 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
                                                             <input 
                                                                 type={visibleSecrets[item._id] ? "text" : "password"} 
                                                                 className="vault-item-secret-val"
-                                                                value={decrypted.secret || ""} 
+                                                                value={formatSecretIfVoiceJson(decrypted.secret || "")} 
                                                                 readOnly
                                                             />
                                                             <div className="vault-item-actions">
@@ -414,7 +432,7 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
                                                                 </button>
                                                                 <button 
                                                                     className="vault-icon-action" 
-                                                                    onClick={() => handleCopy(decrypted.secret, item._id)}
+                                                                    onClick={() => handleCopy(formatSecretIfVoiceJson(decrypted.secret || "", true), item._id)}
                                                                     title="Copy"
                                                                 >
                                                                     {copiedStates[item._id] ? <FiCheck size={15} style={{ color: 'var(--green, #22c55e)' }} /> : <FiCopy size={15} />}

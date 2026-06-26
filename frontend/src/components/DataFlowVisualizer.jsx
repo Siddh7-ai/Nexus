@@ -38,22 +38,19 @@ function DataFlowVisualizer({ isOpen, onClose, visualizerData }) {
             // Stage 2: Move to Server / In-Transit (ciphertext only)
             t2 = setTimeout(() => {
                 setCurrentStage(2);
+                setSenderText(plaintext); // Restore sender box to plaintext
                 setTransitText(shortCiphertext);
-            }, 2000);
+            }, 2500);
 
             // Stage 3: Move to Recipient (starts as ciphertext, then decrypts)
             t3 = setTimeout(() => {
                 setCurrentStage(3);
                 setRecipientText(shortCiphertext);
-            }, 3500);
+            }, 4000);
 
             t4 = setTimeout(() => {
                 setRecipientText(plaintext); // Decrypts to plaintext
-            }, 4500);
-
-            t5 = setTimeout(() => {
-                setCurrentStage(0); // Animation complete, reset to idle
-            }, 6000);
+            }, 5000);
         } else {
             // E2EE OFF: Plaintext remains visible at all stages
             t1 = setTimeout(() => {
@@ -69,10 +66,6 @@ function DataFlowVisualizer({ isOpen, onClose, visualizerData }) {
                 setCurrentStage(3);
                 setRecipientText(plaintext);
             }, 3500);
-
-            t4 = setTimeout(() => {
-                setCurrentStage(0);
-            }, 5500);
         }
 
         return () => {

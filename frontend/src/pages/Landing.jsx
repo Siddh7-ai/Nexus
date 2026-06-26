@@ -178,7 +178,7 @@ export default function Landing() {
               }}
             >
               <HiOutlineChatBubbleLeftRight/>
-              Nexus Official
+              General Chat
             </button>
 
             <button

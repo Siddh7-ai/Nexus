@@ -1,6 +1,8 @@
 import React from "react";
 import { FiArrowLeft, FiCheck } from "react-icons/fi";
 import { Lock } from "lucide-react";
+import VoiceMessageBubble from "./VoiceMessageBubble";
+import { getBackendUrl } from "../utils/config";
 
 export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate }) {
     if (!msg) return null;
@@ -43,6 +45,14 @@ export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate 
         return `${relativeTime} by ${lockerDisplay}`;
     };
 
+    const isVoice = msg.fileType === "audio/e2ee" || msg.fileType?.startsWith("audio/");
+    let voiceData = null;
+    if (isVoice) {
+        try {
+            voiceData = JSON.parse(msg.text);
+        } catch (e) {}
+    }
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content vault-pin-modal message-info-modal" onClick={e => e.stopPropagation()}>
@@ -69,6 +79,18 @@ export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate 
                                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                 </div>
+                            </div>
+                        ) : isVoice && voiceData && typeof voiceData.duration !== 'undefined' ? (
+                            <div style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>
+                                <VoiceMessageBubble
+                                    fileUrl={`${getBackendUrl()}${msg.fileUrl}`}
+                                    encryptedPayload={msg.fileType === "audio/e2ee" ? voiceData : null}
+                                    isE2EE={msg.fileType === "audio/e2ee"}
+                                    isOwnMessage={isOwn}
+                                    duration={voiceData.duration}
+                                    waveform={voiceData.waveform}
+                                    transcript={voiceData.transcript}
+                                />
                             </div>
                         ) : (
                             <div className={`message-bubble ${isOwn ? "own" : "other"}`} style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>
