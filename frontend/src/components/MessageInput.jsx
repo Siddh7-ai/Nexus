@@ -314,7 +314,9 @@ function MessageInput({
     onCancelEdit,
     isGuest,
     onLockTrigger,
-    onVoiceMessageSend
+    onVoiceMessageSend,
+    onRecordingStart,
+    onRecordingStop
 }) {
     const [hoveredButton, setHoveredButton] = useState(null);
     const [tooltipPos, setTooltipPos] = useState({ left: 0, bottom: 0 });
@@ -1653,7 +1655,11 @@ function MessageInput({
                     />
                 </div>
                 <div className="voice-recorder-wrapper" style={{ marginRight: '8px' }}>
-                    <VoiceRecorder onVoiceMessageReady={onVoiceMessageSend} />
+                    <VoiceRecorder 
+                        onVoiceMessageReady={onVoiceMessageSend} 
+                        onRecordingStart={onRecordingStart}
+                        onRecordingStop={onRecordingStop}
+                    />
                 </div>
                 <button className="send-btn" onClick={sendMessage} disabled={!message.trim()} aria-label="Send Message">
                     {isEditing ? "Save" : <SendHorizontal size={17} />}

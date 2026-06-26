@@ -974,6 +974,92 @@ io.on("connection", async (socket) => {
         }
     });
 
+    // Recording status
+    socket.on("recordingStart", async ({ room, privateChatId }) => {
+        if (privateChatId) {
+            if (socket.role === "guest") return;
+            socket.to(`private_${privateChatId}`).emit("recordingStart", {
+                username: socket.username,
+                role: socket.role,
+                displayName: socket.displayName || socket.username,
+                avatar: socket.avatar || "",
+                room: null,
+                privateChatId
+            });
+        } else {
+            const targetRoom = room || "Nexus Official";
+            const userId = socket.request.user?.id;
+            let roomDoc = null;
+            if (socket.role !== "guest" && userId) {
+                if (mongoose.Types.ObjectId.isValid(targetRoom)) {
+                    roomDoc = await Room.findById(targetRoom);
+                } else {
+                    roomDoc = await Room.findOne({ name: targetRoom, members: userId });
+                }
+            }
+
+            let targetChannel = targetRoom;
+            let roomNameValue = targetRoom;
+
+            try {
+                if (roomDoc) {
+                    if (!socket.request || !socket.request.user) return;
+                    const isMember = roomDoc.members.some(m => m.toString() === userId.toString());
+                    if (!isMember) return;
+                    targetChannel = roomDoc._id.toString();
+                    roomNameValue = roomDoc.name;
+                } else {
+                    if (!canAccessRoom(socket.role, targetRoom)) return;
+                }
+            } catch (err) {
+                console.error("Error verifying recording room permissions:", err);
+                return;
+            }
+            socket.to(targetChannel).emit("recordingStart", {
+                username: socket.username,
+                role: socket.role,
+                displayName: socket.displayName || socket.username,
+                avatar: socket.avatar || "",
+                room: roomNameValue,
+                privateChatId: null
+            });
+        }
+    });
+
+    socket.on("recordingStop", async ({ room, privateChatId }) => {
+        if (privateChatId) {
+            if (socket.role === "guest") return;
+            socket.to(`private_${privateChatId}`).emit("recordingStop", {
+                username: socket.username,
+                room: null,
+                privateChatId
+            });
+        } else {
+            const targetRoom = room || "Nexus Official";
+            const userId = socket.request.user?.id;
+            let roomDoc = null;
+            if (socket.role !== "guest" && userId) {
+                if (mongoose.Types.ObjectId.isValid(targetRoom)) {
+                    roomDoc = await Room.findById(targetRoom);
+                } else {
+                    roomDoc = await Room.findOne({ name: targetRoom, members: userId });
+                }
+            }
+
+            let targetChannel = targetRoom;
+            let roomNameValue = targetRoom;
+            if (roomDoc) {
+                targetChannel = roomDoc._id.toString();
+                roomNameValue = roomDoc.name;
+            }
+            socket.to(targetChannel).emit("recordingStop", {
+                username: socket.username,
+                room: roomNameValue,
+                privateChatId: null
+            });
+        }
+    });
+
     // Send message (room or private)
     socket.on("message", async (data) => {
         try {

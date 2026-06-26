@@ -27,17 +27,36 @@ function initWorker() {
     return initPromise;
 }
 
+// Proactively pre-initialize ASR pipeline in the worker background on load
+(async () => {
+    try {
+        console.log("Nexus ASR: Proactively pre-initializing Worker pipeline in background...");
+        await initWorker();
+    } catch (e) {
+        console.warn("ASR background pre-initialization failed:", e);
+    }
+})();
+
 export async function transcribeAudio(audioBlob, onProgress) {
     try {
         currentProgressCallback = onProgress;
-        const w = await initWorker();
         
         const arrayBuffer = await audioBlob.arrayBuffer();
-        
-        // We need an AudioContext to decode the audio
         const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         const float32Array = audioBuffer.getChannelData(0);
+        
+        const durationSeconds = float32Array.length / 16000;
+        // Tight cap on tokens for short clips to prevent runaway CPU generation (1s -> 15 tokens)
+        const maxNewTokens = Math.max(15, Math.ceil(durationSeconds * 6) + 10);
+
+        if (onProgress) {
+            onProgress({ status: 'init_start' });
+        }
+        const w = await initWorker();
+        if (onProgress) {
+            onProgress({ status: 'ready' });
+        }
         
         return new Promise((resolve, reject) => {
             const transcribeHandler = (e) => {
@@ -53,7 +72,11 @@ export async function transcribeAudio(audioBlob, onProgress) {
                 }
             };
             w.addEventListener('message', transcribeHandler);
-            w.postMessage({ type: 'TRANSCRIBE', audioData: float32Array });
+            w.postMessage({ 
+                type: 'TRANSCRIBE', 
+                audioData: float32Array,
+                maxNewTokens
+            });
         });
     } catch (err) {
         console.error("Transcription error:", err);

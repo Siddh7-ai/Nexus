@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import VoiceMessageBubble from "./VoiceMessageBubble";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock, Mic } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 
 const customSchema = {
@@ -117,6 +117,71 @@ function ThoughtBubbleIndicator({ typingUser }) {
                     <span className="thought-dot"></span>
                     <span className="thought-dot"></span>
                     <span className="thought-dot"></span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function RecordingBubbleIndicator({ recordingUser }) {
+    const [visible, setVisible] = useState(false);
+    const [isExiting, setIsExiting] = useState(false);
+    const timeoutRef = useRef(null);
+    const recordingUserRef = useRef(null);
+
+    if (recordingUser) {
+        recordingUserRef.current = recordingUser;
+    }
+
+    useEffect(() => {
+        if (recordingUser) {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+            setIsExiting(false);
+            setVisible(true);
+        } else {
+            if (visible && !isExiting) {
+                setIsExiting(true);
+                timeoutRef.current = setTimeout(() => {
+                    setVisible(false);
+                    setIsExiting(false);
+                    timeoutRef.current = null;
+                }, 1000);
+            }
+        }
+    }, [recordingUser, visible, isExiting]);
+
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
+    if (!visible || !recordingUserRef.current) return null;
+
+    const rUser = recordingUserRef.current;
+    const displayName = rUser.displayName || rUser.username;
+    const label = rUser.role === "guest" ? `${displayName} [Guest]` : displayName;
+
+    return (
+        <div 
+            className={`message-row other typing-row ${isExiting ? "is-exiting" : ""}`}
+            title={`${label} is recording audio...`}
+        >
+            <Avatar username={rUser.username} avatarSrc={rUser.avatar} />
+            <div className="thought-bubble-container recording-indicator-bubble">
+                <div className="thought-circle recording-circle thought-circle-1"></div>
+                <div className="thought-circle recording-circle thought-circle-2"></div>
+                <div className="thought-circle recording-circle thought-circle-3"></div>
+                <div className="thought-cloud recording-cloud">
+                    <Mic size={12} className="recording-mic-icon" />
+                    <span className="thought-dot recording-dot"></span>
+                    <span className="thought-dot recording-dot"></span>
+                    <span className="thought-dot recording-dot"></span>
                 </div>
             </div>
         </div>
@@ -355,6 +420,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
 
 function MessageList({ 
     messages, 
+    loadingMessages = false,
     currentUser, 
     messagesEndRef, 
     onReact, 
@@ -363,6 +429,7 @@ function MessageList({
     isPrivate, 
     onAddReactionClick, 
     typingUser, 
+    recordingUser = null,
     onUserProfileClick, 
     allUsers = [], 
     onlineUserList = [], 
@@ -456,6 +523,31 @@ function MessageList({
             }
         }
     }, [typingUser, messagesEndRef]);
+
+    if (loadingMessages) {
+        return (
+            <div className="messages-wrapper">
+                <div className="messages" style={{ overflow: 'hidden' }}>
+                    {[1, 2, 3, 4, 5].map((val) => {
+                        const isOwn = val % 2 === 0;
+                        const widthVal = val === 1 ? '70%' : val === 2 ? '45%' : val === 3 ? '60%' : val === 4 ? '35%' : '50%';
+                        return (
+                            <div key={val} className={`message-row ${isOwn ? 'own' : 'other'}`}>
+                                {!isOwn && <div className="avatar skeleton-avatar"></div>}
+                                <div className={`message-bubble-wrapper ${isOwn ? 'own' : 'other'}`}>
+                                    <div className={`skeleton-loader ${isOwn ? 'own' : 'other'}`} style={{ width: widthVal }}>
+                                        <div className="skeleton-line first"></div>
+                                        <div className="skeleton-line second"></div>
+                                    </div>
+                                </div>
+                                {isOwn && <div className="avatar skeleton-avatar"></div>}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
 
     if (messages.length === 0) {
         return (
@@ -743,6 +835,7 @@ function MessageList({
                 })}
 
                 <ThoughtBubbleIndicator typingUser={typingUser} />
+                <RecordingBubbleIndicator recordingUser={recordingUser} />
                 <div ref={messagesEndRef}></div>
             </div>
             

@@ -164,6 +164,7 @@ function Chat() {
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
+    const [loadingMessages, setLoadingMessages] = useState(true);
     const [decryptedMessages, setDecryptedMessages] = useState({});
 
     // Reply and message info states
@@ -306,6 +307,8 @@ function Chat() {
     }, [activePrivate, activePrivateName]);
 
     const [typingUser, setTypingUser] = useState("");
+    const [recordingUser, setRecordingUser] = useState(null);
+    const recordingTimeoutRef = useRef(null);
     const [onlineUsers, setOnlineUsers] = useState(0);
     const [onlineUserList, setOnlineUserList] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
@@ -877,13 +880,16 @@ function Chat() {
             if (privateChatId) {
                 if (activePrivateRef.current?.toLowerCase() === privateChatId?.toLowerCase()) {
                     setMessages(msgs);
+                    setLoadingMessages(false);
                 }
             } else if (room) {
                 if (activeRoomRef.current === room) {
                     setMessages(msgs);
+                    setLoadingMessages(false);
                 }
             } else {
                 setMessages(msgs);
+                setLoadingMessages(false);
             }
         });
 
@@ -1064,6 +1070,33 @@ function Chat() {
                     : (activeRoomRef.current === data.room);
                 if (isMatch) {
                     setTypingUser(prev => (prev && prev.username?.toLowerCase() === data.username?.toLowerCase()) ? null : prev);
+                }
+            }
+        });
+
+        newSocket.on("recordingStart", (recordingData) => {
+            if (!recordingData || !recordingData.username) return;
+            const isMatch = recordingData.privateChatId
+                ? (activePrivateRef.current?.toLowerCase() === recordingData.privateChatId?.toLowerCase())
+                : (activeRoomRef.current === recordingData.room);
+            if (!isMatch) return;
+
+            setRecordingUser(recordingData);
+            if (recordingTimeoutRef.current) {
+                clearTimeout(recordingTimeoutRef.current);
+            }
+            recordingTimeoutRef.current = setTimeout(() => {
+                setRecordingUser(null);
+            }, 30000);
+        });
+
+        newSocket.on("recordingStop", (data) => {
+            if (data && data.username) {
+                const isMatch = data.privateChatId
+                    ? (activePrivateRef.current?.toLowerCase() === data.privateChatId?.toLowerCase())
+                    : (activeRoomRef.current === data.room);
+                if (isMatch) {
+                    setRecordingUser(prev => (prev && prev.username?.toLowerCase() === data.username?.toLowerCase()) ? null : prev);
                 }
             }
         });
@@ -1326,8 +1359,10 @@ function Chat() {
         setActivePrivate(null);
         setActivePrivateName("");
         setMessages([]);
+        setLoadingMessages(true);
         setSidebarOpen(false);
         setTypingUser(null);
+        setRecordingUser(null);
         setUnreadCounts(prev => ({ ...prev, [room]: 0 }));
         socketRef.current?.emit("joinRoom", room);
     }
@@ -1344,8 +1379,10 @@ function Chat() {
         setActivePrivateName(otherUsername);
         setActiveRoom(null);
         setMessages([]);
+        setLoadingMessages(true);
         setSidebarOpen(false);
         setTypingUser(null);
+        setRecordingUser(null);
         setUnreadCounts(prev => {
             const next = { ...prev };
             const lowerId = privateChatId.toLowerCase();
@@ -1734,6 +1771,22 @@ function Chat() {
                 privateChatId: activePrivate
             });
         }
+    }
+
+    function emitRecordingStart() {
+        if (!socketRef.current) return;
+        socketRef.current.emit("recordingStart", {
+            room: activeRoom,
+            privateChatId: activePrivate
+        });
+    }
+
+    function emitRecordingStop() {
+        if (!socketRef.current) return;
+        socketRef.current.emit("recordingStop", {
+            room: activeRoom,
+            privateChatId: activePrivate
+        });
     }
 
     function handleReact(messageId, emoji) {
@@ -2781,6 +2834,7 @@ function Chat() {
                                 return (
                                     <MessageList
                                         messages={processedMessages}
+                                        loadingMessages={loadingMessages}
                                         currentUser={username}
                                         messagesEndRef={messagesEndRef}
                                         onReact={handleReact}
@@ -2789,6 +2843,7 @@ function Chat() {
                                         isPrivate={!!activePrivate}
                                         onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
                                         typingUser={typingUser}
+                                        recordingUser={recordingUser}
                                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                                         allUsers={allUsers}
                                         onlineUserList={onlineUserList}
@@ -2824,6 +2879,7 @@ function Chat() {
 
                             {!isSelectionMode && (
                                 <MessageInput
+                                    key={activePrivate ? `private_${activePrivate}` : `room_${activeRoom}`}
                                     message={message}
                                     setMessage={setMessage}
                                     sendMessage={editingMsg ? submitEdit : sendMessage}
@@ -2836,6 +2892,8 @@ function Chat() {
                                     isGuest={isGuest}
                                     onLockTrigger={() => setShowLoginModal(true)}
                                     onVoiceMessageSend={handleVoiceMessageSend}
+                                    onRecordingStart={emitRecordingStart}
+                                    onRecordingStop={emitRecordingStop}
                                 />
                             )}
 
