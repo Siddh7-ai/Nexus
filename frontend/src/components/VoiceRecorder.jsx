@@ -278,7 +278,13 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
             : processingSteps[stepIndex];
         return (
             <div className="voice-recorder-processing">
-                <div className="processing-spinner"></div>
+                <div className="processing-loader">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
                 <div className="processing-text" key={isModelLoading ? 'downloading' : stepIndex}>
                     {currentMsg}
                 </div>

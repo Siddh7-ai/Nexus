@@ -93,7 +93,6 @@ self.addEventListener('message', async (event) => {
                 return_timestamps: false, // Turn off timestamp decoding for maximum speed
                 max_new_tokens: maxNewTokens, // Dynamic token cap to prevent silent loops
                 ...(durationSeconds > 30 ? { chunk_length_s: 30, stride_length_s: 5 } : {}),
-                prompt: "Siddharth, Smit, Jyot, Dharmit." // Bias names spelling
             });
             console.timeEnd("ASR Worker CPU/GPU Pipeline Execution");
             

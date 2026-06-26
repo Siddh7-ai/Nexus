@@ -200,11 +200,11 @@ function ChatHeader({
                                     <>
                                         <img 
                                             src={savedMessagesLogo} 
-                                            alt="Saved Messages" 
+                                            alt="Your Messages" 
                                             className="avatar header-avatar"
                                             style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
                                         />
-                                        <div className="chat-title">Saved Messages</div>
+                                        <div className="chat-title">Your Messages</div>
                                     </>
                                 ) : (
                                     <>
@@ -359,7 +359,7 @@ function ChatHeader({
                             {isPrivate ? (
                                 /* Option list for private chat */
                                 <>
-                                    {/* 1. View Profile (Only if not self / Saved Messages) */}
+                                    {/* 1. View Profile (Only if not self / Your Messages) */}
                                     {privateUser?.username?.toLowerCase() !== username?.toLowerCase() && (
                                         <button 
                                             className="header-dropdown-item" 

@@ -112,7 +112,7 @@ function RoomList({
 }) {
     const [dmSearch, setDmSearch] = useState("");
 
-    const savedMessagesTitle = "Saved Messages";
+    const savedMessagesTitle = "Your Messages";
     const showSavedMessages = !isGuest && currentUser && (!dmSearch || savedMessagesTitle.toLowerCase().includes(dmSearch.toLowerCase()));
 
     const totalDmUnread = useMemo(() => {
@@ -322,7 +322,7 @@ function RoomList({
                                                     <div className="dm-avatar-wrapper">
                                                         <img 
                                                             src={savedMessagesLogo} 
-                                                            alt="Saved Messages" 
+                                                            alt="Your Messages" 
                                                             className="dm-row-avatar" 
                                                             style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }}
                                                         />
@@ -633,7 +633,7 @@ function RoomList({
                                                 <div className="dm-avatar-wrapper">
                                                     <img 
                                                         src={savedMessagesLogo} 
-                                                        alt="Saved Messages" 
+                                                        alt="Your Messages" 
                                                         className="dm-row-avatar" 
                                                         style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
                                                     />
