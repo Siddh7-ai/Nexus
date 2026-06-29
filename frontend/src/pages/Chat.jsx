@@ -2843,6 +2843,10 @@ function Chat() {
                                 }}>
                                     Choose an existing room from the sidebar, start a private conversation, or create your own room!
                                 </p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#17d67e', marginTop: '1px' }}>
+                                    <FiLock />
+                                    <span>End-to-end encrypted</span>
+                                </div>
                             </div>
 
                             {/* Crowd Canvas at the bottom */}

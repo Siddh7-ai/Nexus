@@ -5,6 +5,7 @@ import './Landing.css';
 import { SmoothInput } from '../components/SmoothInput';
 import { useState, useEffect } from 'react';
 import { HiOutlineChatBubbleLeftRight } from 'react-icons/hi2';
+import { FiLock } from 'react-icons/fi';
 import ThemeToggleButton from '../components/ThemeToggleButton';
 import { getBackendUrl } from '../utils/config';
 import { initTheme, toggleTheme } from '../utils/theme';
@@ -147,7 +148,7 @@ export default function Landing() {
         {/* Small logo + brand label above headline */}
         <div className={`hero-brand ${showContent ? 'show' : ''}`}>
           <img src={logo} alt="" className="hero-logo-img" aria-hidden="true" />
-          <span className="hero-brand-name"><span className="nexus-word">Nexus</span> Messenger</span>
+            <span className="hero-brand-name"><span className="nexus-word">Nexus</span> Messenger</span>
         </div>      
 
         <h1 className="landing-headline typing-headline">
