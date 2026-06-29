@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Lock, ChevronDown, ChevronUp } from 'lucide-react';
-import { decryptVoiceMessageAudio, formatDuration } from '../utils/voiceMessage';
+import { Play, Pause, Lock, FileText, Loader2 } from 'lucide-react';
+import { decryptVoiceMessageAudio, formatDuration, normalizeWaveform } from '../utils/voiceMessage';
+import { getBackendUrl } from '../utils/config';
 
 export default function VoiceMessageBubble({ 
     fileUrl, 
@@ -9,15 +10,21 @@ export default function VoiceMessageBubble({
     isOwnMessage, 
     duration, 
     waveform, 
-    transcript 
+    messageId
 }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackTime, setPlaybackTime] = useState(0);
     const [isDecrypted, setIsDecrypted] = useState(false);
     const [isDecrypting, setIsDecrypting] = useState(false);
     const [localAudioUrl, setLocalAudioUrl] = useState(null);
-    const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+    const [decryptedBlob, setDecryptedBlob] = useState(null);
     const [error, setError] = useState(null);
+    
+    // Transcript state
+    const [transcriptVisible, setTranscriptVisible] = useState(false);
+    const [transcriptText, setTranscriptText] = useState(null); // null = not fetched, "" = silent, "text" = result
+    const [transcriptLoading, setTranscriptLoading] = useState(false);
+    const [transcriptError, setTranscriptError] = useState(null);
     
     const audioRef = useRef(null);
 
@@ -34,26 +41,53 @@ export default function VoiceMessageBubble({
         };
     }, [isE2EE, fileUrl]);
 
-    // Handle audio time update
+    // Handle audio event listeners
     useEffect(() => {
         if (!audioRef.current) return;
         
-        const updateTime = () => setPlaybackTime(audioRef.current.currentTime);
         const onEnd = () => {
             setIsPlaying(false);
             setPlaybackTime(0);
         };
+        const onPause = () => {
+            setIsPlaying(false);
+        };
+        const onPlay = () => {
+            setIsPlaying(true);
+        };
         
-        audioRef.current.addEventListener('timeupdate', updateTime);
         audioRef.current.addEventListener('ended', onEnd);
+        audioRef.current.addEventListener('pause', onPause);
+        audioRef.current.addEventListener('play', onPlay);
         
         return () => {
             if (audioRef.current) {
-                audioRef.current.removeEventListener('timeupdate', updateTime);
                 audioRef.current.removeEventListener('ended', onEnd);
+                audioRef.current.removeEventListener('pause', onPause);
+                audioRef.current.removeEventListener('play', onPlay);
             }
         };
     }, [localAudioUrl]);
+
+    // Handle high-precision progress tracking via requestAnimationFrame (60+ FPS)
+    useEffect(() => {
+        if (!isPlaying || !audioRef.current) return;
+        
+        let animationFrameId;
+        
+        const updateProgress = () => {
+            if (audioRef.current) {
+                setPlaybackTime(audioRef.current.currentTime);
+                animationFrameId = requestAnimationFrame(updateProgress);
+            }
+        };
+        
+        animationFrameId = requestAnimationFrame(updateProgress);
+        
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+        };
+    }, [isPlaying, localAudioUrl]);
 
     const fetchAndDecryptAudio = async () => {
         try {
@@ -76,10 +110,11 @@ export default function VoiceMessageBubble({
             const blob = new Blob([decryptedBytes], { type: encryptedPayload.mimeType || 'audio/webm' });
             const url = URL.createObjectURL(blob);
             
+            setDecryptedBlob(blob);
             setLocalAudioUrl(url);
             setIsDecrypted(true);
             setIsDecrypting(false);
-            return url;
+            return { url, blob };
         } catch (err) {
             console.error("Audio decryption error:", err);
             setError("Failed to decrypt audio");
@@ -92,8 +127,9 @@ export default function VoiceMessageBubble({
         let url = localAudioUrl;
         
         if (isE2EE && !isDecrypted) {
-            url = await fetchAndDecryptAudio();
-            if (!url) return;
+            const decryptRes = await fetchAndDecryptAudio();
+            if (!decryptRes || !decryptRes.url) return;
+            url = decryptRes.url;
             // Wait for React to set the ref (we need the audio element to be updated with src first)
             setTimeout(() => {
                 if (audioRef.current) {
@@ -113,14 +149,111 @@ export default function VoiceMessageBubble({
         }
     };
 
-    const displayWaveform = waveform && waveform.length > 0 ? waveform : new Array(40).fill(0.1);
+    const handleViewTranscript = async () => {
+        // Toggle visibility if already fetched
+        if (transcriptText !== null) {
+            setTranscriptVisible(!transcriptVisible);
+            return;
+        }
+
+        setTranscriptLoading(true);
+        setTranscriptError(null);
+        setTranscriptVisible(true);
+
+        try {
+            if (isE2EE) {
+                // For E2EE: Decrypt locally, then send to transcription proxy
+                let audioBlob = decryptedBlob;
+                if (!isDecrypted || !audioBlob) {
+                    const decryptRes = await fetchAndDecryptAudio();
+                    if (!decryptRes) {
+                        throw new Error("Could not decrypt audio for transcription");
+                    }
+                    audioBlob = decryptRes.blob;
+                }
+                
+                if (!audioBlob) {
+                    throw new Error("Could not retrieve decrypted audio blob");
+                }
+
+                const formData = new FormData();
+                formData.append("file", audioBlob, "voice_message.webm");
+
+                const res = await fetch(`${getBackendUrl()}/api/transcribe`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || `Server error: ${res.status}`);
+                }
+                
+                const data = await res.json();
+                let text = (data.transcript || "").trim();
+                
+                if (text === "[BLANK_AUDIO]" || text === "(blank audio)" || text === "[BLANK AUDIO]") {
+                    text = "";
+                }
+                
+                setTranscriptText(text);
+
+            } else {
+                // For Public: Fetch pre-computed transcript from backend
+                if (!messageId) {
+                    setTranscriptError("Message ID not available");
+                    setTranscriptLoading(false);
+                    return;
+                }
+
+                const res = await fetch(`${getBackendUrl()}/api/transcript/${messageId}`);
+                if (!res.ok) throw new Error("Failed to fetch transcript");
+                
+                const data = await res.json();
+
+                if (data.status === "ready") {
+                    setTranscriptText(data.transcript || "");
+                } else {
+                    // Transcript not ready yet, retry after 3 seconds
+                    setTranscriptText(null);
+                    setTimeout(async () => {
+                        try {
+                            const retryRes = await fetch(`${getBackendUrl()}/api/transcript/${messageId}`);
+                            if (retryRes.ok) {
+                                const retryData = await retryRes.json();
+                                if (retryData.status === "ready") {
+                                    setTranscriptText(retryData.transcript || "");
+                                } else {
+                                    setTranscriptText("");
+                                }
+                            }
+                        } catch (retryErr) {
+                            console.error("Transcript retry error:", retryErr);
+                            setTranscriptText("");
+                        }
+                        setTranscriptLoading(false);
+                    }, 3000);
+                    return; // Don't set loading to false yet
+                }
+            }
+        } catch (err) {
+            console.error("Transcript error:", err);
+            setTranscriptError("Could not load transcript: " + err.message);
+        }
+        setTranscriptLoading(false);
+    };
+
+    const displayWaveform = waveform && waveform.length > 0 ? normalizeWaveform(waveform, 40) : new Array(40).fill(0.1);
     const playProgress = duration > 0 ? (playbackTime / duration) : 0;
 
     return (
         <div className={`voice-message-bubble ${isOwnMessage ? 'own' : 'other'}`}>
-            {isE2EE && <div className="e2ee-badge" title="End-to-End Encrypted"><Lock size={12} /></div>}
-            
             <div className="voice-message-header">
+                {isE2EE && (
+                    <div className="e2ee-badge" title="End-to-End Encrypted">
+                        <Lock size={13} />
+                    </div>
+                )}
                 <button 
                     className="voice-play-btn" 
                     onClick={togglePlay}
@@ -135,17 +268,33 @@ export default function VoiceMessageBubble({
                     )}
                 </button>
                 
-                <div className="voice-waveform">
-                    {displayWaveform.map((val, i) => {
-                        const isPlayed = (i / displayWaveform.length) <= playProgress;
-                        return (
+                <div className="voice-waveform-container">
+                    {/* Background Waveform (gray) */}
+                    <div className="voice-waveform voice-waveform-bg">
+                        {displayWaveform.map((val, i) => (
                             <div 
                                 key={i} 
-                                className={`waveform-bar ${isPlayed ? 'played' : ''}`}
+                                className="waveform-bar"
                                 style={{ height: `${Math.max(10, val * 100)}%` }}
                             />
-                        );
-                    })}
+                        ))}
+                    </div>
+                    {/* Progress Waveform Overlay (cyan with clip-path) */}
+                    <div 
+                        className="voice-waveform voice-waveform-progress"
+                        style={{ 
+                            clipPath: `inset(0 ${100 - playProgress * 100}% 0 0)`,
+                            WebkitClipPath: `inset(0 ${100 - playProgress * 100}% 0 0)`
+                        }}
+                    >
+                        {displayWaveform.map((val, i) => (
+                            <div 
+                                key={i} 
+                                className="waveform-bar played"
+                                style={{ height: `${Math.max(10, val * 100)}%` }}
+                            />
+                        ))}
+                    </div>
                 </div>
                 
                 <div className="voice-duration">
@@ -155,22 +304,44 @@ export default function VoiceMessageBubble({
 
             {error && <div className="voice-error">{error}</div>}
 
-            {transcript && (
-                <div className="voice-transcript-container">
-                    <div className={`voice-transcript ${transcriptExpanded ? 'expanded' : 'collapsed'}`}>
-                        {transcript}
-                    </div>
-                    {transcript.length > 100 && (
-                        <button 
-                            className="transcript-toggle"
-                            onClick={() => setTranscriptExpanded(!transcriptExpanded)}
-                        >
-                            {transcriptExpanded ? (
-                                <>Show less <ChevronUp size={14} /></>
-                            ) : (
-                                <>Show more <ChevronDown size={14} /></>
-                            )}
-                        </button>
+            {/* View Transcript Button — available for both public and E2EE messages */}
+            {messageId && (
+                <div className="voice-transcript-section">
+                    <button 
+                        className="view-transcript-btn"
+                        onClick={handleViewTranscript}
+                        disabled={transcriptLoading}
+                    >
+                        {transcriptLoading ? (
+                            <>
+                                <Loader2 size={13} className="transcript-spinner" />
+                                <span>Loading transcript...</span>
+                            </>
+                        ) : transcriptVisible && transcriptText !== null ? (
+                            <>
+                                <FileText size={13} />
+                                <span>Hide Transcript</span>
+                            </>
+                        ) : (
+                            <>
+                                <FileText size={13} />
+                                <span>View Transcript</span>
+                            </>
+                        )}
+                    </button>
+
+                    {transcriptVisible && (
+                        <div className="voice-transcript-content">
+                            {transcriptLoading ? (
+                                <div className="transcript-loading-text">Transcribing audio...</div>
+                            ) : transcriptError ? (
+                                <div className="transcript-error-text">{transcriptError}</div>
+                            ) : transcriptText === "" ? (
+                                <div className="transcript-empty-text">No speech detected</div>
+                            ) : transcriptText !== null ? (
+                                <div className="transcript-text">{transcriptText}</div>
+                            ) : null}
+                        </div>
                     )}
                 </div>
             )}

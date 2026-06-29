@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import savedMessagesLogo from "../assets/saved_messages.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut } from "react-icons/fi";
 
 const VerifiedRoomBadge = ({ size = 13, style = {} }) => (
     <svg 
@@ -108,7 +108,8 @@ function RoomList({
     setActiveSidebarTab,
     pendingRequestsCount = 0,
     deletedSystemRooms = [],
-    onLogoClick
+    onLogoClick,
+    onLogout
 }) {
     const [dmSearch, setDmSearch] = useState("");
 
@@ -275,6 +276,17 @@ function RoomList({
                     >
                         <FiSettings />
                     </button>
+
+                    {onLogout && (
+                        <button 
+                            className="narrow-nav-btn logout-btn"
+                            onClick={onLogout}
+                            title="Log Out"
+                            style={{ color: '#f87171' }}
+                        >
+                            <FiLogOut />
+                        </button>
+                    )}
                 </div>
             </div>
 

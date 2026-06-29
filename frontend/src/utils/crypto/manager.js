@@ -32,17 +32,18 @@ let inMemoryMasterKey = null;
  */
 export function setMasterKey(key) {
     inMemoryMasterKey = key;
-    // sessionStorage survives refresh but is accessible to page JS; a higher-security alternative is in-memory only.
+    // Store in both sessionStorage and localStorage for persistent login support
     sessionStorage.setItem("nexus_master_key", toBase64(key));
+    localStorage.setItem("nexus_master_key", toBase64(key));
 }
 
 /**
- * Retrieve the master key from memory or sessionStorage.
+ * Retrieve the master key from memory, sessionStorage, or localStorage.
  * @returns {Uint8Array|null}
  */
 export function getMasterKey() {
     if (inMemoryMasterKey) return inMemoryMasterKey;
-    const sessionVal = sessionStorage.getItem("nexus_master_key");
+    const sessionVal = sessionStorage.getItem("nexus_master_key") || localStorage.getItem("nexus_master_key");
     if (sessionVal) {
         inMemoryMasterKey = fromBase64(sessionVal);
         return inMemoryMasterKey;

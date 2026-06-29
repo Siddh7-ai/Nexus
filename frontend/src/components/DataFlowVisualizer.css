@@ -340,3 +340,34 @@
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
 }
+
+/* Empty State Styles */
+.visualizer-empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    text-align: center;
+    gap: 16px;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    opacity: 0.6;
+    animation: pulse 2s infinite ease-in-out;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: var(--text-muted, #a0a0a0);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 260px;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.05); opacity: 0.8; }
+}

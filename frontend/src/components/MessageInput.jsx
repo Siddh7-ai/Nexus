@@ -901,6 +901,43 @@ function MessageInput({
         setCaptionText("");
     };
 
+    const handlePaste = (e) => {
+        const files = Array.from(e.clipboardData?.files || []);
+        if (files.length === 0) return;
+
+        // Prevent default paste to prevent contentEditable formatting corruption
+        e.preventDefault();
+
+        if (files.length > 20) {
+            setErrorBanner("You can only select a maximum of 20 photos/videos.");
+            setTimeout(() => setErrorBanner(null), 5000);
+            return;
+        }
+
+        const largeVideo = files.find(f => f.type.startsWith("video/") && f.size > 100 * 1024 * 1024);
+        if (largeVideo) {
+            setErrorBanner("Video files must be smaller than 100MB.");
+            setTimeout(() => setErrorBanner(null), 5000);
+            return;
+        }
+
+        const fileObjects = files.map(file => ({
+            file,
+            previewUrl: file.type.startsWith("image/") || file.type.startsWith("video/") 
+                ? URL.createObjectURL(file) 
+                : null,
+            name: file.name,
+            size: file.size,
+            type: file.type
+        }));
+
+        setSelectedFiles(fileObjects);
+        setActivePreviewIndex(0);
+        setPreviewModalOpen(true);
+        setHdQuality(false);
+        setCaptionText("");
+    };
+
     const handleSendAttachments = async () => {
         if (selectedFiles.length === 0) return;
         setUploading(true);
@@ -1559,6 +1596,7 @@ function MessageInput({
                         className="composer-textarea-editable"
                         contentEditable="true"
                         data-placeholder={isEditing ? "Edit your message..." : "Type a message..."}
+                        onPaste={handlePaste}
                         onInput={() => {
                             handleInput();
                             updateEditorCaret();

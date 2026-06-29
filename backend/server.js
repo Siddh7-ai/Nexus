@@ -1,10 +1,31 @@
+// Load environment variables from .env file if it exists
+const fs = require("fs");
+const path = require("path");
+const envPath = path.join(__dirname, ".env");
+if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, "utf-8");
+    envContent.split(/\r?\n/).forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+            const index = trimmed.indexOf("=");
+            if (index !== -1) {
+                const key = trimmed.substring(0, index).trim();
+                const val = trimmed.substring(index + 1).trim();
+                if (key) {
+                    process.env[key] = val;
+                }
+            }
+        }
+    });
+}
+
 const mongoose = require("mongoose");
 const Message = require("./models/Message");
 const ClearedChat = require("./models/ClearedChat");
 const Room = require("./models/Room");
 const VaultItem = require("./models/VaultItem");
 const VaultPin = require("./models/VaultPin");
-const express = require("express");
+const express = require("express"); // trigger restart 2
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
@@ -16,8 +37,6 @@ const keyRoutes = require("./routes/keyRoutes");
 const { canAccessRoom } = require("./permissions");
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
-const path = require("path");
-const fs = require("fs");
 const multer = require("multer");
 const { GridFSBucket, ObjectId } = require("mongodb");
 
@@ -34,6 +53,16 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/keys", keyRoutes);
+
+// Endpoint for transcription config queries
+app.get("/api/config/transcription", (req, res) => {
+    res.json({
+        mode: process.env.TRANSCRIPTION_MODE || "local",
+        localModel: process.env.LOCAL_ASR_MODEL || "Xenova/distil-whisper-small.en",
+        localModelVersion: process.env.LOCAL_MODEL_VERSION || "v1",
+        devMode: process.env.TRANSCRIPTION_DEV_MODE === "true"
+    });
+});
 
 // Endpoint for E2EE receiver ciphertext backup (reuses userRoutes middleware)
 app.post("/api/messages/:messageId/backup", userRoutes.authenticateToken, async (req, res) => {
@@ -313,6 +342,138 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     } catch (err) {
         console.error("Upload error:", err);
         res.status(500).json({ error: "Failed to upload file" });
+    }
+});
+
+// Express endpoint to receive audio upload and proxy to Python transcription service
+app.post("/api/transcribe", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        if ((process.env.TRANSCRIPTION_MODE || "local") !== "server") {
+            return res.status(400).json({ error: "Server-side transcription is disabled. Use client-side local transcription." });
+        }
+
+        const formData = new FormData();
+        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+        formData.append("file", blob, req.file.originalname);
+
+        const pythonRes = await fetch("http://127.0.0.1:5001/transcribe", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!pythonRes.ok) {
+            const errText = await pythonRes.text();
+            throw new Error(`Python ASR failed: ${errText}`);
+        }
+
+        const result = await pythonRes.json();
+        res.json(result);
+    } catch (err) {
+        console.error("[Node Server] Transcription routing error:", err);
+        res.status(500).json({ error: "Failed to transcribe audio. Check backend service status." });
+    }
+});
+
+// Async background transcription: downloads audio from GridFS, sends to Python ASR, saves result
+async function transcribeMessageInBackground(messageId, fileUrl) {
+    try {
+        if ((process.env.TRANSCRIPTION_MODE || "local") !== "server") return;
+
+        // Extract GridFS file ID from fileUrl (format: /api/file/<id>)
+        const fileIdMatch = fileUrl.match(/\/api\/file\/([a-f0-9]+)/i);
+        if (!fileIdMatch) {
+            console.error("[ASR Background] Could not extract file ID from:", fileUrl);
+            return;
+        }
+
+        const db = mongoose.connection.db;
+        const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+        const fileId = new ObjectId(fileIdMatch[1]);
+
+        // Download file from GridFS into memory buffer
+        const chunks = [];
+        const downloadStream = bucket.openDownloadStream(fileId);
+
+        await new Promise((resolve, reject) => {
+            downloadStream.on("data", (chunk) => chunks.push(chunk));
+            downloadStream.on("end", resolve);
+            downloadStream.on("error", reject);
+        });
+
+        const audioBuffer = Buffer.concat(chunks);
+        console.log(`[ASR Background] Downloaded ${audioBuffer.length} bytes for message ${messageId}`);
+
+        // Send to Python ASR service
+        const formData = new FormData();
+        const blob = new Blob([audioBuffer], { type: "audio/webm" });
+        formData.append("file", blob, "voice_message.webm");
+
+        const pythonRes = await fetch("http://127.0.0.1:5001/transcribe", {
+            method: "POST",
+            body: formData
+        });
+
+        if (!pythonRes.ok) {
+            const errText = await pythonRes.text();
+            console.error(`[ASR Background] Python ASR failed for ${messageId}:`, errText);
+            return;
+        }
+
+        const result = await pythonRes.json();
+        let transcript = (result.transcript || "").trim();
+
+        // Clean up Whisper artifacts like "[BLANK_AUDIO]"
+        if (transcript === "[BLANK_AUDIO]" || transcript === "(blank audio)" || transcript === "[BLANK AUDIO]") {
+            transcript = "";
+        }
+
+        // Save transcript to the message document
+        await Message.findByIdAndUpdate(messageId, { transcript });
+        console.log(`[ASR Background] Transcript saved for ${messageId}: "${transcript}"`);
+
+    } catch (err) {
+        console.error(`[ASR Background] Error transcribing message ${messageId}:`, err.message);
+    }
+}
+
+// GET endpoint to fetch transcript for a specific message (on-demand)
+app.get("/api/transcript/:messageId", async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(messageId)) {
+            return res.status(400).json({ error: "Invalid message ID" });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+
+        // If transcript already exists (including empty string for silent audio), return it
+        if (message.transcript !== null && message.transcript !== undefined) {
+            return res.json({ transcript: message.transcript, status: "ready" });
+        }
+
+        // Transcript not yet ready — try to transcribe on-demand if it has a file
+        if (message.fileUrl && (process.env.TRANSCRIPTION_MODE || "local") === "server") {
+            await transcribeMessageInBackground(messageId, message.fileUrl);
+
+            // Re-fetch the updated message
+            const updated = await Message.findById(messageId);
+            if (updated && updated.transcript !== null) {
+                return res.json({ transcript: updated.transcript, status: "ready" });
+            }
+        }
+
+        // Still not ready or server mode disabled
+        return res.json({ transcript: null, status: "pending" });
+    } catch (err) {
+        console.error("[Transcript API] Error:", err);
+        res.status(500).json({ error: "Failed to fetch transcript" });
     }
 });
 
@@ -1150,6 +1311,7 @@ io.on("connection", async (socket) => {
             }
 
             const savedMessage = await Message.create(msgData);
+            console.log("[Nexus ASR G] Database document saved:", JSON.stringify(savedMessage));
 
             if (data.privateChatId) {
                 io.to(`private_${data.privateChatId}`).emit("reply", savedMessage);
@@ -1164,6 +1326,14 @@ io.on("connection", async (socket) => {
                 const clientMsg = savedMessage.toObject();
                 clientMsg.room = roomNameValue;
                 io.to(targetRoomName).emit("reply", clientMsg);
+            }
+
+            // Fire-and-forget: Trigger async background transcription for voice messages
+            if (savedMessage.fileUrl && savedMessage.fileType &&
+                (savedMessage.fileType.startsWith("audio/") || savedMessage.fileType === "audio/e2ee") &&
+                savedMessage.fileType !== "audio/e2ee") { // Skip E2EE (server can't decrypt)
+                transcribeMessageInBackground(savedMessage._id.toString(), savedMessage.fileUrl)
+                    .catch(err => console.error("[ASR Background] Fire-and-forget error:", err.message));
             }
         } catch (error) {
             console.log(error);
@@ -1838,6 +2008,58 @@ app.get("*all", (req, res) => {
     }
 });
 
+const { spawn } = require("child_process");
+let pythonProcess = null;
+
+function startPythonASR() {
+    if ((process.env.TRANSCRIPTION_MODE || "local") !== "server") return;
+
+    console.log("[Node Server] Spawning Python ASR service...");
+    const pythonExec = "C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+    const scriptPath = path.join(__dirname, "transcription_server.py");
+
+    const pathDelimiter = process.platform === "win32" ? ";" : ":";
+    const customEnv = {
+        ...process.env,
+        PATH: `${__dirname}${pathDelimiter}${process.env.PATH || ""}`
+    };
+
+    pythonProcess = spawn(pythonExec, [scriptPath], {
+        cwd: __dirname,
+        env: customEnv
+    });
+
+    pythonProcess.stdout.on("data", (data) => {
+        console.log(`[Python ASR stdout]: ${data}`);
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+        console.error(`[Python ASR stderr]: ${data}`);
+    });
+
+    pythonProcess.on("close", (code) => {
+        console.log(`[Python ASR Process] exited with code ${code}`);
+    });
+}
+
+const cleanUpProcess = () => {
+    if (pythonProcess) {
+        console.log("[Node Server] Stopping Python ASR process...");
+        pythonProcess.kill();
+    }
+};
+
+process.on("exit", cleanUpProcess);
+process.on("SIGINT", () => {
+    cleanUpProcess();
+    process.exit();
+});
+process.on("SIGTERM", () => {
+    cleanUpProcess();
+    process.exit();
+});
+
 server.listen(5000, () => {
     console.log("Server started on port 5000");
+    startPythonASR(); // Auto-spawn Python speech recognition microservice if enabled ASR
 });

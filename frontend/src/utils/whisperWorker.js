@@ -16,6 +16,8 @@ self.addEventListener('message', async (event) => {
                 env.useBrowserCache = true;
             }
 
+            const modelName = event.data.modelName || 'Xenova/distil-whisper-small.en';
+
             if (!whisperPipeline) {
                 let useWebGPU = false;
                 try {
@@ -28,10 +30,10 @@ self.addEventListener('message', async (event) => {
 
                 if (useWebGPU) {
                     try {
-                        console.log("Attempting WebGPU initialization with fp16...");
+                        console.log(`Attempting WebGPU initialization of ${modelName} with fp16...`);
                         whisperPipeline = await pipeline(
                             'automatic-speech-recognition',
-                            'Xenova/whisper-small',
+                            modelName,
                             {
                                 device: 'webgpu',
                                 dtype: 'fp16',
@@ -48,7 +50,7 @@ self.addEventListener('message', async (event) => {
 
                 // CPU Fallback if WebGPU is not used or failed
                 if (!whisperPipeline) {
-                    console.log("Initializing CPU / WASM pipeline with q8 quantization...");
+                    console.log(`Initializing CPU / WASM pipeline for ${modelName} with q8 quantization...`);
                     try {
                         env.backends.onnx.wasm.simd = true;
                         if (typeof SharedArrayBuffer !== 'undefined') {
@@ -62,7 +64,7 @@ self.addEventListener('message', async (event) => {
 
                     whisperPipeline = await pipeline(
                         'automatic-speech-recognition',
-                        'Xenova/whisper-small',
+                        modelName,
                         {
                             device: 'cpu',
                             dtype: 'q8',

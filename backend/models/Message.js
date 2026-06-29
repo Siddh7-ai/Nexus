@@ -144,6 +144,11 @@ const messageSchema = new mongoose.Schema({
         },
         default: null
     },
+    // Async server-side voice transcript (null = not yet transcribed, "" = silent, "text" = result)
+    transcript: {
+        type: String,
+        default: null
+    },
     createdAt: {
         type: Date,
         default: Date.now

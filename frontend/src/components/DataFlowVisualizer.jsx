@@ -92,118 +92,129 @@ function DataFlowVisualizer({ isOpen, onClose, visualizerData }) {
                 </button>
             </div>
 
-            <div className="visualizer-body">
-                {/* Simulation Control Toggle */}
-                <div className="visualizer-toggle-row">
-                    <span className="toggle-label">Encryption Simulation Mode:</span>
-                    <div className="simulation-toggle">
-                        <button 
-                            className={`toggle-btn secure ${e2eeEnabled ? "active" : ""}`}
-                            onClick={() => setE2eeEnabled(true)}
-                        >
-                            E2EE ON
-                        </button>
-                        <button 
-                            className={`toggle-btn unsecure ${!e2eeEnabled ? "active" : ""}`}
-                            onClick={() => setE2eeEnabled(false)}
-                        >
-                            E2EE OFF
-                        </button>
-                    </div>
+            {!visualizerData ? (
+                <div className="visualizer-empty-state">
+                    <div className="empty-state-icon">💬</div>
+                    <p className="empty-state-text">
+                        start chat to see the preview of recent message
+                    </p>
                 </div>
-
-                <div className="visualizer-flow-container">
-                    {/* Stage 1: Sender */}
-                    <div className={`flow-stage ${currentStage === 1 ? "active" : ""} ${currentStage > 1 ? "completed" : ""}`}>
-                        <div className="stage-header">
-                            <span className="stage-num">1</span>
-                            <span className="stage-name">{displayType === "send" ? "Sender (You)" : `Sender (@${visualizerData?.username})`}</span>
-                        </div>
-                        <div className="stage-box">
-                            <div className="stage-box-label">Plaintext Message</div>
-                            <div className="stage-text-display">
-                                {currentStage >= 1 ? senderText || "[No Data]" : ""}
+            ) : (
+                <>
+                    <div className="visualizer-body">
+                        {/* Simulation Control Toggle */}
+                        <div className="visualizer-toggle-row">
+                            <span className="toggle-label">Encryption Simulation Mode:</span>
+                            <div className="simulation-toggle">
+                                <button 
+                                    className={`toggle-btn secure ${e2eeEnabled ? "active" : ""}`}
+                                    onClick={() => setE2eeEnabled(true)}
+                                >
+                                    E2EE ON
+                                </button>
+                                <button 
+                                    className={`toggle-btn unsecure ${!e2eeEnabled ? "active" : ""}`}
+                                    onClick={() => setE2eeEnabled(false)}
+                                >
+                                    E2EE OFF
+                                </button>
                             </div>
-                            {currentStage === 1 && e2eeEnabled && (
-                                <div className="action-badge encrypting">Encrypting...</div>
-                            )}
                         </div>
-                    </div>
 
-                    {/* Arrow / Line 1 */}
-                    <div className={`flow-line ${currentStage >= 2 ? "active" : ""} ${!e2eeEnabled && currentStage >= 2 ? "danger" : ""}`}>
-                        <div className="flow-dot" />
-                    </div>
-
-                    {/* Stage 2: Server */}
-                    <div className={`flow-stage ${currentStage === 2 ? "active" : ""} ${currentStage > 2 ? "completed" : ""}`}>
-                        <div className="stage-header">
-                            <span className="stage-num">2</span>
-                            <span className="stage-name">Server / Transit Relay</span>
-                        </div>
-                        <div className={`stage-box server-stage-box ${!e2eeEnabled ? "unencrypted-alert" : ""}`}>
-                            <div className="stage-box-label">Stored in MongoDB / Sent via WebSocket</div>
-                            <div className="stage-text-display server-data">
-                                {currentStage >= 2 ? transitText || "[No Data]" : ""}
-                            </div>
-                            
-                            {e2eeEnabled ? (
-                                <div className="security-status-badge secure">
-                                    <FiCheck size={12} />
-                                    Server is Blind (Ciphertext only)
+                        <div className="visualizer-flow-container">
+                            {/* Stage 1: Sender */}
+                            <div className={`flow-stage ${currentStage === 1 ? "active" : ""} ${currentStage > 1 ? "completed" : ""}`}>
+                                <div className="stage-header">
+                                    <span className="stage-num">1</span>
+                                    <span className="stage-name">{displayType === "send" ? "Sender (You)" : `Sender (@${visualizerData?.username})`}</span>
                                 </div>
-                            ) : (
-                                <div className="security-status-badge insecure">
-                                    <FiAlertTriangle size={12} />
-                                    UNENCRYPTED — Server sees plaintext!
+                                <div className="stage-box">
+                                    <div className="stage-box-label">Plaintext Message</div>
+                                    <div className="stage-text-display">
+                                        {currentStage >= 1 ? senderText || "[No Data]" : ""}
+                                    </div>
+                                    {currentStage === 1 && e2eeEnabled && (
+                                        <div className="action-badge encrypting">Encrypting...</div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Arrow / Line 2 */}
-                    <div className={`flow-line ${currentStage >= 3 ? "active" : ""} ${!e2eeEnabled && currentStage >= 3 ? "danger" : ""}`}>
-                        <div className="flow-dot" />
-                    </div>
-
-                    {/* Stage 3: Recipient */}
-                    <div className={`flow-stage ${currentStage === 3 ? "active" : ""} ${currentStage > 3 || currentStage === 0 ? "completed" : ""}`}>
-                        <div className="stage-header">
-                            <span className="stage-num">3</span>
-                            <span className="stage-name">{displayType === "send" ? `Recipient (@${visualizerData?.username})` : "Recipient (You)"}</span>
-                        </div>
-                        <div className="stage-box">
-                            <div className="stage-box-label">Decrypted Message</div>
-                            <div className="stage-text-display">
-                                {currentStage >= 3 ? recipientText || "[No Data]" : ""}
                             </div>
-                            {currentStage === 3 && e2eeEnabled && (
-                                <div className="action-badge decrypting">Decrypting...</div>
-                            )}
+
+                            {/* Arrow / Line 1 */}
+                            <div className={`flow-line ${currentStage >= 2 ? "active" : ""} ${!e2eeEnabled && currentStage >= 2 ? "danger" : ""}`}>
+                                <div className="flow-dot" />
+                            </div>
+
+                            {/* Stage 2: Server */}
+                            <div className={`flow-stage ${currentStage === 2 ? "active" : ""} ${currentStage > 2 ? "completed" : ""}`}>
+                                <div className="stage-header">
+                                    <span className="stage-num">2</span>
+                                    <span className="stage-name">Server / Transit Relay</span>
+                                </div>
+                                <div className={`stage-box server-stage-box ${!e2eeEnabled ? "unencrypted-alert" : ""}`}>
+                                    <div className="stage-box-label">Stored in MongoDB / Sent via WebSocket</div>
+                                    <div className="stage-text-display server-data">
+                                        {currentStage >= 2 ? transitText || "[No Data]" : ""}
+                                    </div>
+                                    
+                                    {e2eeEnabled ? (
+                                        <div className="security-status-badge secure">
+                                            <FiCheck size={12} />
+                                            Server is Blind (Ciphertext only)
+                                        </div>
+                                    ) : (
+                                        <div className="security-status-badge insecure">
+                                            <FiAlertTriangle size={12} />
+                                            UNENCRYPTED — Server sees plaintext!
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Arrow / Line 2 */}
+                            <div className={`flow-line ${currentStage >= 3 ? "active" : ""} ${!e2eeEnabled && currentStage >= 3 ? "danger" : ""}`}>
+                                <div className="flow-dot" />
+                            </div>
+
+                            {/* Stage 3: Recipient */}
+                            <div className={`flow-stage ${currentStage === 3 ? "active" : ""} ${currentStage > 3 || currentStage === 0 ? "completed" : ""}`}>
+                                <div className="stage-header">
+                                    <span className="stage-num">3</span>
+                                    <span className="stage-name">{displayType === "send" ? `Recipient (@${visualizerData?.username})` : "Recipient (You)"}</span>
+                                </div>
+                                <div className="stage-box">
+                                    <div className="stage-box-label">Decrypted Message</div>
+                                    <div className="stage-text-display">
+                                        {currentStage >= 3 ? recipientText || "[No Data]" : ""}
+                                    </div>
+                                    {currentStage === 3 && e2eeEnabled && (
+                                        <div className="action-badge decrypting">Decrypting...</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Bottom Metadata Panel */}
-            <div className="visualizer-metadata-footer">
-                <div className="meta-grid">
-                    <div className="meta-item">
-                        <span className="meta-label">Double Ratchet Session</span>
-                        <span className="meta-value font-mono">{sessionId}</span>
+                    {/* Bottom Metadata Panel */}
+                    <div className="visualizer-metadata-footer">
+                        <div className="meta-grid">
+                            <div className="meta-item">
+                                <span className="meta-label">Double Ratchet Session</span>
+                                <span className="meta-value font-mono">{sessionId}</span>
+                            </div>
+                            <div className="meta-item">
+                                <span className="meta-label">Message Number</span>
+                                <span className="meta-value font-mono">#{messageNumber}</span>
+                            </div>
+                            <div className="meta-item">
+                                <span className="meta-label">Ratchet Key Advanced</span>
+                                <span className={`meta-value font-mono ${e2eeEnabled ? "accent-text" : "danger-text"}`}>
+                                    {e2eeEnabled ? "YES" : "NO (Simulation Off)"}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="meta-item">
-                        <span className="meta-label">Message Number</span>
-                        <span className="meta-value font-mono">#{messageNumber}</span>
-                    </div>
-                    <div className="meta-item">
-                        <span className="meta-label">Ratchet Key Advanced</span>
-                        <span className={`meta-value font-mono ${e2eeEnabled ? "accent-text" : "danger-text"}`}>
-                            {e2eeEnabled ? "YES" : "NO (Simulation Off)"}
-                        </span>
-                    </div>
-                </div>
-            </div>
+                </>
+            )}
         </div>
     );
 }

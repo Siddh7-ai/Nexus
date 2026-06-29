@@ -65,7 +65,8 @@ function Login() {
       if (response.ok) {
         sessionStorage.setItem("token", data.token);
         sessionStorage.setItem("username", data.username);
-        localStorage.removeItem("token");
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("username", data.username);
 
         // 1. Derive the master key from the password
         const { masterKey } = await deriveKeysFromPassword(password, data.username);

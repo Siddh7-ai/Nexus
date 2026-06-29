@@ -396,7 +396,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Edit</span>
                         </button>
                     )}
-                    {isPrivate && !msg.isLocked && (
+                    {isPrivate && !msg.isLocked && !msg.fileUrl && (
                         <button className="menu-item" onClick={() => { onLockMessage(msg); setShowMenu(false); }}>
                             <Lock size={16} className="menu-icon" />
                             <span>Lock message</span>
@@ -734,8 +734,18 @@ function MessageList({
                                                     </div>
                                                 ) : msg.fileType === "audio/e2ee" || msg.fileType.startsWith("audio/") ? (() => {
                                                     let voiceData = null;
-                                                    try { voiceData = JSON.parse(msg.text); } catch(e) {}
-                                                    if (voiceData && typeof voiceData.duration !== 'undefined') {
+                                                    try {
+                                                        if (msg.text && msg.text.trim().startsWith("{")) {
+                                                            const parsed = JSON.parse(msg.text);
+                                                            if (parsed && (parsed.__voice === true || typeof parsed.duration !== 'undefined')) {
+                                                                voiceData = parsed;
+                                                            }
+                                                        }
+                                                    } catch(e) {
+                                                        console.error("Defensive voiceData parse failed:", e);
+                                                    }
+                                                    if (voiceData) {
+                                                        console.log("[Nexus ASR J] React message object parsed voiceData:", JSON.stringify(voiceData));
                                                         return (
                                                             <VoiceMessageBubble
                                                                 fileUrl={`${getBackendUrl()}${msg.fileUrl}`}
@@ -744,7 +754,7 @@ function MessageList({
                                                                 isOwnMessage={isOwn}
                                                                 duration={voiceData.duration}
                                                                 waveform={voiceData.waveform}
-                                                                transcript={voiceData.transcript}
+                                                                messageId={msg._id}
                                                             />
                                                         );
                                                     }
@@ -791,7 +801,20 @@ function MessageList({
                                             </div>
                                         ) : (
                                             <>
-                                                {msg.text && (!msg.fileType || (msg.fileType !== "audio/e2ee" && !msg.fileType.startsWith("audio/"))) && (
+                                                {msg.text && (
+                                                    !msg.fileType || 
+                                                    (msg.fileType !== "audio/e2ee" && !msg.fileType.startsWith("audio/")) ||
+                                                    // Fallback: If voice parsing of JSON metadata fails or lacks voice markers, render as normal text
+                                                    (() => {
+                                                        try {
+                                                            if (!msg.text.trim().startsWith("{")) return true;
+                                                            const parsed = JSON.parse(msg.text);
+                                                            return !(parsed && (parsed.__voice === true || typeof parsed.duration !== 'undefined'));
+                                                        } catch(e) {
+                                                            return true;
+                                                        }
+                                                    })()
+                                                ) && (
                                                     <div className="message-text markdown-content">
                                                         <ReactMarkdown 
                                                             remarkPlugins={[remarkGfm]} 

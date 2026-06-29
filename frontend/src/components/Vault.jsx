@@ -7,7 +7,6 @@ import { decryptVaultItem, encryptVaultItem, setupVaultPin, getVaultKeyFromSessi
 import VaultPinSetupModal from "./VaultPinSetupModal";
 import VaultPinEntryModal from "./VaultPinEntryModal";
 import VaultAddTextModal from "./VaultAddTextModal";
-import VaultAddFileModal from "./VaultAddFileModal";
 import sodium from "libsodium-wrappers-sumo";
 import { formatDuration } from "../utils/voiceMessage";
 
@@ -36,7 +35,6 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
     const [showSetupModal, setShowSetupModal] = useState(false);
     const [showEntryModal, setShowEntryModal] = useState(false);
     const [showAddTextModal, setShowAddTextModal] = useState(false);
-    const [showAddFileModal, setShowAddFileModal] = useState(false);
 
     // Vault contents
     const [vaultItems, setVaultItems] = useState([]);
@@ -93,7 +91,6 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
             setShowSetupModal(false);
             setShowEntryModal(false);
             setShowAddTextModal(false);
-            setShowAddFileModal(false);
         }
     }, [isOpen, checkPinStatus]);
 
@@ -379,9 +376,6 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
                                 <button className="vault-action-btn" onClick={() => setShowAddTextModal(true)}>
                                     <FiPlus /> Add Password
                                 </button>
-                                <button className="vault-action-btn" onClick={() => setShowAddFileModal(true)}>
-                                    <FiPlus /> Add File
-                                </button>
                             </div>
 
                             {loadingItems ? (
@@ -555,14 +549,6 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
                 />
             )}
 
-            {/* Render Add File Modal */}
-            {showAddFileModal && (
-                <VaultAddFileModal 
-                    onClose={() => setShowAddFileModal(false)}
-                    onSave={handleSaveFileItem}
-                    token={token}
-                />
-            )}
         </>
     );
 }

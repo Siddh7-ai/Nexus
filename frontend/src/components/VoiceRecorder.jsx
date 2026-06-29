@@ -1,17 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Square, Trash2, Send, Play, Pause } from 'lucide-react';
-import { VoiceRecorderSession, transcribeAudio, normalizeWaveform, formatDuration } from '../utils/voiceMessage';
+import { VoiceRecorderSession, normalizeWaveform, formatDuration } from '../utils/voiceMessage';
 
-const processingSteps = [
-    "Analyzing audio...",
-    "Processing speech...",
-    "Transcribing voice...",
-    "Refining text...",
-    "Applying E2EE...",
-    "Encrypting payload...",
-    "Securing packets...",
-    "Sending message..."
-];
+
 
 export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordingStart, onRecordingStop }) {
     const [state, setState] = useState('idle'); // 'idle', 'recording', 'preview', 'processing'
@@ -24,25 +15,36 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackTime, setPlaybackTime] = useState(0);
     
-    // Processing state
-    const [progressStatus, setProgressStatus] = useState('');
-    const [progressPercent, setProgressPercent] = useState(0);
-    const [isModelLoading, setIsModelLoading] = useState(false);
-    const [stepIndex, setStepIndex] = useState(0);
-
+    // Handle high-precision progress tracking via requestAnimationFrame (60+ FPS)
     useEffect(() => {
-        let interval = null;
-        if (state === 'processing') {
-            setStepIndex(0);
-            interval = setInterval(() => {
-                setStepIndex(prev => (prev + 1) % processingSteps.length);
-            }, 6000); // Very slow transitions (3 seconds)
-        }
-        return () => {
-            if (interval) clearInterval(interval);
+        if (!isPlaying || !audioRef.current) return;
+        
+        let animationFrameId;
+        
+        const updateProgress = () => {
+            if (audioRef.current) {
+                setPlaybackTime(audioRef.current.currentTime);
+                animationFrameId = requestAnimationFrame(updateProgress);
+            }
         };
-    }, [state]);
-    
+        
+        animationFrameId = requestAnimationFrame(updateProgress);
+        
+        return () => {
+            cancelAnimationFrame(animationFrameId);
+        };
+    }, [isPlaying]);
+
+    // Cleanup audio on unmount
+    useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                URL.revokeObjectURL(audioRef.current.src);
+            }
+        };
+    }, []);
+
     const sessionRef = useRef(null);
     const timerRef = useRef(null);
     const audioRef = useRef(null);
@@ -128,8 +130,11 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
             setIsPlaying(false);
             setPlaybackTime(0);
         };
-        audioRef.current.ontimeupdate = () => {
-            setPlaybackTime(audioRef.current.currentTime);
+        audioRef.current.onpause = () => {
+            setIsPlaying(false);
+        };
+        audioRef.current.onplay = () => {
+            setIsPlaying(true);
         };
     };
 
@@ -146,54 +151,13 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
     const handleSend = async () => {
         if (!audioBlob) return;
         setState('processing');
-        setIsModelLoading(true);
-        setProgressStatus('Preparing transcription...');
-        setProgressPercent(0);
 
-        const seenOnnxFiles = [];
-        // Run transcription
-        const transcript = await transcribeAudio(audioBlob, (data) => {
-            if (data) {
-                if (data.status === 'init_start') {
-                    setIsModelLoading(true);
-                    setProgressStatus('Initializing voice AI...');
-                } else if (data.status === 'ready') {
-                    setIsModelLoading(false);
-                } else {
-                    let pct = -1;
-                    if (typeof data.progress === 'number') {
-                        pct = Math.round(data.progress);
-                    } else if (typeof data.loaded === 'number' && typeof data.total === 'number' && data.total > 0) {
-                        pct = Math.round((data.loaded / data.total) * 100);
-                    }
-
-                    if (pct >= 0) {
-                        const isModelFile = data.file && (data.file.endsWith('.onnx') || data.file.includes('.onnx'));
-                        if (isModelFile) {
-                            if (!seenOnnxFiles.includes(data.file)) {
-                                seenOnnxFiles.push(data.file);
-                            }
-                            const partNum = seenOnnxFiles.indexOf(data.file) + 1;
-                            setProgressPercent(pct);
-                            setProgressStatus(`Downloading voice AI model (Part ${partNum})...`);
-                            setIsModelLoading(true);
-                        } else if (seenOnnxFiles.length === 0) {
-                            setProgressStatus('Downloading model configuration...');
-                            setIsModelLoading(true);
-                        }
-                    }
-                }
-            }
-        });
-
-        setIsModelLoading(false);
-        setProgressStatus('Finalizing...');
         const normalizedWaveform = normalizeWaveform(amplitudeData, 100);
 
         if (onVoiceMessageReady) {
             await onVoiceMessageReady({
                 audioBlob,
-                transcript,
+                transcript: "", // Backend will transcribe asynchronously
                 waveform: normalizedWaveform,
                 durationSeconds: duration
             });
@@ -270,12 +234,6 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
     };
 
     if (state === 'processing') {
-        const isDownloading = progressStatus.toLowerCase().includes('downloading');
-        const currentMsg = isModelLoading
-            ? (isDownloading
-                ? (progressPercent >= 100 ? "Loading voice AI model..." : `${progressStatus} (${progressPercent}%)`)
-                : progressStatus)
-            : processingSteps[stepIndex];
         return (
             <div className="voice-recorder-processing">
                 <div className="processing-loader">
@@ -285,8 +243,8 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
                     <span></span>
                     <span></span>
                 </div>
-                <div className="processing-text" key={isModelLoading ? 'downloading' : stepIndex}>
-                    {currentMsg}
+                <div className="processing-text">
+                    Sending voice message...
                 </div>
             </div>
         );
@@ -302,17 +260,33 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
                     {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
                 
-                <div className="preview-waveform">
-                    {normalizedWaveform.map((val, i) => {
-                        const isPlayed = (i / normalizedWaveform.length) <= playProgress;
-                        return (
+                <div className="voice-waveform-container" style={{ width: '100px', flexGrow: 0 }}>
+                    {/* Background Waveform (gray) */}
+                    <div className="preview-waveform voice-waveform-bg">
+                        {normalizedWaveform.map((val, i) => (
                             <div 
                                 key={i} 
-                                className={`waveform-bar ${isPlayed ? 'played' : ''}`}
+                                className="waveform-bar"
                                 style={{ height: `${Math.max(10, val * 100)}%` }}
                             />
-                        );
-                    })}
+                        ))}
+                    </div>
+                    {/* Progress Waveform Overlay (cyan with clip-path) */}
+                    <div 
+                        className="preview-waveform voice-waveform-progress"
+                        style={{ 
+                            clipPath: `inset(0 ${100 - playProgress * 100}% 0 0)`,
+                            WebkitClipPath: `inset(0 ${100 - playProgress * 100}% 0 0)`
+                        }}
+                    >
+                        {normalizedWaveform.map((val, i) => (
+                            <div 
+                                key={i} 
+                                className="waveform-bar played"
+                                style={{ height: `${Math.max(10, val * 100)}%` }}
+                            />
+                        ))}
+                    </div>
                 </div>
                 
                 <span className="preview-time">{formatDuration(duration)}</span>

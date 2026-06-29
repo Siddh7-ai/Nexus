@@ -24,7 +24,13 @@ export default function Landing() {
 
   useEffect(() => {
     setTheme(initTheme());
-  }, []);
+    
+    // Auto-redirect if user/guest is already logged in
+    const existingToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (existingToken) {
+      navigate('/chat');
+    }
+  }, [navigate]);
 
   function handleThemeToggle(e) {
     toggleTheme(e, setTheme);
@@ -92,9 +98,11 @@ export default function Landing() {
         guestId
       };
 
-      // Save guest info in localStorage and token in sessionStorage
+      // Save guest info in localStorage and token in both storage spaces
       localStorage.setItem("guestProfile", JSON.stringify(guestProfile));
       sessionStorage.setItem("token", `guest:${trimmedUsername}`);
+      localStorage.setItem("token", `guest:${trimmedUsername}`);
+      localStorage.setItem("username", trimmedUsername);
 
       setLoading(false);
       setShowModal(false);
@@ -165,6 +173,8 @@ export default function Landing() {
                     const profile = JSON.parse(guestProfileStr);
                     if (profile && profile.username) {
                       sessionStorage.setItem("token", `guest:${profile.username}`);
+                      localStorage.setItem("token", `guest:${profile.username}`);
+                      localStorage.setItem("username", profile.username);
                       navigate('/chat');
                       return;
                     }

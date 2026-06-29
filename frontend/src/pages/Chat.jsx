@@ -35,6 +35,28 @@ import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
 import { FiLock, FiTrash2, FiMessageSquare, FiX } from "react-icons/fi";
 import ThemeTransitionOptions from "../components/ThemeTransitionOptions";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+
+const customSchema = {
+    ...defaultSchema,
+    tagNames: [...(defaultSchema.tagNames || []), "u"]
+};
+
+function stripMarkdownAndHtml(text) {
+    if (!text) return "";
+    // Remove HTML tags
+    let clean = text.replace(/<\/?[^>]+(>|$)/g, "");
+    // Remove Markdown formatting chars
+    clean = clean.replace(/(\*\*|__|\*|_)/g, "");
+    clean = clean.replace(/~~/g, "");
+    clean = clean.replace(/^#+\s+/gm, "");
+    clean = clean.replace(/(```|`)/g, "");
+    clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    return clean;
+}
 
 // Lazy-load emoji picker library to optimize bundle load times
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -221,6 +243,15 @@ function Chat() {
 
                 try {
                     const decryptedPayload = await decryptAndCacheMessage(msg, myUsername, token);
+                    
+                    let decryptedTranscript = "[Not a voice message]";
+                    try {
+                        const parsed = JSON.parse(decryptedPayload.text);
+                        if (parsed && typeof parsed.transcript !== 'undefined') {
+                            decryptedTranscript = parsed.transcript;
+                        }
+                    } catch (e) {}
+                    console.log("[Nexus ASR I] Decrypted voice message transcript:", decryptedTranscript);
                     
                     if (isCancelled) break;
                     setDecryptedMessages(prev => ({
@@ -516,6 +547,7 @@ function Chat() {
         setSelectedMessageIds(new Set());
 
         // Commit pending deletes immediately on room change
+
         if (deleteTimeoutRef.current) {
             clearTimeout(deleteTimeoutRef.current);
             deleteTimeoutRef.current = null;
@@ -549,6 +581,30 @@ function Chat() {
     useEffect(() => {
         allUsersRef.current = allUsers;
     }, [allUsers]);
+
+    // Handle page refresh/close while there are pending undo timeouts
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            if (deleteTimeoutRef.current && undoDeleteInfoRef.current) {
+                const info = undoDeleteInfoRef.current;
+                const prevTargets = info.messageIds || [info.messageId];
+                prevTargets.forEach(id => {
+                    socketRef.current?.emit("deleteMessage", {
+                        messageId: id,
+                        deleteFor: info.deleteFor,
+                        deleteFileFromServer: info.deleteFileFromServer
+                    });
+                });
+            }
+            if (clearTimeoutRef.current && undoClearInfoRef.current) {
+                const info = undoClearInfoRef.current;
+                socketRef.current?.emit("clearChat", { chatId: info.chatId });
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, []);
 
     // Notification permission hook
     useEffect(() => {
@@ -638,7 +694,8 @@ function Chat() {
 
     const triggerDesktopNotification = (data) => {
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-            const bodyText = formatNotificationText(data);
+            const rawBody = formatNotificationText(data);
+            const bodyText = stripMarkdownAndHtml(rawBody);
             const senderName = data.displayName || data.username;
             const title = data.room ? `New message in #${data.room}` : `New message from ${senderName}`;
             const notification = new Notification(title, {
@@ -862,6 +919,10 @@ function Chat() {
         newSocket.on("connect_error", () => {
             sessionStorage.removeItem("token");
             localStorage.removeItem("token");
+            sessionStorage.removeItem("username");
+            localStorage.removeItem("username");
+            sessionStorage.removeItem("nexus_master_key");
+            localStorage.removeItem("nexus_master_key");
             navigate("/login");
         });
 
@@ -905,6 +966,7 @@ function Chat() {
         });
 
         newSocket.on("reply", (data) => {
+            console.log("[Nexus ASR H] Received socket reply payload:", JSON.stringify(data));
             if (data.privateChatId) {
                 const parts = data.privateChatId.split("_");
                 const partnerUsername = parts.find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
@@ -1590,16 +1652,16 @@ function Chat() {
                 // E2EE mode: Encrypt audio blob and generate inner metadata payload
                 const encryptedData = await encryptVoiceMessage(
                     payload.audioBlob,
-                    payload.transcript,
                     payload.waveform,
                     payload.durationSeconds
                 );
                 finalBlob = encryptedData.encryptedAudioBlob;
                 textToEncrypt = encryptedData.textToEncrypt;
             } else {
-                // Public room mode: plain JSON text
+                // Public room mode: plain JSON text (transcript handled by backend async)
                 textToEncrypt = JSON.stringify({
-                    transcript: payload.transcript,
+                    __voice: true,
+                    version: 1,
                     waveform: payload.waveform,
                     duration: payload.durationSeconds
                 });
@@ -1626,6 +1688,8 @@ function Chat() {
                 fileQuality: "Normal",
                 overrideText: textToEncrypt // Will be used as the actual text payload
             };
+
+            console.log("[Nexus ASR E] Message payload prepared:", JSON.stringify(attachmentMsg));
 
             sendMessage(attachmentMsg);
         } catch (err) {
@@ -1746,13 +1810,14 @@ function Chat() {
                     return;
                 }
             } else {
-                msgData = realAttachment ? { ...realAttachment } : { text: originalMessage };
+                msgData = realAttachment ? { ...realAttachment, text: realAttachment.overrideText } : { text: originalMessage };
                 msgData.room = activeRoomRef.current;
                 msgData.tempId = tempId;
                 msgData.replyTo = replyToPayload;
             }
 
             setReplyToMsg(null); // Clear reply state
+            console.log("[Nexus ASR F] Socket.IO payload emitted:", JSON.stringify(msgData));
             socketRef.current.emit("message", msgData);
         })();
     }
@@ -2054,6 +2119,7 @@ function Chat() {
     };
 
     function handleLockMessage(msg) {
+        if (msg.fileUrl) return;
         setLockingMessage(msg);
     }
 
@@ -2424,11 +2490,11 @@ function Chat() {
     function logout() {
         sessionStorage.removeItem("token");
         localStorage.removeItem("token");
-        if (isGuest) {
-            navigate("/login");
-        } else {
-            navigate("/");
-        }
+        sessionStorage.removeItem("username");
+        localStorage.removeItem("username");
+        sessionStorage.removeItem("nexus_master_key");
+        localStorage.removeItem("nexus_master_key");
+        navigate("/login");
     }
 
     async function handleGuestNameChange(e) {
@@ -2633,6 +2699,7 @@ function Chat() {
                         deletedSystemRooms={deletedSystemRooms}
                         pendingRequestsCount={pendingRequests.length}
                         onLogoClick={clearActiveChat}
+                        onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
                     />
                 </div>
 
@@ -4265,7 +4332,18 @@ function Chat() {
                                         {activeToast.chatType === "private" ? "DM" : `#${activeToast.room}`}
                                     </span>
                                 </div>
-                                <p className="notification-toast-text">{activeToast.text}</p>
+                                <p className="notification-toast-text">
+                                    <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+                                        components={{
+                                            a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
+                                            p: ({ node, ...props }) => <span {...props} />
+                                        }}
+                                    >
+                                        {activeToast.text}
+                                    </ReactMarkdown>
+                                </p>
                             </div>
                             <button
                                 type="button"
