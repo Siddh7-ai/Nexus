@@ -650,29 +650,54 @@ body.dark-theme .scroll-to-bottom-btn {
   color: #8c929c;
 }
 
-.seen-status.sending {
-  font-size: 8px;
-  margin-left: 4px;
-  opacity: 0.65;
-  display: inline-block;
-  animation: pulse 1.5s infinite ease-in-out;
+.seen-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 5px;
 }
 
-.seen-status.sent {
-  font-size: 10px;
-  color: #8c929c;
-  margin-left: 4px;
-  font-weight: 500;
-  display: inline-block;
+.seen-status.seen-avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
-.seen-status.read {
-  font-size: 10px;
-  color: #34b7f1 !important; /* Premium WhatsApp Blue */
-  margin-left: 4px;
-  font-weight: 800;
+.status-circle-sending {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
   display: inline-block;
-  text-shadow: 0 0 1px rgba(52, 183, 241, 0.3);
+  vertical-align: middle;
+  box-sizing: border-box;
+  animation: spin-status-indicator 1s linear infinite;
+}
+
+.status-circle-hollow {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.status-circle-solid {
+  width: 9px;
+  height: 9px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+@keyframes spin-status-indicator {
+  to { transform: rotate(360deg); }
 }
 
 .message-bubble.other .message-time,

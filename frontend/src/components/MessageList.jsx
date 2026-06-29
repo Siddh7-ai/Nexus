@@ -27,6 +27,24 @@ function formatTimestamp(dateStr) {
     return `${msgDate.toLocaleDateString([], { month: "short", day: "numeric" })} ${timeStr}`;
 }
 
+function formatRelativeTime(dateStr) {
+    if (!dateStr) return "just now";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return "just now";
+    if (diffMins === 1) return "1 min ago";
+    if (diffMins < 60) return `${diffMins} mins ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return "1 hour ago";
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 function formatFileSize(bytes) {
     if (!bytes) return "0 Bytes";
     const k = 1024;
@@ -190,7 +208,7 @@ function RecordingBubbleIndicator({ recordingUser }) {
 
 const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👍"];
 
-function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
+function SeenStatus({ msg, currentUser, onlineUserList = [], allUsers = [] }) {
     if (msg.username?.toLowerCase() !== currentUser?.toLowerCase() || msg.isDeleted) return null;
 
     const seenBy = msg.seenBy || [];
@@ -200,15 +218,45 @@ function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
     if (isSending) {
         return (
             <span className="seen-status sending" title="Sending...">
-                🕐
+                <span className="status-circle-sending" />
             </span>
         );
     }
 
     const isSelfChat = msg.privateChatId && msg.privateChatId.toLowerCase() === `${currentUser?.toLowerCase()}_${currentUser?.toLowerCase()}`;
     if (seenByOther || isSelfChat) {
+        if (msg.privateChatId) {
+            const parts = msg.privateChatId.split("_");
+            const partner = parts.find(u => u.toLowerCase() !== currentUser?.toLowerCase());
+            if (partner) {
+                const partnerUser = allUsers.find(u => u.username?.toLowerCase() === partner.toLowerCase());
+                return (
+                    <span className="seen-status seen-avatar" title={`Seen by ${partner}`}>
+                        <Avatar username={partner} avatarSrc={partnerUser?.avatar} size={12} />
+                    </span>
+                );
+            }
+        }
+        
+        // Group chat seen indicators
+        const groupSeenBy = seenBy.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase());
+        if (groupSeenBy.length > 0) {
+            return (
+                <span className="seen-status seen-avatars-group" title="Seen">
+                    <span style={{ display: 'inline-flex', gap: '2px', alignItems: 'center' }}>
+                        {groupSeenBy.slice(0, 3).map(u => {
+                            const uObj = allUsers.find(user => user.username?.toLowerCase() === u.toLowerCase());
+                            return (
+                                <Avatar key={u} username={u} avatarSrc={uObj?.avatar} size={12} />
+                            );
+                        })}
+                    </span>
+                </span>
+            );
+        }
+
         return (
-            <span className="seen-status read" title="Read">
+            <span className="seen-status read" title="Read" style={{ color: '#00f0ff', fontSize: '9px', fontWeight: 'bold' }}>
                 ✓✓
             </span>
         );
@@ -221,7 +269,7 @@ function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
         if (isPartnerOnline) {
             return (
                 <span className="seen-status delivered" title="Delivered">
-                    ✓✓
+                    <span className="status-circle-solid" />
                 </span>
             );
         }
@@ -229,7 +277,7 @@ function SeenStatus({ msg, currentUser, onlineUserList = [] }) {
 
     return (
         <span className="seen-status sent" title="Sent">
-            ✓
+            <span className="status-circle-hollow" />
         </span>
     );
 }
@@ -446,6 +494,14 @@ function MessageList({
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
     const [selectedReactionMsgId, setSelectedReactionMsgId] = useState(null);
     const scrollContainerRef = useRef(null);
+
+    const [tick, setTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTick(t => t + 1);
+        }, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     const activeReactionMsg = messages.find(m => m._id === selectedReactionMsgId);
 
@@ -836,7 +892,7 @@ function MessageList({
                                                 {formatTimestamp(msg.createdAt)}
                                                 {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
                                             </span>
-                                            <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} />
+                                            <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} allUsers={allUsers} />
                                         </div>
                                     </div>
                                 )}
@@ -846,6 +902,25 @@ function MessageList({
                                     onShowDetail={() => setSelectedReactionMsgId(msg._id)}
                                     currentUser={currentUser}
                                 />
+
+                                {index === messages.length - 1 && isOwn && isPrivate && !msg.isDeleted && (
+                                    <div className="last-message-status" style={{ 
+                                        fontSize: '11.5px', 
+                                        color: 'var(--muted)', 
+                                        marginTop: '5px',
+                                        alignSelf: 'flex-end',
+                                        paddingRight: '4px',
+                                        opacity: 0.85,
+                                        userSelect: 'none',
+                                        fontWeight: '500'
+                                    }}>
+                                        {msg.seenBy?.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase()).length > 0 ? (
+                                            <span>Seen {formatRelativeTime(msg.createdAt)}</span>
+                                        ) : (
+                                            <span>Sent {formatRelativeTime(msg.createdAt)}</span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {isOwn && (

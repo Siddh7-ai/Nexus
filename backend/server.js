@@ -639,8 +639,7 @@ app.get("/api/users/conversations", async (req, res) => {
                 $group: {
                     _id: "$privateChatId",
                     latestMessageTime: { $first: "$createdAt" },
-                    lastMessage: { $first: "$body" },
-                    lastMessageAt: { $first: "$createdAt" }
+                    lastMessage: { $first: "$$ROOT" }
                 }
             },
             { $sort: { latestMessageTime: -1 } }
@@ -665,15 +664,29 @@ app.get("/api/users/conversations", async (req, res) => {
         const userMap = {};
         dmUsers.forEach(u => { userMap[u.username.toLowerCase()] = u; });
 
+        // Get cleared chats for current user to filter out cleared messages
+        const clearedChats = await ClearedChat.find({ username: { $regex: new RegExp(`^${currentU}$`, "i") } });
+        const clearedMap = {};
+        clearedChats.forEach(c => {
+            clearedMap[c.chatId.toLowerCase()] = c.clearedAt;
+        });
+
         const sortedDmUsers = uniquePartnerNames
             .map(name => ({ name, chat: chats.find(ch => ch._id.includes(name)) }))
             .filter(item => userMap[item.name])
             .map(item => {
                 const u = userMap[item.name];
+                const chatId = item.chat._id.toLowerCase();
+                const clearedAt = clearedMap[chatId];
+
+                let lastMessage = item.chat.lastMessage;
+                if (clearedAt && lastMessage && new Date(lastMessage.createdAt) <= new Date(clearedAt)) {
+                    lastMessage = null;
+                }
+
                 return {
                     ...u.toObject(),
-                    lastMessage: item.chat.lastMessage,
-                    lastMessageAt: item.chat.lastMessageAt
+                    lastMessage
                 };
             });
 

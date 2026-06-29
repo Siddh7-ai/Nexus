@@ -19,7 +19,8 @@ import {
   decryptAndCacheMessage, 
   replenishOneTimePrekeysIfNeeded,
   loadDecryptedKeys,
-  saveDecryptedMessage
+  saveDecryptedMessage,
+  getDecryptedMessage
 } from "../utils/crypto/manager";
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
 import { encryptVoiceMessage } from "../utils/voiceMessage";
@@ -56,6 +57,23 @@ function stripMarkdownAndHtml(text) {
     clean = clean.replace(/(```|`)/g, "");
     clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
     return clean;
+}
+function formatRelativeTime(dateStr) {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return "just now";
+    if (diffMins === 1) return "1m ago";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return "1h ago";
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 // Lazy-load emoji picker library to optimize bundle load times
@@ -188,6 +206,13 @@ function Chat() {
     const [messages, setMessages] = useState([]);
     const [loadingMessages, setLoadingMessages] = useState(true);
     const [decryptedMessages, setDecryptedMessages] = useState({});
+    const [sidebarTick, setSidebarTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setSidebarTick(t => t + 1);
+        }, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Reply and message info states
     const [replyToMsg, setReplyToMsg] = useState(null);
@@ -380,6 +405,29 @@ function Chat() {
             prevChatKeyRef.current = currentChatKey;
         }
     }, [activeRoom, activePrivate]);
+
+    // Decrypt/retrieve last messages for the sidebar from IndexedDB cache
+    useEffect(() => {
+        const token = getAuthToken();
+        if (!token || !conversationUsers.length) return;
+
+        conversationUsers.forEach(async (cUser) => {
+            const msg = cUser.lastMessage;
+            if (msg && msg.privateChatId && msg.ratchetHeader && msg._id && !decryptedMessages[msg._id]) {
+                try {
+                    const decrypted = await decryptAndCacheMessage(msg, username, token);
+                    if (decrypted) {
+                        setDecryptedMessages(prev => ({
+                            ...prev,
+                            [msg._id]: decrypted
+                        }));
+                    }
+                } catch (err) {
+                    console.error("Error loading last message decryption:", err);
+                }
+            }
+        });
+    }, [conversationUsers, username]);
     const [editingMsg, setEditingMsg] = useState(null); // { _id, text }
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showTransitionSettings, setShowTransitionSettings] = useState(false);
@@ -965,6 +1013,16 @@ function Chat() {
             setUnreadCounts(normalized);
         });
 
+        newSocket.on("chatCleared", ({ chatId }) => {
+            setConversationUsers(prev => prev.map(u => {
+                const privateChatId = [usernameRef.current?.toLowerCase(), u.username?.toLowerCase()].sort().join("_");
+                if (privateChatId === chatId || u.username === chatId) {
+                    return { ...u, lastMessage: null };
+                }
+                return u;
+            }));
+        });
+
         newSocket.on("reply", (data) => {
             console.log("[Nexus ASR H] Received socket reply payload:", JSON.stringify(data));
             if (data.privateChatId) {
@@ -974,17 +1032,32 @@ function Chat() {
                     setConversationUsers((prev) => {
                         const lowerPartner = partnerUsername.toLowerCase();
                         const index = prev.findIndex(u => u.username?.toLowerCase() === lowerPartner);
+                        const lastMsgObj = {
+                            _id: data._id,
+                            text: data.text,
+                            username: data.username,
+                            ratchetHeader: data.ratchetHeader,
+                            fileUrl: data.fileUrl,
+                            fileName: data.fileName,
+                            fileType: data.fileType,
+                            voiceMessage: data.voiceMessage,
+                            createdAt: data.createdAt
+                        };
                         if (index !== -1) {
                             const updated = [...prev];
                             const [targetUser] = updated.splice(index, 1);
-                            return [targetUser, ...updated];
+                            const updatedUser = {
+                                ...targetUser,
+                                lastMessage: lastMsgObj
+                            };
+                            return [updatedUser, ...updated];
                         } else {
                             const userObj = allUsersRef.current.find(u => u.username?.toLowerCase() === lowerPartner);
-                            if (userObj) {
-                                return [userObj, ...prev];
-                            } else {
-                                return [{ username: partnerUsername, displayName: partnerUsername, status: "Offline" }, ...prev];
-                            }
+                            const newUser = {
+                                ...(userObj || { username: partnerUsername, displayName: partnerUsername, status: "Offline" }),
+                                lastMessage: lastMsgObj
+                            };
+                            return [newUser, ...prev];
                         }
                     });
                 }
@@ -1894,12 +1967,21 @@ function Chat() {
         }
 
         const originalMsgs = [...messages];
+        const originalConvs = [...conversationUsers];
 
         setUndoClearInfo({
             chatId,
-            originalMsgs
+            originalMsgs,
+            originalConvs
         });
         setMessages([]);
+        setConversationUsers(prev => prev.map(u => {
+            const privateChatId = [username.toLowerCase(), u.username.toLowerCase()].sort().join("_");
+            if (privateChatId === chatId || u.username === chatId) {
+                return { ...u, lastMessage: null };
+            }
+            return u;
+        }));
         setShowClearConfirm(false);
 
         clearTimeoutRef.current = setTimeout(() => {
@@ -1918,6 +2000,9 @@ function Chat() {
         if (undoClearInfo) {
             // Restore messages locally
             setMessages(undoClearInfo.originalMsgs || []);
+            if (undoClearInfo.originalConvs) {
+                setConversationUsers(undoClearInfo.originalConvs);
+            }
             setUndoClearInfo(null);
         }
     };
@@ -2600,6 +2685,54 @@ function Chat() {
 
     const dmConversations = React.useMemo(() => {
         let list = conversationUsers.map((cUser) => {
+            let lastMsgText = "";
+            if (cUser.lastMessage) {
+                const msg = cUser.lastMessage;
+                const isOwnMsg = msg.username?.toLowerCase() === username?.toLowerCase();
+
+                if (isOwnMsg) {
+                    if (msg.createdAt) {
+                        const relativeTime = formatRelativeTime(msg.createdAt);
+                        const hasSeen = msg.seenBy?.filter(u => u?.toLowerCase() !== username?.toLowerCase()).length > 0;
+                        lastMsgText = hasSeen ? `Seen ${relativeTime}` : `Sent ${relativeTime}`;
+                    } else {
+                        lastMsgText = "Sent";
+                    }
+                } else {
+                    let innerText = "";
+                    if (decryptedMessages[msg._id]) {
+                        const decrypted = decryptedMessages[msg._id];
+                        if (decrypted.text) {
+                            try {
+                                const parsed = JSON.parse(decrypted.text);
+                                if (parsed && (parsed._voice || typeof parsed.duration !== 'undefined')) {
+                                    innerText = `🎵 ${parsed.transcript || "Voice message"}`;
+                                } else {
+                                    innerText = decrypted.text;
+                                }
+                            } catch (e) {
+                                innerText = decrypted.text;
+                            }
+                        } else if (decrypted.fileName) {
+                            innerText = `📎 ${decrypted.fileName}`;
+                        } else {
+                            innerText = "🔒 Encrypted Message";
+                        }
+                    } else if (msg.voiceMessage) {
+                        innerText = "🎵 Voice message";
+                    } else if (msg.fileUrl) {
+                        innerText = `📎 ${msg.fileName || "Attachment"}`;
+                    } else if (msg.ratchetHeader) {
+                        innerText = "🔒 Encrypted Message";
+                    } else {
+                        innerText = msg.text || "";
+                    }
+
+                    let suffix = msg.createdAt ? ` · ${formatRelativeTime(msg.createdAt)}` : "";
+                    lastMsgText = innerText ? `${innerText}${suffix}` : "";
+                }
+            }
+
             const onlineUser = onlineUserList.find(
                 (u) => u.username?.toLowerCase() === cUser.username?.toLowerCase()
             );
@@ -2610,7 +2743,8 @@ function Chat() {
                     avatar: onlineUser.avatar || cUser.avatar,
                     status: onlineUser.status || "Online",
                     isOnline: true,
-                    role: onlineUser.role
+                    role: onlineUser.role,
+                    lastMessage: lastMsgText
                 };
             } else {
                 const dbUser = allUsers.find(
@@ -2621,7 +2755,8 @@ function Chat() {
                     displayName: dbUser?.displayName || cUser.displayName || cUser.username,
                     avatar: dbUser?.avatar || cUser.avatar,
                     status: "Offline",
-                    isOnline: false
+                    isOnline: false,
+                    lastMessage: lastMsgText
                 };
             }
         });
@@ -2672,7 +2807,7 @@ function Chat() {
         });
 
         return list;
-    }, [conversationUsers, onlineUserList, username, activePrivateName, allUsers]);
+    }, [conversationUsers, onlineUserList, username, activePrivateName, allUsers, decryptedMessages, sidebarTick]);
 
     const chatTitle = activePrivate
         ? `${activePrivateName}`

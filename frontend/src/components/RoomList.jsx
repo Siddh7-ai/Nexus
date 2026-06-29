@@ -458,13 +458,9 @@ function RoomList({
                                                                 <span className="dm-row-name" style={{ fontSize: '13px' }}>
                                                                     {user.displayName || user.username}
                                                                 </span>
-                                                                {user.lastMessage ? (
+                                                                {user.lastMessage && (
                                                                     <span className="dm-message-preview">
                                                                         {user.lastMessage}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="dm-message-preview" style={{ fontStyle: 'italic' }}>
-                                                                        No messages yet
                                                                     </span>
                                                                 )}
                                                             </div>
