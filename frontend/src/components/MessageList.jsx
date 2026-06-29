@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import VoiceMessageBubble from "./VoiceMessageBubble";
@@ -43,6 +43,30 @@ function formatRelativeTime(dateStr) {
     if (diffHours < 24) return `${diffHours} hours ago`;
     
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function formatDividerDate(dateStr) {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    const now = new Date();
+    
+    const dDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const diffTime = dNow.getTime() - dDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+        return "Today";
+    }
+    if (diffDays === 1) {
+        return "Yesterday";
+    }
+    if (diffDays < 7 && diffDays > 0) {
+        return date.toLocaleDateString([], { weekday: 'long' });
+    }
+    
+    return date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function formatFileSize(bytes) {
@@ -628,6 +652,9 @@ function MessageList({
             <div className="messages" ref={scrollContainerRef} onScroll={handleScroll}>
                 {messages.map((msg, index) => {
                     if (msg.username === "System") {
+                        const isLegacyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(msg.text);
+                        if (isLegacyDate) return null;
+
                         return (
                             <div className="system-message" key={msg._id || index}>
                                 {msg.text}
@@ -640,10 +667,50 @@ function MessageList({
                     const selectionClass = isSelectionMode ? "selection-active" : "";
                     const selectedClass = isSelected ? "selected-row" : "";
 
+                    const isLastStatus = index === messages.length - 1 && isOwn && isPrivate && !msg.isDeleted;
+                    
+                    let prevMsg = null;
+                    for (let i = index - 1; i >= 0; i--) {
+                        const m = messages[i];
+                        if (m.username !== "System" || !/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(m.text)) {
+                            prevMsg = m;
+                            break;
+                        }
+                    }
+
+                    const showDateHeader = !prevMsg || (() => {
+                        const prevDate = new Date(prevMsg.createdAt);
+                        const currDate = new Date(msg.createdAt);
+                        return prevDate.toDateString() !== currDate.toDateString();
+                    })();
+
                     return (
-                        <div 
-                            className={`message-row ${isOwn ? "own" : "other"} ${selectionClass} ${selectedClass}`} 
+                        <React.Fragment key={msg._id || index}>
+                            {showDateHeader && (
+                                <div className="system-message date-divider" style={{ 
+                                    alignSelf: 'center', 
+                                    margin: '18px auto 10px', 
+                                    fontSize: '11.5px',
+                                    fontWeight: '600',
+                                    background: 'rgba(120, 120, 120, 0.18)',
+                                    color: 'var(--text)',
+                                    padding: '5px 14px',
+                                    borderRadius: '999px',
+                                    border: 'none',
+                                    opacity: 0.8,
+                                    userSelect: 'none',
+                                    textAlign: 'center'
+                                }}>
+                                    {formatDividerDate(msg.createdAt)}
+                                </div>
+                            )}
+
+                            <div 
+                                className={`message-row ${isOwn ? "own" : "other"} ${selectionClass} ${selectedClass}`} 
                             key={msg._id || index}
+                            style={{
+                                marginBottom: isLastStatus ? '20px' : '0px'
+                            }}
                             onClick={() => {
                                 if (isSelectionMode && onToggleMessageSelection) {
                                     onToggleMessageSelection(msg._id);
@@ -700,6 +767,12 @@ function MessageList({
                                     style={{ cursor: isSelectionMode ? "default" : "pointer" }} 
                                     title={isSelectionMode ? "" : "View Profile"}
                                 >
+                                    <Avatar username={msg.username} avatarSrc={msg.avatar} />
+                                </div>
+                            )}
+
+                            {isOwn && (
+                                <div onClick={() => onUserProfileClick(msg.username)} style={{ cursor: "pointer" }} title="View Profile">
                                     <Avatar username={msg.username} avatarSrc={msg.avatar} />
                                 </div>
                             )}
@@ -892,7 +965,6 @@ function MessageList({
                                                 {formatTimestamp(msg.createdAt)}
                                                 {msg.isEdited && !msg.isDeleted && <span className="edited-label"> edited</span>}
                                             </span>
-                                            <SeenStatus msg={msg} currentUser={currentUser} onlineUserList={onlineUserList} allUsers={allUsers} />
                                         </div>
                                     </div>
                                 )}
@@ -907,12 +979,13 @@ function MessageList({
                                     <div className="last-message-status" style={{ 
                                         fontSize: '11.5px', 
                                         color: 'var(--muted)', 
-                                        marginTop: '5px',
-                                        alignSelf: 'flex-end',
-                                        paddingRight: '4px',
+                                        position: 'absolute',
+                                        bottom: '-20px',
+                                        right: '4px',
                                         opacity: 0.85,
                                         userSelect: 'none',
-                                        fontWeight: '500'
+                                        fontWeight: '500',
+                                        whiteSpace: 'nowrap'
                                     }}>
                                         {msg.seenBy?.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase()).length > 0 ? (
                                             <span>Seen {formatRelativeTime(msg.createdAt)}</span>
@@ -922,15 +995,10 @@ function MessageList({
                                     </div>
                                 )}
                             </div>
-
-                            {isOwn && (
-                                <div onClick={() => onUserProfileClick(msg.username)} style={{ cursor: "pointer" }} title="View Profile">
-                                    <Avatar username={msg.username} avatarSrc={msg.avatar} />
-                                </div>
-                            )}
                         </div>
-                    );
-                })}
+                    </React.Fragment>
+                );
+            })}
 
                 <ThoughtBubbleIndicator typingUser={typingUser} />
                 <RecordingBubbleIndicator recordingUser={recordingUser} />

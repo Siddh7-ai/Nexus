@@ -6,6 +6,15 @@ import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, F
 import { getBackendUrl } from "../utils/config";
 import { toggleTheme } from "../utils/theme";
 import ThemeToggleButton from "./ThemeToggleButton";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+
+const customSchema = {
+    ...defaultSchema,
+    tagNames: [...(defaultSchema.tagNames || []), "u"]
+};
 
 const VerifiedRoomBadge = ({ size = 13, style = {} }) => (
     <svg 
@@ -460,7 +469,16 @@ function RoomList({
                                                                 </span>
                                                                 {user.lastMessage && (
                                                                     <span className="dm-message-preview">
-                                                                        {user.lastMessage}
+                                                                        <ReactMarkdown
+                                                                            remarkPlugins={[remarkGfm]}
+                                                                            rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+                                                                            components={{
+                                                                                p: ({ node, ...props }) => <span {...props} style={{ margin: 0, padding: 0 }} />,
+                                                                                a: ({ node, ...props }) => <span {...props} style={{ color: 'inherit', textDecoration: 'underline' }} />
+                                                                            }}
+                                                                        >
+                                                                            {user.lastMessage}
+                                                                        </ReactMarkdown>
                                                                     </span>
                                                                 )}
                                                             </div>
