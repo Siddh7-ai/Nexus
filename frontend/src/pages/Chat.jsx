@@ -2255,6 +2255,18 @@ function Chat() {
                 setNewPasswordConfirmVal("");
                 setProfileLoading(false);
                 setShowProfileSettings(false);
+                setActiveToast({
+                    sender: "System",
+                    content: "Profile updated successfully!",
+                    avatarUrl: "",
+                    chatType: "system"
+                });
+                if (toastTimeoutRef.current) {
+                    clearTimeout(toastTimeoutRef.current);
+                }
+                toastTimeoutRef.current = setTimeout(() => {
+                    setActiveToast(null);
+                }, 4000);
             } else {
                 setProfileError(data.message || "Failed to update profile.");
                 setProfileLoading(false);
@@ -2567,6 +2579,18 @@ function Chat() {
 
             setProfileLoading(false);
             setShowProfileSettings(false);
+            setActiveToast({
+                sender: "System",
+                content: "Guest profile updated successfully!",
+                avatarUrl: "",
+                chatType: "system"
+            });
+            if (toastTimeoutRef.current) {
+                clearTimeout(toastTimeoutRef.current);
+            }
+            toastTimeoutRef.current = setTimeout(() => {
+                setActiveToast(null);
+            }, 4000);
         } catch (err) {
             console.error(err);
             setProfileError("Connection error. Please try again.");
@@ -2679,7 +2703,12 @@ function Chat() {
                         currentUser={username}
                         currentUserProfile={currentUserProfile}
                         isGuest={isGuest}
-                        onProfileClick={isGuest ? () => setShowProfileSettings(true) : openOwnProfileSettings}
+                        onProfileClick={() => {
+                            setActiveSidebarTab("settings");
+                            if (!isGuest) {
+                                openOwnProfileSettings();
+                            }
+                        }}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                         unreadCounts={unreadCounts}
                         allUsers={allUsers}
@@ -2698,6 +2727,47 @@ function Chat() {
                         setActiveSidebarTab={setActiveSidebarTab}
                         deletedSystemRooms={deletedSystemRooms}
                         pendingRequestsCount={pendingRequests.length}
+                        settingsProps={{
+                            ownProfileData,
+                            displayNameVal,
+                            setDisplayNameVal,
+                            bioVal,
+                            setBioVal,
+                            avatarVal,
+                            setAvatarVal,
+                            statusVal,
+                            setStatusVal,
+                            emailVal,
+                            setEmailVal,
+                            currentPasswordVal,
+                            setCurrentPasswordVal,
+                            newPasswordVal,
+                            setNewPasswordVal,
+                            newPasswordConfirmVal,
+                            setNewPasswordConfirmVal,
+                            privacyLastSeenVal,
+                            setPrivacyLastSeenVal,
+                            privacyAvatarVal,
+                            setPrivacyAvatarVal,
+                            privacyPMVal,
+                            setPrivacyPMVal,
+                            profileError,
+                            setProfileError,
+                            profileLoading,
+                            handleOwnProfileUpdate,
+                            handleGuestNameChange,
+                            handleCropFileChange,
+                            pendingRequests,
+                            handleAcceptRequest,
+                            handleDeclineRequest,
+                            setOwnProfileData,
+                            newGuestName,
+                            setNewGuestName,
+                            showTransitionSettings,
+                            setShowTransitionSettings,
+                            theme,
+                            setTheme
+                        }}
                         onLogoClick={clearActiveChat}
                         onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
                     />
@@ -3144,339 +3214,7 @@ function Chat() {
                 </div>
             )}
 
-            {/* Registered User Profile Settings Modal */}
-            {showProfileSettings && !isGuest && (
-                <div className="modal-overlay" onClick={() => { if (!profileLoading) setShowProfileSettings(false); }}>
-                    <div className="modal-content profile-settings-modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 420px)' }}>
-                        <div className="modal-header-section">
-                            <h3>Profile Settings</h3>
-                            <button className="close-picker-btn" onClick={() => setShowProfileSettings(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', float: 'right' }}>×</button>
-                        </div>
-                        {ownProfileData ? (
-                            <form onSubmit={handleOwnProfileUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '70vh' }}>
-                                <div className="modal-body-section" style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', paddingRight: '6px' }}>
-                                    {/* Avatar Upload */}
-                                    <div className="profile-settings-avatar-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                        <div 
-                                            className="profile-settings-avatar-wrapper" 
-                                            style={{ position: 'relative', cursor: avatarVal ? 'zoom-in' : 'default' }}
-                                            onClick={() => {
-                                                if (avatarVal) {
-                                                    setFullAvatarUrl(avatarVal);
-                                                }
-                                            }}
-                                        >
-                                            {avatarVal ? (
-                                                <img src={avatarVal} alt="Avatar Preview" className="profile-settings-avatar-img" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover' }} />
-                                            ) : (
-                                                <div className="profile-settings-avatar-placeholder" style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #c8eeff, #bff7f2)', color: 'var(--accent-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '800' }}>
-                                                    {(editUsernameVal || username).charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <label className="change-avatar-btn" style={{ padding: '6px 12px', background: '#f1f2f4', border: '1px solid #cbd5e1', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-                                            Change Photo
-                                            <input type="file" accept="image/*" onChange={handleCropFileChange} style={{ display: 'none' }} />
-                                        </label>
-                                    </div>
 
-                                    {/* Username & Display Name */}
-                                    <div className="form-group-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                        <div>
-                                            <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Username</label>
-                                            <SmoothInput
-                                                type="text"
-                                                value={editUsernameVal}
-                                                onChange={(e) => { setEditUsernameVal(e.target.value); setProfileError(""); }}
-                                                className="guest-username-input"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Display Name</label>
-                                            <SmoothInput
-                                                type="text"
-                                                value={displayNameVal}
-                                                onChange={(e) => setDisplayNameVal(e.target.value)}
-                                                className="guest-username-input"
-                                                placeholder="Set display name"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Bio */}
-                                    <div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                            <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)' }}>Bio / About Me</label>
-                                            <small style={{ color: 'var(--muted)', fontSize: '11px' }}>{bioVal.length}/50</small>
-                                        </div>
-                                        <textarea
-                                            value={bioVal}
-                                            onChange={(e) => setBioVal(e.target.value.slice(0, 50))}
-                                            placeholder="Write something about yourself..."
-                                            className="guest-username-input"
-                                            rows={2}
-                                            style={{ resize: 'none' }}
-                                        />
-                                    </div>
-
-                                    {/* Status Dropdown */}
-                                    <div>
-                                        <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>My Status</label>
-                                        <select value={statusVal} onChange={(e) => setStatusVal(e.target.value)} className="guest-username-input select-status">
-                                            <option value="Online">Online</option>
-                                            <option value="Away">Away</option>
-                                            <option value="Busy">Busy</option>
-                                            <option value="Offline">Offline</option>
-                                        </select>
-                                    </div>
-
-                                    {/* Account Details: Email & Password */}
-                                    <div className="profile-privacy-card" style={{ marginTop: '10px' }}>
-                                        <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Account Settings</h4>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                            <div>
-                                                <label className="form-label" style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)', display: 'block', marginBottom: '4px' }}>Email (Gmail)</label>
-                                                <SmoothInput
-                                                    type="email"
-                                                    value={emailVal}
-                                                    onChange={(e) => setEmailVal(e.target.value)}
-                                                    className="guest-username-input"
-                                                    placeholder="Enter new email"
-                                                />
-                                            </div>
-                                            
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '10px', marginTop: '4px' }}>
-                                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)' }}>Change Password</span>
-                                                <SmoothInput
-                                                    type="password"
-                                                    value={currentPasswordVal}
-                                                    onChange={(e) => setCurrentPasswordVal(e.target.value)}
-                                                    className="guest-username-input"
-                                                    placeholder="Current Password (required to change)"
-                                                />
-                                                <SmoothInput
-                                                    type="password"
-                                                    value={newPasswordVal}
-                                                    onChange={(e) => setNewPasswordVal(e.target.value)}
-                                                    className="guest-username-input"
-                                                    placeholder="New Password"
-                                                />
-                                                <SmoothInput
-                                                    type="password"
-                                                    value={newPasswordConfirmVal}
-                                                    onChange={(e) => setNewPasswordConfirmVal(e.target.value)}
-                                                    onPaste={(e) => e.preventDefault()}
-                                                    className="guest-username-input"
-                                                    placeholder="Confirm New Password"
-                                                />
-                                            </div>
-                                            {profileError && (profileError.toLowerCase().includes("password") || profileError.toLowerCase().includes("email")) && (
-                                                <div className="guest-error-alert" style={{ marginTop: '4px', marginBottom: '0' }}>
-                                                    {profileError}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Privacy Dropdowns */}
-                                    <div className="profile-privacy-card">
-                                        <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Privacy Settings</h4>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span className="privacy-label" style={{ fontSize: '12px' }}>Last Seen Visibility</span>
-                                                <select value={privacyLastSeenVal} onChange={(e) => setPrivacyLastSeenVal(e.target.value)} className="privacy-select" style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px' }}>
-                                                    <option value="Everyone">Everyone</option>
-                                                    <option value="Friends">Friends</option>
-                                                    <option value="Nobody">Nobody</option>
-                                                </select>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span className="privacy-label" style={{ fontSize: '12px' }}>Profile Picture Visibility</span>
-                                                <select value={privacyAvatarVal} onChange={(e) => setPrivacyAvatarVal(e.target.value)} className="privacy-select" style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px' }}>
-                                                    <option value="Everyone">Everyone</option>
-                                                    <option value="Friends">Friends</option>
-                                                    <option value="Nobody">Nobody</option>
-                                                </select>
-                                            </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span className="privacy-label" style={{ fontSize: '12px' }}>Private Message Permissions</span>
-                                                <select value={privacyPMVal} onChange={(e) => setPrivacyPMVal(e.target.value)} className="privacy-select" style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px' }}>
-                                                    <option value="Everyone">Everyone</option>
-                                                    <option value="Friends">Friends</option>
-                                                    <option value="Nobody">Nobody</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Blocked Users Management */}
-                                    {ownProfileData.blockedUsers && ownProfileData.blockedUsers.length > 0 && (
-                                        <div className="profile-blocked-card">
-                                            <h4 style={{ margin: '0 0 8px 0', fontSize: '13px', fontWeight: '800' }}>Blocked Users</h4>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '100px', overflowY: 'auto' }}>
-                                                {ownProfileData.blockedUsers.map(uname => (
-                                                    <div key={uname} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span className="blocked-user-name">@{uname}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={async () => {
-                                                                try {
-                                                                    await fetch(`${getBackendUrl()}/api/user/unblock`, {
-                                                                        method: "POST",
-                                                                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getAuthToken()}` },
-                                                                        body: JSON.stringify({ targetUsername: uname })
-                                                                    });
-                                                                    setOwnProfileData(prev => ({
-                                                                        ...prev,
-                                                                        blockedUsers: prev.blockedUsers.filter(x => x !== uname)
-                                                                    }));
-                                                                } catch(e) {}
-                                                            }}
-                                                            style={{ fontSize: '11px', color: '#b91c1c', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold' }}
-                                                        >
-                                                            Unblock
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Pending Friend Requests */}
-                                    {pendingRequests && pendingRequests.length > 0 && (
-                                        <div className="profile-blocked-card" style={{ background: 'var(--soft)', border: '1px solid var(--border)', borderRadius: '12px', padding: '12px 16px' }}>
-                                            <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Friend Requests ({pendingRequests.length})</h4>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '150px', overflowY: 'auto' }}>
-                                                {pendingRequests.map(reqItem => (
-                                                    <div key={reqItem._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                            <Avatar username={reqItem.sender} avatarSrc={reqItem.avatar} size={24} />
-                                                            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)' }}>
-                                                                @{reqItem.sender}
-                                                            </span>
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '6px' }}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleAcceptRequest(reqItem.sender)}
-                                                                className="modal-btn primary"
-                                                                style={{ fontSize: '11px', padding: '4px 8px', height: '24px', minWidth: 'unset', cursor: 'pointer' }}
-                                                            >
-                                                                Accept
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDeclineRequest(reqItem.sender)}
-                                                                className="modal-btn cancel"
-                                                                style={{ fontSize: '11px', padding: '4px 8px', height: '24px', minWidth: 'unset', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer' }}
-                                                            >
-                                                                Decline
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Account Stats */}
-                                    <div className="profile-stats-card">
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div className="stat-label">Messages Sent</div>
-                                            <div className="stat-value" style={{ fontSize: '16px', fontWeight: '800' }}>{ownProfileData.totalMessagesSent.toLocaleString()}</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <div className="stat-label">Member Since</div>
-                                            <div className="stat-value" style={{ fontSize: '13px', fontWeight: '700', marginTop: '2px' }}>
-                                                {new Date(ownProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {profileError && !(profileError.toLowerCase().includes("password") || profileError.toLowerCase().includes("email")) && (
-                                        <div className="guest-error-alert" style={{ margin: 0 }}>
-                                            {profileError}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="modal-footer-buttons" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                    <button type="submit" className="modal-btn primary" disabled={profileLoading || editUsernameVal.trim() === ""}>
-                                        {profileLoading ? "Saving..." : "Save Changes"}
-                                    </button>
-                                    <button type="button" className="modal-btn cancel" onClick={() => setShowProfileSettings(false)} disabled={profileLoading}>
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        ) : (
-                            <div className="emoji-picker-loader" style={{ padding: '24px 0' }}>Loading profile...</div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Guest Profile Settings Modal */}
-            {showProfileSettings && isGuest && (
-                <div className="modal-overlay" onClick={() => { if (!profileLoading) setShowProfileSettings(false); }}>
-                    <div className="modal-content guest-profile-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header-section">
-                            <h3>Guest Profile Settings</h3>
-                        </div>
-                        <form onSubmit={handleGuestNameChange}>
-                            <div className="modal-body-section">
-                                <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '16px' }}>
-                                    Modify your guest username. This change will be visible to all online users instantly.
-                                </p>
-                                <div className="guest-input-wrap">
-                                    <SmoothInput
-                                        type="text"
-                                        placeholder="Enter new username"
-                                        value={newGuestName}
-                                        onChange={(e) => {
-                                            setNewGuestName(e.target.value);
-                                            setProfileError("");
-                                        }}
-                                        autoFocus
-                                        maxLength={20}
-                                        disabled={profileLoading}
-                                        className="guest-username-input"
-                                    />
-                                    <small style={{ display: 'block', marginTop: '6px', color: 'var(--muted)', fontSize: '11px' }}>
-                                        3–20 characters. Letters, numbers, and underscores only.
-                                    </small>
-                                </div>
-                                {profileError && (
-                                    <div className="guest-error-alert" style={{ marginTop: '12px' }}>
-                                        {profileError}
-                                    </div>
-                                )}
-                            </div>
-                            <div className="modal-footer-buttons">
-                                <button
-                                    type="submit"
-                                    className="modal-btn primary"
-                                    disabled={newGuestName.trim() === username || newGuestName.trim().length < 3 || profileLoading}
-                                >
-                                    {profileLoading ? "Updating..." : "Save Changes"}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="modal-btn cancel"
-                                    onClick={() => {
-                                        setShowProfileSettings(false);
-                                        setNewGuestName(username);
-                                        setProfileError("");
-                                    }}
-                                    disabled={profileLoading}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
 
             {/* Avatar Canvas Cropper Overlay */}
             {cropImageSrc && (
@@ -4175,6 +3913,28 @@ function Chat() {
                                 ? `Delete ${deleteConfirmModal.messageIds.length} messages?`
                                 : "Delete message?"}
                         </h3>
+
+                        {deleteConfirmModal.deleteFor === "everyone" && (
+                            <div className="delete-confirm-description" style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '16px', lineHeight: '1.4' }}>
+                                Are you sure you want to delete this message for everyone?
+                                {messages.find(m => m._id === deleteConfirmModal.messageId)?.isLocked && (
+                                    <div className="delete-vault-warning" style={{ 
+                                        color: '#f87171', 
+                                        fontWeight: '600', 
+                                        marginTop: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        background: 'rgba(248, 113, 113, 0.08)',
+                                        padding: '8px 12px',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(248, 113, 113, 0.2)'
+                                    }}>
+                                        ⚠️ This message is locked in the shared vault and will also be deleted from the vault.
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         
                         {deleteConfirmModal.hasFile && (
                             <label className="delete-confirm-checkbox-label">

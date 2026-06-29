@@ -619,7 +619,7 @@ app.get("/api/users/conversations", async (req, res) => {
         const authHeader = req.headers.authorization;
         if (!authHeader) return res.status(401).json({ message: "No token" });
         const token = authHeader.split(" ")[1];
-        
+
         if (token.startsWith("guest:")) {
             return res.status(403).json({ message: "Access denied. Guests cannot list conversations." });
         }
@@ -627,28 +627,27 @@ app.get("/api/users/conversations", async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const currentU = decoded.username.toLowerCase();
 
-        // Find private chats containing the current user
-        const activeChats = await Message.aggregate([
+        // Aggregate private chats with latest message and preview
+        const chats = await Message.aggregate([
             {
                 $match: {
                     privateChatId: { $regex: new RegExp(`(^|_)${currentU}(_|$)`, "i") }
                 }
             },
-            {
-                $sort: { createdAt: -1 }
-            },
+            { $sort: { createdAt: -1 } },
             {
                 $group: {
                     _id: "$privateChatId",
-                    latestMessageTime: { $first: "$createdAt" }
+                    latestMessageTime: { $first: "$createdAt" },
+                    lastMessage: { $first: "$body" },
+                    lastMessageAt: { $first: "$createdAt" }
                 }
             },
-            {
-                $sort: { latestMessageTime: -1 }
-            }
+            { $sort: { latestMessageTime: -1 } }
         ]);
 
-        const partnerNames = activeChats.map(c => {
+        // Extract partner usernames
+        const partnerNames = chats.map(c => {
             const parts = c._id.split("_");
             const partner = parts.find(u => u.toLowerCase() !== currentU.toLowerCase());
             return partner ? partner.toLowerCase() : null;
@@ -656,20 +655,27 @@ app.get("/api/users/conversations", async (req, res) => {
 
         const uniquePartnerNames = [...new Set(partnerNames)];
 
+        // Fetch user details for partners
         const dmUsers = await User.find(
             { username: { $in: uniquePartnerNames.map(u => new RegExp(`^${u}$`, "i")) } },
             { username: 1, displayName: 1, avatar: 1, status: 1, _id: 1 }
         );
 
-        // Sort dmUsers according to uniquePartnerNames order
+        // Map usernames to user docs for ordering
         const userMap = {};
-        dmUsers.forEach(u => {
-            userMap[u.username.toLowerCase()] = u;
-        });
+        dmUsers.forEach(u => { userMap[u.username.toLowerCase()] = u; });
 
         const sortedDmUsers = uniquePartnerNames
-            .map(name => userMap[name.toLowerCase()])
-            .filter(Boolean);
+            .map(name => ({ name, chat: chats.find(ch => ch._id.includes(name)) }))
+            .filter(item => userMap[item.name])
+            .map(item => {
+                const u = userMap[item.name];
+                return {
+                    ...u.toObject(),
+                    lastMessage: item.chat.lastMessage,
+                    lastMessageAt: item.chat.lastMessageAt
+                };
+            });
 
         res.json(sortedDmUsers);
     } catch (err) {
@@ -1443,6 +1449,27 @@ io.on("connection", async (socket) => {
             }
 
             if (deleteFor === "everyone" && msg.username?.toLowerCase() === socket.username?.toLowerCase()) {
+                // If the message is locked in the shared vault, also delete it from VaultItem
+                if (msg.isLocked && msg.lockedItemId) {
+                    const item = await VaultItem.findById(msg.lockedItemId);
+                    if (item) {
+                        if (item.itemType === "file" && item.fileRef) {
+                            const db = mongoose.connection.db;
+                            const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+                            try {
+                                await bucket.delete(new ObjectId(item.fileRef));
+                            } catch (fileErr) {
+                                console.error("Error deleting vault file from GridFS:", fileErr);
+                            }
+                        }
+                        await VaultItem.findByIdAndDelete(msg.lockedItemId);
+                    }
+                    msg.isLocked = false;
+                    msg.lockedItemId = null;
+                    msg.lockedBy = null;
+                    msg.lockedAt = null;
+                }
+
                 msg.isDeleted = true;
                 msg.text = "This message was deleted";
                 if (deleteFileFromServer) {

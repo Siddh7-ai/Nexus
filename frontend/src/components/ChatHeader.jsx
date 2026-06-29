@@ -235,12 +235,11 @@ function ChatHeader({
                                     <FiLock size={16} />
                                 </button>
                                 <button 
-                                    className="header-activity-btn" 
+                                    className="header-visualizer-btn header-icon-tooltip-trigger" 
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onToggleVisualizer && onToggleVisualizer();
                                     }}
-                                    title="Toggle Data-Flow Visualizer"
                                     style={{ 
                                         background: 'none', 
                                         border: 'none', 
@@ -249,18 +248,22 @@ function ChatHeader({
                                         padding: '4px',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        opacity: 0.8
+                                        opacity: 0.8,
+                                        position: 'relative'
                                     }}
                                 >
                                     <FiActivity size={16} />
+                                    <div className="header-icon-tooltip-popup">
+                                        <strong>Data-Flow Visualizer</strong>
+                                        <p>Displays a live data stream of socket events, message lifecycle logs, and encryption payloads under the hood.</p>
+                                    </div>
                                 </button>
                                 <button 
-                                    className="header-vault-btn" 
+                                    className="header-vault-btn header-icon-tooltip-trigger" 
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onVaultClick && onVaultClick();
                                     }}
-                                    title="Open Shared Vault"
                                     style={{ 
                                         background: 'none', 
                                         border: 'none', 
@@ -269,10 +272,15 @@ function ChatHeader({
                                         padding: '4px',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        opacity: 0.8
+                                        opacity: 0.8,
+                                        position: 'relative'
                                     }}
                                 >
                                     <FiBriefcase size={16} />
+                                    <div className="header-icon-tooltip-popup">
+                                        <strong>Shared Vault</strong>
+                                        <p>A secure End-to-End Encrypted storage shared in this private chat. Save passwords and secret notes decrypted locally via PIN.</p>
+                                    </div>
                                 </button>
                             </div>
                         </div>
