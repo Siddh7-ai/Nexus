@@ -1365,19 +1365,30 @@ function Chat() {
                 ? (activePrivateRef.current?.toLowerCase() === updatedMsg.privateChatId?.toLowerCase())
                 : (activeRoomRef.current === updatedMsg.room);
 
-            if (!isMatch) return;
+            if (isMatch) {
+                setMessages(prev => {
+                    const exists = prev.some(m => m._id === updatedMsg._id);
+                    if (exists) {
+                        return prev.map(m => (m._id === updatedMsg._id ? updatedMsg : m));
+                    }
+                    if (updatedMsg.isDeleted) {
+                        const list = [...prev, updatedMsg];
+                        return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    }
+                    return prev;
+                });
+            }
 
-            setMessages(prev => {
-                const exists = prev.some(m => m._id === updatedMsg._id);
-                if (exists) {
-                    return prev.map(m => (m._id === updatedMsg._id ? updatedMsg : m));
+            // Update conversationUsers so the sidebar preview reflects the lock/unlock state instantly
+            setConversationUsers(prev => prev.map(user => {
+                if (user.lastMessage && user.lastMessage._id === updatedMsg._id) {
+                    return {
+                        ...user,
+                        lastMessage: updatedMsg
+                    };
                 }
-                if (updatedMsg.isDeleted) {
-                    const list = [...prev, updatedMsg];
-                    return list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                }
-                return prev;
-            });
+                return user;
+            }));
         });
 
 
@@ -2875,48 +2886,53 @@ function Chat() {
             let lastMsgText = "";
             if (cUser.lastMessage) {
                 const msg = cUser.lastMessage;
-                const isOwnMsg = msg.username?.toLowerCase() === username?.toLowerCase();
-
-                if (isOwnMsg) {
-                    if (msg.createdAt) {
-                        const relativeTime = formatRelativeTime(msg.createdAt);
-                        const hasSeen = msg.seenBy?.filter(u => u?.toLowerCase() !== username?.toLowerCase()).length > 0;
-                        lastMsgText = hasSeen ? `Seen ${relativeTime}` : `Sent ${relativeTime}`;
-                    } else {
-                        lastMsgText = "Sent";
-                    }
+                if (msg.isLocked) {
+                    let suffix = msg.createdAt ? ` · ${formatRelativeTime(msg.createdAt)}` : "";
+                    lastMsgText = `🔒 Locked Message${suffix}`;
                 } else {
-                    let innerText = "";
-                    if (decryptedMessages[msg._id]) {
-                        const decrypted = decryptedMessages[msg._id];
-                        if (decrypted.text) {
-                            try {
-                                const parsed = JSON.parse(decrypted.text);
-                                if (parsed && (parsed._voice || typeof parsed.duration !== 'undefined')) {
-                                    innerText = `🎵 ${parsed.transcript || "Voice message"}`;
-                                } else {
+                    const isOwnMsg = msg.username?.toLowerCase() === username?.toLowerCase();
+
+                    if (isOwnMsg) {
+                        if (msg.createdAt) {
+                            const relativeTime = formatRelativeTime(msg.createdAt);
+                            const hasSeen = msg.seenBy?.filter(u => u?.toLowerCase() !== username?.toLowerCase()).length > 0;
+                            lastMsgText = hasSeen ? `Seen ${relativeTime}` : `Sent ${relativeTime}`;
+                        } else {
+                            lastMsgText = "Sent";
+                        }
+                    } else {
+                        let innerText = "";
+                        if (decryptedMessages[msg._id]) {
+                            const decrypted = decryptedMessages[msg._id];
+                            if (decrypted.text) {
+                                try {
+                                    const parsed = JSON.parse(decrypted.text);
+                                    if (parsed && (parsed._voice || typeof parsed.duration !== 'undefined')) {
+                                        innerText = `🎵 ${parsed.transcript || "Voice message"}`;
+                                    } else {
+                                        innerText = decrypted.text;
+                                    }
+                                } catch (e) {
                                     innerText = decrypted.text;
                                 }
-                            } catch (e) {
-                                innerText = decrypted.text;
+                            } else if (decrypted.fileName) {
+                                innerText = `📎 ${decrypted.fileName}`;
+                            } else {
+                                innerText = "🔒 Encrypted Message";
                             }
-                        } else if (decrypted.fileName) {
-                            innerText = `📎 ${decrypted.fileName}`;
-                        } else {
+                        } else if (msg.voiceMessage) {
+                            innerText = "🎵 Voice message";
+                        } else if (msg.fileUrl) {
+                            innerText = `📎 ${msg.fileName || "Attachment"}`;
+                        } else if (msg.ratchetHeader) {
                             innerText = "🔒 Encrypted Message";
+                        } else {
+                            innerText = msg.text || "";
                         }
-                    } else if (msg.voiceMessage) {
-                        innerText = "🎵 Voice message";
-                    } else if (msg.fileUrl) {
-                        innerText = `📎 ${msg.fileName || "Attachment"}`;
-                    } else if (msg.ratchetHeader) {
-                        innerText = "🔒 Encrypted Message";
-                    } else {
-                        innerText = msg.text || "";
-                    }
 
-                    let suffix = msg.createdAt ? ` · ${formatRelativeTime(msg.createdAt)}` : "";
-                    lastMsgText = innerText ? `${innerText}${suffix}` : "";
+                        let suffix = msg.createdAt ? ` · ${formatRelativeTime(msg.createdAt)}` : "";
+                        lastMsgText = innerText ? `${innerText}${suffix}` : "";
+                    }
                 }
             }
 
