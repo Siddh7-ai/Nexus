@@ -39,7 +39,14 @@ router.post("/upload", authenticateToken, async (req, res) => {
             return res.status(403).json({ message: "Guests cannot configure cryptographic keys" });
         }
 
-        const { identityPublicKey, signedPrekey, oneTimePrekeys } = req.body;
+        const { 
+            identityPublicKey, 
+            signedPrekey, 
+            oneTimePrekeys,
+            encryptedIdentityPrivateKey,
+            encryptedSignedPrekeyPrivateKey,
+            encryptedOneTimePrekeys
+        } = req.body;
         if (!identityPublicKey || !signedPrekey || !Array.isArray(oneTimePrekeys)) {
             return res.status(400).json({ message: "Missing required key fields" });
         }
@@ -59,6 +66,16 @@ router.post("/upload", authenticateToken, async (req, res) => {
             keyId: k.keyId,
             publicKey: k.publicKey
         }));
+
+        if (encryptedIdentityPrivateKey) {
+            user.encryptedIdentityPrivateKey = encryptedIdentityPrivateKey;
+        }
+        if (encryptedSignedPrekeyPrivateKey) {
+            user.encryptedSignedPrekeyPrivateKey = encryptedSignedPrekeyPrivateKey;
+        }
+        if (encryptedOneTimePrekeys) {
+            user.encryptedOneTimePrekeys = encryptedOneTimePrekeys;
+        }
 
         await user.save();
         res.status(200).json({ message: "Prekey bundle uploaded successfully" });
@@ -164,6 +181,99 @@ router.post("/replenish", authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error("Error replenishing one-time prekeys:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+
+// 5. Get E2EE key and session backup
+router.get("/backup", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ message: "Guests cannot access backups" });
+        }
+
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        res.status(200).json({
+            encryptedIdentityPrivateKey: user.encryptedIdentityPrivateKey,
+            encryptedSignedPrekeyPrivateKey: user.encryptedSignedPrekeyPrivateKey,
+            encryptedOneTimePrekeys: user.encryptedOneTimePrekeys,
+            identityPublicKey: user.identityPublicKey,
+            signedPrekey: user.signedPrekey,
+            encryptedSessions: user.encryptedSessions || []
+        });
+    } catch (error) {
+        console.error("Error fetching E2EE backup:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// 6. Save/update encrypted Double Ratchet session state
+router.post("/backup/session", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ message: "Guests cannot back up sessions" });
+        }
+
+        const { chatId, nonce, ciphertext } = req.body;
+        if (!chatId || !nonce || !ciphertext) {
+            return res.status(400).json({ message: "Missing required backup fields" });
+        }
+
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (!user.encryptedSessions) {
+            user.encryptedSessions = [];
+        }
+
+        // Find existing session or push new one
+        const existingIdx = user.encryptedSessions.findIndex(s => s.chatId === chatId);
+        if (existingIdx !== -1) {
+            user.encryptedSessions[existingIdx] = { chatId, nonce, ciphertext };
+        } else {
+            user.encryptedSessions.push({ chatId, nonce, ciphertext });
+        }
+
+        await user.save();
+        res.status(200).json({ message: "Session backed up successfully" });
+    } catch (error) {
+        console.error("Error backing up session:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// 7. Delete an encrypted Double Ratchet session state
+router.delete("/backup/session/:chatId", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) {
+            return res.status(403).json({ message: "Guests cannot manage sessions" });
+        }
+
+        const { chatId } = req.params;
+        if (!chatId) {
+            return res.status(400).json({ message: "Missing chatId parameter" });
+        }
+
+        const user = await User.findById(req.user.userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (user.encryptedSessions) {
+            user.encryptedSessions = user.encryptedSessions.filter(s => s.chatId !== chatId);
+            await user.save();
+        }
+
+        res.status(200).json({ message: "Session backup deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting session backup:", error);
         res.status(500).json({ message: "Server error" });
     }
 });

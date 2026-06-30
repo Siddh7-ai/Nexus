@@ -3,6 +3,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
 
 :root {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -61,4 +62,26 @@ label {
 button,
 input {
   font: inherit;
+}
+
+@keyframes idCardSway {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(1.8deg); }
+  75%  { transform: rotate(-1.8deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@media (max-width: 768px) {
+  .id-card-container {
+    display: flex !important;
+    position: absolute !important;
+    right: 50px !important;       /* Shifted slightly right on mobile */
+    top: 0 !important;
+    transform: scale(0.50) !important; /* Scales layout down to 50% */
+    transform-origin: top center !important;
+    z-index: 5 !important;
+  }
+  .id-card-wire {
+    height: 156px !important;    /* 30% longer string on mobile */
+  }
 }

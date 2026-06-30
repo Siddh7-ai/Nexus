@@ -158,6 +158,7 @@ export default function Vault({ isOpen, onClose, privateChatId, myUsername, toke
         } catch (e) {
             console.error("Failed to setup vault PIN:", e);
             setErrorMsg("Failed to save PIN details.");
+            throw e; // Re-throw so the setup modal can show error feedback
         }
     };
 

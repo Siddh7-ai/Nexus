@@ -78,6 +78,8 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
     }, [onRecordingStop]);
 
     const startRecording = async () => {
+        if (state !== 'idle') return;
+        setState('starting');
         try {
             sessionRef.current = new VoiceRecorderSession();
             await sessionRef.current.start((amp) => setAmplitude(amp));
@@ -86,6 +88,9 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
             setDuration(0);
             setAmplitudeData([]);
             
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
             timerRef.current = setInterval(() => {
                 setDuration(prev => {
                     if (prev >= 300) { // 5 minutes max limit
@@ -103,11 +108,12 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
 
     const stopRecording = async () => {
         if (!sessionRef.current || state !== 'recording') return;
+        setState('stopping');
         
         clearInterval(timerRef.current);
         const result = await sessionRef.current.stop();
         
-        if (result.durationSeconds < 1) {
+        if (!result || result.durationSeconds < 1) {
             // Too short
             alert("Recording too short");
             setState('idle');
@@ -143,6 +149,16 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
             sessionRef.current.cancel();
         }
         clearInterval(timerRef.current);
+        
+        // Stop any active preview audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            URL.revokeObjectURL(audioRef.current.src);
+            audioRef.current = null;
+        }
+        setIsPlaying(false);
+        setPlaybackTime(0);
+
         setState('idle');
         if (onRecordingStop) onRecordingStop();
         if (onCancel) onCancel();
@@ -151,6 +167,15 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
     const handleSend = async () => {
         if (!audioBlob) return;
         setState('processing');
+
+        // Stop any active preview audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            URL.revokeObjectURL(audioRef.current.src);
+            audioRef.current = null;
+        }
+        setIsPlaying(false);
+        setPlaybackTime(0);
 
         const normalizedWaveform = normalizeWaveform(amplitudeData, 100);
 
@@ -252,6 +277,7 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
 
     if (state === 'preview') {
         const normalizedWaveform = normalizeWaveform(amplitudeData, 40); // 40 bars for preview UI
+        const displayTime = (isPlaying || playbackTime > 0) ? playbackTime : duration;
         const playProgress = duration > 0 ? (playbackTime / duration) : 0;
 
         return (
@@ -289,7 +315,7 @@ export default function VoiceRecorder({ onVoiceMessageReady, onCancel, onRecordi
                     </div>
                 </div>
                 
-                <span className="preview-time">{formatDuration(duration)}</span>
+                <span className="preview-time">{formatDuration(displayTime)}</span>
                 
                 <button className="preview-action-btn discard" onClick={cancelRecording} title="Discard">
                     <Trash2 size={20} />

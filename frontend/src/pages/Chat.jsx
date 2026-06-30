@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
-import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity, useSpring } from "framer-motion";
 
 import ChatHeader from "../components/ChatHeader";
 import OnlineUsers from "../components/OnlineUsers";
@@ -148,6 +148,35 @@ function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = 
     );
 }
 
+export function SRLogo({ color = '#111110', size = 34 }) {
+  return (
+    <svg
+      viewBox="0 0 130 130"
+      width={size}
+      height={size}
+      fill="none"
+      style={{ flexShrink: 0, display: 'block' }}
+    >
+      <path
+        d="M58 22 A28 22 0 0 0 14 44 A28 22 0 0 1 58 66 A28 22 0 0 1 14 88"
+        fill="none"
+        stroke={color}
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <line x1="74" y1="22" x2="74" y2="110" stroke={color} strokeWidth="8" strokeLinecap="round" />
+      <path
+        d="M74 22 Q104 22 104 44 Q104 66 74 66"
+        fill="none"
+        stroke={color}
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <line x1="74" y1="66" x2="104" y2="110" stroke={color} strokeWidth="8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function Chat() {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -204,6 +233,12 @@ function Chat() {
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
+    const messagesRef = useRef([]);
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
+    const requestedResendsRef = useRef(new Set());
+    const decryptionMetaDataRef = useRef({});
     const [loadingMessages, setLoadingMessages] = useState(true);
     const [decryptedMessages, setDecryptedMessages] = useState({});
     const [sidebarTick, setSidebarTick] = useState(0);
@@ -264,7 +299,17 @@ function Chat() {
                 if (isCancelled) break;
                 if (msg.isDeleted) continue; // Skip deleted messages
                 if (!msg.privateChatId || !msg.ratchetHeader) continue;
-                if (decryptedMessages[msg._id]) continue; // already decrypted
+
+                const cachedMetadata = decryptionMetaDataRef.current[msg._id];
+                const hasChanged = !cachedMetadata ||
+                    cachedMetadata.text !== msg.text ||
+                    JSON.stringify(cachedMetadata.handshakePayload) !== JSON.stringify(msg.handshakePayload);
+
+                if (hasChanged) {
+                    requestedResendsRef.current.delete(msg._id);
+                }
+
+                if (decryptedMessages[msg._id] && !hasChanged) continue; // already decrypted and has not changed
 
                 try {
                     const decryptedPayload = await decryptAndCacheMessage(msg, myUsername, token);
@@ -279,6 +324,10 @@ function Chat() {
                     console.log("[Nexus ASR I] Decrypted voice message transcript:", decryptedTranscript);
                     
                     if (isCancelled) break;
+                    decryptionMetaDataRef.current[msg._id] = {
+                        text: msg.text,
+                        handshakePayload: msg.handshakePayload
+                    };
                     setDecryptedMessages(prev => ({
                         ...prev,
                         [msg._id]: decryptedPayload
@@ -298,16 +347,22 @@ function Chat() {
                 } catch (error) {
                     console.error("Failed to decrypt message:", msg._id, error);
                     if (isCancelled) break;
+                    decryptionMetaDataRef.current[msg._id] = {
+                        text: msg.text,
+                        handshakePayload: msg.handshakePayload
+                    };
                     setDecryptedMessages(prev => ({
                         ...prev,
-                        [msg._id]: { text: "[Message unavailable — sent before session was established]", isError: true }
+                        [msg._id]: { text: `[Decryption Failed: ${error.message || error}]`, isError: true }
                     }));
                     if (newlyReceivedMessageIdsRef.current.has(msg._id)) {
                         newlyReceivedMessageIdsRef.current.delete(msg._id);
-                        if (socketRef.current && msg.privateChatId) {
-                            await deleteSessionState(msg.privateChatId);
-                            socketRef.current.emit("requestSessionReset", { privateChatId: msg.privateChatId });
-                        }
+                    }
+                    if (socketRef.current && msg.privateChatId && !requestedResendsRef.current.has(msg._id)) {
+                        requestedResendsRef.current.add(msg._id);
+                        console.log(`[E2EE Self-Heal] Triggering session reset and resend request for message: ${msg._id}`);
+                        await deleteSessionState(msg.privateChatId);
+                        socketRef.current.emit("requestSessionResetAndResend", { messageId: msg._id, privateChatId: msg.privateChatId });
                     }
                 }
             }
@@ -413,17 +468,28 @@ function Chat() {
 
         conversationUsers.forEach(async (cUser) => {
             const msg = cUser.lastMessage;
-            if (msg && msg.privateChatId && msg.ratchetHeader && msg._id && !decryptedMessages[msg._id]) {
-                try {
-                    const decrypted = await decryptAndCacheMessage(msg, username, token);
-                    if (decrypted) {
-                        setDecryptedMessages(prev => ({
-                            ...prev,
-                            [msg._id]: decrypted
-                        }));
+            if (msg && msg.privateChatId && msg.ratchetHeader && msg._id) {
+                const cachedMetadata = decryptionMetaDataRef.current[msg._id];
+                const hasChanged = !cachedMetadata ||
+                    cachedMetadata.text !== msg.text ||
+                    JSON.stringify(cachedMetadata.handshakePayload) !== JSON.stringify(msg.handshakePayload);
+
+                if (!decryptedMessages[msg._id] || hasChanged) {
+                    try {
+                        const decrypted = await decryptAndCacheMessage(msg, username, token);
+                        if (decrypted) {
+                            decryptionMetaDataRef.current[msg._id] = {
+                                text: msg.text,
+                                handshakePayload: msg.handshakePayload
+                            };
+                            setDecryptedMessages(prev => ({
+                                ...prev,
+                                [msg._id]: decrypted
+                            }));
+                        }
+                    } catch (err) {
+                        console.error("Error loading last message decryption:", err);
                     }
-                } catch (err) {
-                    console.error("Error loading last message decryption:", err);
                 }
             }
         });
@@ -487,35 +553,89 @@ function Chat() {
     const [joinCode, setJoinCode] = useState("");
     const [joinError, setJoinError] = useState("");
 
-    // Framer Motion Values for interactive dragging and physical lanyard updates
-    const cardX = useMotionValue(0);
-    const cardY = useMotionValue(0);
-    
-    // Capture horizontal velocity to simulate realistic drag-induced rotation
-    const xVelocity = useVelocity(cardX);
-    const cardRotate = useTransform(xVelocity, [-2000, 2000], [-12, 12]);
-    
-    // Calculate woven lanyard tilt angle and vertical stretch dynamically
-    const lanyardAngle = useTransform([cardX, cardY], ([cx, cy]) => {
-        const targetY = 90 + cy;
-        if (targetY <= 0) return 0;
-        // Invert rotation sign so the bottom of the lanyard follows card offset coordinates correctly
-        return -Math.atan2(cx, targetY) * (180 / Math.PI);
-    });
-    const lanyardHeight = useTransform([cardX, cardY], ([cx, cy]) => {
-        const targetY = 90 + cy;
-        if (targetY <= 0) return 0;
-        return Math.sqrt(cx * cx + targetY * targetY);
-    });
-    
-    // Calculate carabiner rotation relative to the card's rotation to point toward the lanyard loop
-    const claspRotate = useTransform([lanyardAngle, cardRotate], ([la, cr]) => la - cr);
+    // Hanging ID Card Physics & Spring Values
+    const [idDragging, setIdDragging] = useState(false);
+    const idDraggingRef = useRef(false);
+    const pullX = useMotionValue(0);
+    const pullY = useMotionValue(0);
+    const springX = useSpring(pullX, { stiffness: 160, damping: 26, mass: 1.1 });
+    const springY = useSpring(pullY, { stiffness: 160, damping: 26, mass: 1.1 });
+    const idRotate  = useMotionValue(0);
+    const smoothRotate = useSpring(idRotate, { stiffness: 140, damping: 24, mass: 1.0 });
+    const [cardX, setCardX] = useState(0);
+    const [cardY, setCardY] = useState(0);
 
-    // Reset card coordinates to resting state when profile card opens/closes
+    const lanyardPath = useTransform(
+        [springX, springY],
+        ([x, y]) => {
+            const targetX = 300 + x;
+            const targetY = 286 + y;
+            return `M 220,0 C 220,150 280,280 ${targetX},${targetY} C 320,280 380,150 380,0`;
+        }
+    );
+
+    const claspRotate = useTransform(
+        [springX, springY],
+        ([x, y]) => {
+            const dx = -x;
+            const dy = 312 + y;
+            const rad = Math.atan2(dx, dy);
+            return rad * (180 / Math.PI);
+        }
+    );
+
     useEffect(() => {
-        cardX.set(0);
-        cardY.set(0);
-    }, [selectedProfileUsername, cardX, cardY]);
+        const unsubX = springX.on("change", v => setCardX(v));
+        const unsubY = springY.on("change", v => setCardY(v));
+        return () => {
+            unsubX();
+            unsubY();
+        };
+    }, [springX, springY]);
+
+    useEffect(() => {
+        if (!selectedProfileUsername) {
+            idDraggingRef.current = false;
+            setIdDragging(false);
+            pullX.jump(0); pullY.jump(0);
+            springX.jump(0); springY.jump(0);
+            idRotate.jump(0); smoothRotate.jump(0);
+        }
+    }, [selectedProfileUsername, pullX, pullY, springX, springY, idRotate, smoothRotate]);
+
+    const dragStartX = useRef(0);
+    const dragStartY = useRef(0);
+    const onPointerDown = (e) => {
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'a' || tag === 'select' || tag === 'label' || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('.card-actions-grid') || e.target.closest('.cyber-actions-tray') || e.target.closest('.cyber-avatar-wrapper')) return;
+        idDraggingRef.current = true;
+        setIdDragging(true);
+        dragStartX.current = e.clientX;
+        dragStartY.current = e.clientY;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        
+        const onMove = (ev) => {
+            if (!idDraggingRef.current) return;
+            const dx = ev.clientX - dragStartX.current;
+            const dy = ev.clientY - dragStartY.current;
+            pullX.set(dx * 0.75);
+            pullY.set(dy * 0.85);
+            idRotate.set(dx * 0.12);
+        };
+        
+        const onUp = () => {
+            idDraggingRef.current = false;
+            setIdDragging(false);
+            pullX.set(0);
+            pullY.set(0);
+            idRotate.set(0);
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+        };
+        
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    };
 
     // Avatar Canvas Cropper states
     const [cropImageSrc, setCropImageSrc] = useState(null);
@@ -1337,6 +1457,55 @@ function Chat() {
         newSocket.on("sessionResetRequested", async ({ privateChatId }) => {
             console.log(`Session reset requested for private chat ${privateChatId}. Deleting local session state...`);
             await deleteSessionState(privateChatId);
+        });
+
+        newSocket.on("sessionResetAndResendRequested", async ({ messageId, privateChatId }) => {
+            console.log(`[E2EE Self-Heal] Partner requested session reset and message resend for message ID: ${messageId}`);
+            
+            // 1. Delete local session state to force a new handshake
+            await deleteSessionState(privateChatId);
+
+            // 2. Find message in current messages array
+            const msg = messagesRef.current.find(m => m._id === messageId);
+            if (!msg) {
+                console.warn(`[E2EE Self-Heal] Message ${messageId} not found in messagesRef.`);
+                return;
+            }
+
+            // 3. Re-encrypt and resend
+            try {
+                const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+                const decryptedPayload = await decryptAndCacheMessage(msg, usernameRef.current, token);
+                if (!decryptedPayload) {
+                    console.warn("[E2EE Self-Heal] Failed to decrypt own message payload.");
+                    return;
+                }
+
+                // Get partner name
+                const partnerName = privateChatId.split("_").find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
+
+                // Encrypt outgoing message (this will automatically fetch partner's bundle, create a new session and handshake)
+                const encryptedMsg = await encryptOutgoingMessage(
+                    partnerName,
+                    privateChatId,
+                    decryptedPayload.text,
+                    decryptedPayload.attachment || null,
+                    token
+                );
+
+                // Send the re-encrypted message to the server
+                newSocket.emit("resendEncryptedMessage", {
+                    messageId,
+                    privateChatId,
+                    text: encryptedMsg.text,
+                    ratchetHeader: encryptedMsg.ratchetHeader,
+                    handshakePayload: encryptedMsg.handshakePayload,
+                    senderCiphertext: encryptedMsg.senderCiphertext
+                });
+                console.log(`[E2EE Self-Heal] Re-encrypted and resent message ID: ${messageId}`);
+            } catch (err) {
+                console.error("[E2EE Self-Heal] Error re-encrypting message for resend:", err);
+            }
         });
 
         newSocket.on("roomMemberUpdate", (room) => {
@@ -3482,94 +3651,150 @@ function Chat() {
                             onClick={() => setSelectedProfileUsername(null)} 
                         />
                         <div className="badge-container" onClick={(e) => e.stopPropagation()}>
-                            {/* Woven Lanyard */}
-                            <motion.div 
-                                className="woven-lanyard"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                style={{ 
-                                    rotate: lanyardAngle,
-                                    height: lanyardHeight,
-                                    transformOrigin: "top center"
-                                }}
-                                transition={{ 
-                                    type: "spring",
-                                    stiffness: 90,
-                                    damping: 15
+                            {/* Woven Checkered Lanyard Strap - Rendering dynamic curve */}
+                            <svg
+                                width="600"
+                                height="800"
+                                viewBox="0 0 600 800"
+                                style={{
+                                    position: 'absolute',
+                                    top: -125,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    pointerEvents: 'none',
+                                    zIndex: 9,
+                                    overflow: 'visible'
                                 }}
                             >
-                                <div className="lanyard-text">
-                                    {selectedProfileData ? (selectedProfileData.displayName || selectedProfileData.username).split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : "NX"}
-                                </div>
-                                <div className="lanyard-metal-loop" />
-                            </motion.div>
+                                <defs>
+                                    <linearGradient id="lanyardGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stopColor="#1e293b" />
+                                        <stop offset="50%" stopColor="var(--accent)" />
+                                        <stop offset="100%" stopColor="#0f172a" />
+                                    </linearGradient>
+                                </defs>
+                                <motion.path
+                                    d={lanyardPath}
+                                    fill="none"
+                                    stroke="url(#lanyardGrad)"
+                                    strokeWidth="16"
+                                    strokeLinecap="round"
+                                    style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.4))' }}
+                                />
+                                <motion.path
+                                    d={lanyardPath}
+                                    fill="none"
+                                    stroke="rgba(255, 255, 255, 0.4)"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeDasharray="6 8"
+                                />
+                            </svg>
 
                             {loadingProfileCard ? (
                                 <motion.div 
-                                    className="cyber-badge-card"
                                     initial={{ y: -800, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     exit={{ y: -800, opacity: 0 }}
                                     transition={{ type: "spring", stiffness: 90, damping: 15 }}
-                                    style={{ justifyContent: 'center', minHeight: '220px' }}
+                                    style={{ marginTop: '165px', position: 'relative' }}
                                 >
-                                    <div className="cyber-card-grid" />
-                                    <div className="emoji-picker-loader" style={{ padding: '48px 0', color: 'var(--accent)', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>
-                                        ESTABLISHING SECURE CONNECTION...
+                                    <div className="chrome-clasp-wrapper">
+                                        <svg width="32" height="48" viewBox="0 0 32 48" fill="none">
+                                            <defs>
+                                                <linearGradient id="chromeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="#f8fafc" />
+                                                    <stop offset="20%" stopColor="#cbd5e1" />
+                                                    <stop offset="40%" stopColor="#475569" />
+                                                    <stop offset="60%" stopColor="#cbd5e1" />
+                                                    <stop offset="80%" stopColor="#94a3b8" />
+                                                    <stop offset="100%" stopColor="#1e293b" />
+                                                </linearGradient>
+                                            </defs>
+                                            <path 
+                                                d="M16 2 C10 2 6 6 6 12 C6 15 8 18 10 20 L10 32 C10 34 12 36 14 36 L18 36 C20 34 22 32 22 30 L22 20 C24 18 26 15 26 12 C26 6 22 2 16 2 Z M16 6 C13 6 10 8 10 12 C10 14 11 16 13 18 L13 30 C13 31 14 32 15 32 L17 32 C18 32 19 31 19 30 L19 18 C21 16 22 14 22 12 C22 8 19 6 16 6 Z" 
+                                                fill="url(#chromeGradient)" 
+                                                fillRule="evenodd" 
+                                                filter="drop-shadow(0 2px 3px rgba(0,0,0,0.5))" 
+                                            />
+                                            <path d="M10 14 L22 19" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                                            <circle cx="16" cy="38" r="4" fill="#475569" stroke="#94a3b8" strokeWidth="1.5" />
+                                        </svg>
+                                    </div>
+                                    <div className="cyber-badge-card" style={{ justifyContent: 'center', minHeight: '220px', height: 'auto', cursor: 'default' }}>
+                                        <div className="card-top-bar" />
+                                        <div className="card-grommet-hole" />
+                                        <div className="cyber-card-grid" />
+                                        <div className="emoji-picker-loader" style={{ padding: '48px 0', color: 'var(--accent)', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px' }}>
+                                            ESTABLISHING SECURE CONNECTION...
+                                        </div>
                                     </div>
                                 </motion.div>
                             ) : profileCardError ? (
                                 <motion.div 
-                                    className="cyber-badge-card"
                                     initial={{ y: -800, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     exit={{ y: -800, opacity: 0 }}
                                     transition={{ type: "spring", stiffness: 90, damping: 15 }}
-                                    style={{ justifyContent: 'center', padding: '24px', textAlign: 'center', minHeight: '200px' }}
+                                    style={{ marginTop: '165px', position: 'relative' }}
                                 >
-                                    <div className="cyber-card-grid" />
-                                    <p style={{ color: 'var(--danger)', fontWeight: 'bold', fontSize: '13px', fontFamily: 'monospace', marginBottom: '20px' }}>
-                                        {profileCardError}
-                                    </p>
-                                    <button className="cyber-badge-btn primary" style={{ width: '120px', height: '36px' }} onClick={() => setSelectedProfileUsername(null)}>CLOSE</button>
+                                    <div className="chrome-clasp-wrapper">
+                                        <svg width="32" height="48" viewBox="0 0 32 48" fill="none">
+                                            <defs>
+                                                <linearGradient id="chromeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                    <stop offset="0%" stopColor="#f8fafc" />
+                                                    <stop offset="20%" stopColor="#cbd5e1" />
+                                                    <stop offset="40%" stopColor="#475569" />
+                                                    <stop offset="60%" stopColor="#cbd5e1" />
+                                                    <stop offset="80%" stopColor="#94a3b8" />
+                                                    <stop offset="100%" stopColor="#1e293b" />
+                                                </linearGradient>
+                                            </defs>
+                                            <path 
+                                                d="M16 2 C10 2 6 6 6 12 C6 15 8 18 10 20 L10 32 C10 34 12 36 14 36 L18 36 C20 34 22 32 22 30 L22 20 C24 18 26 15 26 12 C26 6 22 2 16 2 Z M16 6 C13 6 10 8 10 12 C10 14 11 16 13 18 L13 30 C13 31 14 32 15 32 L17 32 C18 32 19 31 19 30 L19 18 C21 16 22 14 22 12 C22 8 19 6 16 6 Z" 
+                                                fill="url(#chromeGradient)" 
+                                                fillRule="evenodd" 
+                                                filter="drop-shadow(0 2px 3px rgba(0,0,0,0.5))" 
+                                            />
+                                            <path d="M10 14 L22 19" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                                            <circle cx="16" cy="38" r="4" fill="#475569" stroke="#94a3b8" strokeWidth="1.5" />
+                                        </svg>
+                                    </div>
+                                    <div className="cyber-badge-card" style={{ justifyContent: 'center', padding: '24px', textAlign: 'center', minHeight: '200px', height: 'auto', cursor: 'default' }}>
+                                        <div className="card-top-bar" />
+                                        <div className="card-grommet-hole" />
+                                        <div className="cyber-card-grid" />
+                                        <p style={{ color: 'var(--danger)', fontWeight: 'bold', fontSize: '13px', fontFamily: 'monospace', marginBottom: '20px' }}>
+                                            {profileCardError}
+                                        </p>
+                                        <button className="cyber-badge-btn primary" style={{ width: '120px', height: '36px' }} onClick={() => setSelectedProfileUsername(null)}>CLOSE</button>
+                                    </div>
                                 </motion.div>
                             ) : selectedProfileData ? (
                                 <motion.div 
-                                    className="cyber-badge-card"
-                                    drag
-                                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-                                    dragElastic={1.0}
                                     initial={{ y: -800, rotate: 22, opacity: 0 }}
                                     animate={{ y: 0, rotate: 0, opacity: 1 }}
                                     exit={{ y: -800, rotate: -22, opacity: 0 }}
-                                    style={{
-                                        x: cardX,
-                                        y: cardY,
-                                        rotate: cardRotate
-                                    }}
                                     transition={{
                                         type: "spring",
                                         stiffness: 90,
                                         damping: 14,
                                         mass: 1.1
                                     }}
+                                    style={{ marginTop: '165px', position: 'relative' }}
                                 >
-                                    {/* Punched Hole with Chrome Grommet */}
-                                    <div className="card-grommet-hole" />
-                                    
-                                    {/* Corner Bracket Accent Indicators */}
-                                    <div className="card-corner-bracket top-left" />
-                                    <div className="card-corner-bracket top-right" />
-                                    <div className="card-corner-bracket bottom-left" />
-                                    <div className="card-corner-bracket bottom-right" />
-
                                     {/* Carabiner Chrome Clasp (dynamic rotation pointing to the lanyard pivot) */}
                                     <motion.div 
                                         className="chrome-clasp-wrapper"
                                         style={{
+                                            x: springX,
+                                            y: springY,
                                             rotate: claspRotate,
-                                            transformOrigin: "center 38px"
+                                            transformOrigin: "center 38px",
+                                            position: 'absolute',
+                                            left: 'calc(50% - 16px)',
+                                            transform: 'none',
+                                            zIndex: 100
                                         }}
                                     >
                                         <svg width="32" height="48" viewBox="0 0 32 48" fill="none">
@@ -3583,16 +3808,38 @@ function Chat() {
                                                     <stop offset="100%" stopColor="#1e293b" />
                                                 </linearGradient>
                                             </defs>
-                                            {/* Carabiner main hook body */}
-                                            <path d="M16 2 C10 2 6 6 6 12 C6 15 8 18 10 20 L10 32 C10 34 12 36 14 36 L18 36 C20 34 22 32 22 30 L22 20 C24 18 26 15 26 12 C26 6 22 2 16 2 Z" fill="url(#chromeGradient)" filter="drop-shadow(0 2px 3px rgba(0,0,0,0.5))" />
-                                            {/* Carabiner inner void */}
-                                            <path d="M16 6 C13 6 10 8 10 12 C10 14 11 16 13 18 L13 30 C13 31 14 32 15 32 L17 32 C18 32 19 31 19 30 L19 18 C21 16 22 14 22 12 C22 8 19 6 16 6 Z" fill="#030407" />
+                                            {/* Combined body and void using fill-rule evenodd */}
+                                            <path 
+                                                d="M16 2 C10 2 6 6 6 12 C6 15 8 18 10 20 L10 32 C10 34 12 36 14 36 L18 36 C20 34 22 32 22 30 L22 20 C24 18 26 15 26 12 C26 6 22 2 16 2 Z M16 6 C13 6 10 8 10 12 C10 14 11 16 13 18 L13 30 C13 31 14 32 15 32 L17 32 C18 32 19 31 19 30 L19 18 C21 16 22 14 22 12 C22 8 19 6 16 6 Z" 
+                                                fill="url(#chromeGradient)" 
+                                                fillRule="evenodd" 
+                                                filter="drop-shadow(0 2px 3px rgba(0,0,0,0.5))" 
+                                            />
                                             {/* Security latch wire gate */}
                                             <path d="M10 14 L22 19" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
                                             {/* Grommet anchor ring hook */}
                                             <circle cx="16" cy="38" r="4" fill="#475569" stroke="#94a3b8" strokeWidth="1.5" />
                                         </svg>
                                     </motion.div>
+
+                                    <motion.div 
+                                        className="cyber-badge-card"
+                                        style={{
+                                            x: springX,
+                                            y: springY,
+                                            rotate: smoothRotate,
+                                            transformOrigin: "center 22px"
+                                        }}
+                                        onPointerDown={onPointerDown}
+                                    >
+                                        {/* Punched Hole with Chrome Grommet */}
+                                        <div className="card-grommet-hole" />
+                                        
+                                        {/* Corner Bracket Accent Indicators */}
+                                        <div className="card-corner-bracket top-left" />
+                                        <div className="card-corner-bracket top-right" />
+                                        <div className="card-corner-bracket bottom-left" />
+                                        <div className="card-corner-bracket bottom-right" />
 
                                     {/* Top Accent Color Bar */}
                                     <div className="card-top-bar" />
@@ -3625,7 +3872,7 @@ function Chat() {
                                                 />
                                             </div>
                                         </div>
-                                        <button className="cyber-close-btn" onClick={() => setSelectedProfileUsername(null)}>×</button>
+                                        <button className="cyber-close-btn" onClick={() => setSelectedProfileUsername(null)}><FiX size={14} /></button>
                                     </div>
 
                                     {/* AVATAR + ACTIVE ZONE */}
@@ -3653,12 +3900,6 @@ function Chat() {
                                     <div className="cyber-bio-section">
                                         <h2 className="cyber-display-name">
                                             {selectedProfileData.displayName}
-                                            {!selectedProfileData.isGuest && (
-                                                <svg className="cyber-verify-badge" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }}>
-                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" strokeWidth="2.5"/>
-                                                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                                                </svg>
-                                            )}
                                         </h2>
                                         <span className="cyber-username">@{selectedProfileData.username}</span>
                                         <p className="cyber-bio-text" style={{ fontStyle: selectedProfileData.bio ? 'normal' : 'italic' }}>
@@ -3826,7 +4067,8 @@ function Chat() {
                                         )}
                                     </div>
                                 </motion.div>
-                            ) : null}
+                            </motion.div>
+                        ) : null}
                         </div>
                     </motion.div>
                 )}
@@ -3846,7 +4088,7 @@ function Chat() {
                             className="full-avatar-close"
                             onClick={() => setFullAvatarUrl(null)}
                         >
-                            ×
+                            <FiX size={22} />
                         </motion.div>
                         <motion.img 
                             src={fullAvatarUrl} 

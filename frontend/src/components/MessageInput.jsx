@@ -1233,29 +1233,34 @@ function MessageInput({
     }
 
     function insertEmoji(emoji) {
+        const input = inputRef.current;
+        if (!input) return;
+
         const selection = window.getSelection();
-        if (!selection.rangeCount) {
-            const input = inputRef.current;
-            if (input) {
-                input.focus();
-                input.innerHTML += emoji;
-                handleInput();
-            }
-            return;
+        const isSelectionInsideInput = selection.rangeCount > 0 && input.contains(selection.anchorNode);
+
+        if (!isSelectionInsideInput) {
+            input.focus();
+            const range = document.createRange();
+            range.selectNodeContents(input);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
-        
+
         const range = selection.getRangeAt(0);
         range.deleteContents();
-        
+
         const textNode = document.createTextNode(emoji);
         range.insertNode(textNode);
-        
+
         const newRange = document.createRange();
         newRange.setStartAfter(textNode);
         newRange.collapse(true);
         selection.removeAllRanges();
         selection.addRange(newRange);
-        
+
+        input.focus();
         handleInput();
     }
 

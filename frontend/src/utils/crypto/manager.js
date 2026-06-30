@@ -154,14 +154,17 @@ export async function generateAndStoreKeys(password, username) {
         signedPrekeyPublicKey: toBase64(spk.publicKey)
     });
 
-    // 6. Return public bundle
+    // 6. Return public bundle and encrypted private keys
     return {
         identityPublicKey: toBase64(identityKeypair.publicKey),
         signedPrekey: {
             publicKey: toBase64(spk.publicKey),
             signature: toBase64(spkSignature)
         },
-        oneTimePrekeys: opksPublic
+        oneTimePrekeys: opksPublic,
+        encryptedIdentityPrivateKey: encryptedIK,
+        encryptedSignedPrekeyPrivateKey: encryptedSPK,
+        encryptedOneTimePrekeys: encryptedOPKs
     };
 }
 
@@ -280,6 +283,7 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
             }
         }
         await saveSessionState(privateChatId, newSessionBlob, partnerIdentityPublicKey, myIdentityPublicKey, encryptedVaultKey);
+        syncSessionToServer(privateChatId);
 
         // Encrypt a copy for the sender using their own master key
         let senderCiphertext = null;
@@ -412,6 +416,7 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
                 
                 // Save updated session
                 await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState));
+                syncSessionToServer(privateChatId);
 
                 // Perform receiver backup (non-blocking)
                 backupReceiverCiphertext(msg, decryptedPayload, token);
@@ -429,35 +434,31 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
             throw new Error("Decryption failed: Session out of sync.");
         }
 
-        console.log(`Receiving E2EE handshake from ${partnerUsername}...`);
+        console.log(`[E2EE] Receiving handshake from ${partnerUsername}...`);
         const myKeys = await loadDecryptedKeys(myUsername);
         if (!myKeys) throw new Error("Failed to load and decrypt local private keys. Please login again.");
+        console.log("[E2EE Debug] Local identity public key:", myKeys.identityPublicKey);
+        console.log("[E2EE Debug] Handshake payload received:", JSON.stringify(msg.handshakePayload));
 
         // Retrieve my one-time prekey private key if Alice consumed one
         let opkPrivateKeyBase64 = null;
+        let foundOpk = null;
         const requestedOpkId = msg.handshakePayload.oneTimePrekeyId;
         if (requestedOpkId && myKeys.oneTimePrekeys) {
-            const foundOpk = myKeys.oneTimePrekeys.find(k => k.keyId === requestedOpkId);
+            foundOpk = myKeys.oneTimePrekeys.find(k => k.keyId === requestedOpkId);
             if (foundOpk) {
                 opkPrivateKeyBase64 = foundOpk.secretKey;
-                
-                // Remove consumed OPK from my local list to preserve forward secrecy
-                const updatedOPKs = myKeys.oneTimePrekeys.filter(k => k.keyId !== requestedOpkId);
-                const masterKey = getMasterKey();
-                const encryptedOPKs = encryptData(sodium.from_string(JSON.stringify(updatedOPKs)), masterKey);
-                
-                const dbKeys = await getKeys(myUsername);
-                await saveKeys(myUsername, {
-                    ...dbKeys,
-                    encryptedOneTimePrekeys: encryptedOPKs
-                });
+                console.log("[E2EE Debug] Found matching OPK private key in IndexedDB for ID:", requestedOpkId);
             } else {
-                console.warn(`Consumed OPK ${requestedOpkId} not found in local IndexedDB. Proceeding with DH1-DH3 fallback.`);
+                console.warn(`[E2EE Warning] Consumed OPK ${requestedOpkId} not found in local IndexedDB. Proceeding with DH1-DH3 fallback.`);
             }
+        } else {
+            console.log("[E2EE Debug] No OPK was consumed for this handshake.");
         }
 
         // Calculate the identical shared secret
         const { sharedSecret, vaultKey } = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
+        console.log("[E2EE Debug] Receiver shared secret first 5 bytes:", toBase64(sharedSecret.slice(0, 5)));
 
         // Initialize my Double Ratchet receiver session
         const spkPrivateKey = fromBase64(myKeys.signedPrekeySecretKey);
@@ -470,6 +471,20 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
         // Decrypt the message
         const decryptedBytes = await session.decrypt(reconstructedMsg);
         const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
+        console.log("[E2EE Debug] Decryption successful!");
+
+        // Remove consumed OPK from my local list ONLY after successful decryption
+        if (foundOpk) {
+            const updatedOPKs = myKeys.oneTimePrekeys.filter(k => k.keyId !== requestedOpkId);
+            const masterKey = getMasterKey();
+            const encryptedOPKs = encryptData(sodium.from_string(JSON.stringify(updatedOPKs)), masterKey);
+            const dbKeys = await getKeys(myUsername);
+            await saveKeys(myUsername, {
+                ...dbKeys,
+                encryptedOneTimePrekeys: encryptedOPKs
+            });
+            console.log("[E2EE Debug] Safely deleted consumed OPK from IndexedDB.");
+        }
 
         // Save the new session state
         let encryptedVaultKey = null;
@@ -480,6 +495,7 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
             }
         }
         await saveSessionState(privateChatId, DoubleRatchet.sessionStateBlob(session.sessionState), msg.handshakePayload.aliceIdentityPublicKey, myKeys.identityPublicKey, encryptedVaultKey);
+        syncSessionToServer(privateChatId);
 
         // Perform receiver backup (non-blocking)
         backupReceiverCiphertext(msg, decryptedPayload, token);
@@ -751,5 +767,108 @@ export async function getOrCreateVaultKey(privateChatId, partnerUsername, token)
     );
 
     return vaultKey;
+}
+
+/**
+ * Backs up the encrypted session state to the server (non-blocking).
+ */
+export async function syncSessionToServer(chatId) {
+    try {
+        const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+        if (!token || token.startsWith("guest:")) return;
+
+        const record = await getFullSessionRecord(chatId);
+        if (!record) return;
+
+        const masterKey = getMasterKey();
+        if (!masterKey) return;
+
+        // Encrypt the entire record JSON string
+        const encrypted = encryptData(sodium.from_string(JSON.stringify(record)), masterKey);
+
+        // Upload in background
+        fetch(`${getBackendUrl()}/api/keys/backup/session`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                chatId,
+                nonce: encrypted.nonce,
+                ciphertext: encrypted.ciphertext
+            })
+        }).catch(err => console.error("Error syncing session backup to server:", err));
+    } catch (err) {
+        console.error("Failed to sync session backup:", err);
+    }
+}
+
+/**
+ * Restores E2EE keys and sessions from server backup and saves them to IndexedDB.
+ */
+export async function restoreBackupFromServer(username, token) {
+    await cryptoReady;
+    try {
+        const response = await fetch(`${getBackendUrl()}/api/keys/backup`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            console.log("No backup found or error fetching backup.");
+            return false;
+        }
+
+        const backup = await response.json();
+        
+        // Restore keys if they exist in backup
+        if (backup.identityPublicKey && backup.encryptedIdentityPrivateKey?.ciphertext) {
+            await saveKeys(username, {
+                encryptedIdentityPrivateKey: backup.encryptedIdentityPrivateKey,
+                encryptedSignedPrekeyPrivateKey: backup.encryptedSignedPrekeyPrivateKey,
+                encryptedOneTimePrekeys: backup.encryptedOneTimePrekeys,
+                identityPublicKey: backup.identityPublicKey,
+                signedPrekeyPublicKey: backup.signedPrekey?.publicKey
+            });
+            console.log("[E2EE Backup] Restored cryptographic keys to local IndexedDB successfully.");
+        } else {
+            console.log("[E2EE Backup] No key backup exists on server.");
+            return false;
+        }
+
+        // Restore sessions if they exist in backup
+        if (Array.isArray(backup.encryptedSessions) && backup.encryptedSessions.length > 0) {
+            const masterKey = getMasterKey();
+            if (!masterKey) {
+                console.warn("[E2EE Backup] Master key not loaded. Cannot restore sessions yet.");
+                return true; // Keys were restored
+            }
+
+            for (const encSession of backup.encryptedSessions) {
+                try {
+                    const decryptedBytes = decryptData(encSession, masterKey);
+                    const record = JSON.parse(sodium.to_string(decryptedBytes));
+                    
+                    const prefix = `${username.toLowerCase()}_`;
+                    const cleanChatId = record.chatId.startsWith(prefix) ? record.chatId.slice(prefix.length) : record.chatId;
+
+                    await saveSessionState(
+                        cleanChatId,
+                        record.sessionBlob,
+                        record.partnerIdentityPublicKey,
+                        record.myIdentityPublicKey,
+                        record.encryptedVaultKey
+                    );
+                } catch (err) {
+                    console.error(`[E2EE Backup] Failed to decrypt and restore session for ${encSession.chatId}:`, err);
+                }
+            }
+            console.log(`[E2EE Backup] Restored ${backup.encryptedSessions.length} sessions to local IndexedDB.`);
+        }
+        
+        return true;
+    } catch (err) {
+        console.error("Error restoring backup from server:", err);
+        return false;
+    }
 }
 

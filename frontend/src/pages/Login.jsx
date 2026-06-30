@@ -10,7 +10,8 @@ import {
   deriveKeysFromPassword, 
   setMasterKey, 
   loadDecryptedKeys, 
-  generateAndStoreKeys 
+  generateAndStoreKeys,
+  restoreBackupFromServer
 } from "../utils/crypto/manager";
 
 import logo from "../assets/logo.png";
@@ -73,9 +74,18 @@ function Login() {
         setMasterKey(masterKey);
 
         // 2. Check if E2EE keys are stored locally in IndexedDB
-        const myKeys = await loadDecryptedKeys(data.username);
+        let myKeys = await loadDecryptedKeys(data.username);
         if (!myKeys) {
-          console.log("No cryptographic keys found locally. Generating and uploading new bundle...");
+          console.log("No cryptographic keys found locally. Attempting to restore from server backup...");
+          const restored = await restoreBackupFromServer(data.username, data.token);
+          if (restored) {
+            console.log("E2EE keys and sessions successfully restored from backup.");
+            myKeys = await loadDecryptedKeys(data.username);
+          }
+        }
+
+        if (!myKeys) {
+          console.log("No backup found on server. Generating and uploading new bundle...");
           // Deterministically re-generate identity key and upload new bundle
           const bundle = await generateAndStoreKeys(password, data.username);
           

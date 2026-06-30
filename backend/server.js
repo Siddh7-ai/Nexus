@@ -1072,6 +1072,33 @@ io.on("connection", async (socket) => {
         socket.to(`private_${privateChatId}`).emit("sessionResetRequested", { privateChatId });
     });
 
+    socket.on("requestSessionResetAndResend", ({ messageId, privateChatId }) => {
+        if (!privateChatId || !messageId) return;
+        socket.to(`private_${privateChatId}`).emit("sessionResetAndResendRequested", { messageId, privateChatId });
+    });
+
+    socket.on("resendEncryptedMessage", async ({ messageId, privateChatId, text, ratchetHeader, handshakePayload, senderCiphertext }) => {
+        try {
+            const msg = await Message.findById(messageId);
+            if (msg) {
+                msg.text = text;
+                msg.ratchetHeader = ratchetHeader;
+                if (handshakePayload) msg.handshakePayload = handshakePayload;
+                if (senderCiphertext) msg.senderCiphertext = senderCiphertext;
+                msg.receiverCiphertext = undefined;
+                await msg.save();
+
+                io.to(`private_${privateChatId}`).emit("messageUpdated", msg);
+                const parts = privateChatId.split("_");
+                parts.forEach(part => {
+                    io.to(`user_${part.toLowerCase()}`).emit("messageUpdated", msg);
+                });
+            }
+        } catch (err) {
+            console.error("Error in resendEncryptedMessage:", err);
+        }
+    });
+
     socket.on("typing", async ({ room, privateChatId }) => {
         if (privateChatId) {
             if (socket.role === "guest") return;

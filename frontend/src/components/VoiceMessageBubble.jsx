@@ -13,6 +13,7 @@ export default function VoiceMessageBubble({
     messageId
 }) {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1);
     const [playbackTime, setPlaybackTime] = useState(0);
     const [isDecrypted, setIsDecrypted] = useState(false);
     const [isDecrypting, setIsDecrypting] = useState(false);
@@ -88,6 +89,24 @@ export default function VoiceMessageBubble({
             cancelAnimationFrame(animationFrameId);
         };
     }, [isPlaying, localAudioUrl]);
+
+    // Keep HTML audio element's playbackRate in sync with state
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.playbackRate = playbackRate;
+        }
+    }, [playbackRate, localAudioUrl]);
+
+    const toggleSpeed = (e) => {
+        e.stopPropagation(); // Avoid triggering parent click events
+        let nextRate = 1;
+        if (playbackRate === 1) nextRate = 1.5;
+        else if (playbackRate === 1.5) nextRate = 2;
+        else if (playbackRate === 2) nextRate = 0.5;
+        else nextRate = 1;
+        
+        setPlaybackRate(nextRate);
+    };
 
     const fetchAndDecryptAudio = async () => {
         try {
@@ -245,6 +264,7 @@ export default function VoiceMessageBubble({
 
     const displayWaveform = waveform && waveform.length > 0 ? normalizeWaveform(waveform, 40) : new Array(40).fill(0.1);
     const playProgress = duration > 0 ? (playbackTime / duration) : 0;
+    const displayTime = (isPlaying || playbackTime > 0) ? playbackTime : duration;
 
     return (
         <div className={`voice-message-bubble ${isOwnMessage ? 'own' : 'other'}`}>
@@ -298,8 +318,16 @@ export default function VoiceMessageBubble({
                 </div>
                 
                 <div className="voice-duration">
-                    {formatDuration(isPlaying ? playbackTime : duration)}
+                    {formatDuration(displayTime)}
                 </div>
+
+                <button 
+                    className="voice-speed-btn" 
+                    onClick={toggleSpeed}
+                    title="Change Playback Speed"
+                >
+                    {playbackRate}x
+                </button>
             </div>
 
             {error && <div className="voice-error">{error}</div>}

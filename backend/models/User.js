@@ -83,6 +83,26 @@ const userSchema = new mongoose.Schema({
             publicKey: { type: String, required: true }
         }],
         default: []
+    },
+    encryptedIdentityPrivateKey: {
+        nonce: { type: String, default: null },
+        ciphertext: { type: String, default: null }
+    },
+    encryptedSignedPrekeyPrivateKey: {
+        nonce: { type: String, default: null },
+        ciphertext: { type: String, default: null }
+    },
+    encryptedOneTimePrekeys: {
+        nonce: { type: String, default: null },
+        ciphertext: { type: String, default: null }
+    },
+    encryptedSessions: {
+        type: [{
+            chatId: { type: String, required: true },
+            nonce: { type: String, required: true },
+            ciphertext: { type: String, required: true }
+        }],
+        default: []
     }
 }, { timestamps: true });
 

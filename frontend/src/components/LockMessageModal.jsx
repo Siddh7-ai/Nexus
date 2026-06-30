@@ -42,35 +42,6 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
     const pinType = pinData?.pinType || "4digit";
     const limit = pinType === "4digit" ? 4 : 6;
 
-    // Numeric keypad key press handlers
-    const handleNumericKeyPress = (val) => {
-        if (enteredPin.length < limit) {
-            setEnteredPin(prev => prev + val);
-        }
-    };
-
-    const handleNumericBackspace = () => {
-        setEnteredPin(prev => prev.slice(0, -1));
-    };
-
-    // Keyboard support for numeric entry
-    useEffect(() => {
-        if (step !== "pin" || pinType === "custom" || !pinData) return;
-
-        const handleKeyDown = (e) => {
-            if (/^[0-9]$/.test(e.key)) {
-                e.preventDefault();
-                setEnteredPin(prev => (prev.length < limit ? prev + e.key : prev));
-            } else if (e.key === "Backspace") {
-                e.preventDefault();
-                setEnteredPin(prev => prev.slice(0, -1));
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [step, pinType, limit, pinData]);
-
     // Auto-verify for numeric PINs when limit is reached
     useEffect(() => {
         if (step !== "pin" || !pinData || pinType === "custom") return;
@@ -214,45 +185,30 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                         </div>
 
                         <form onSubmit={verifyAndTransition} className="vault-form">
-                            {pinType === "custom" ? (
-                                <div className={`auth-field ${shake ? "shake-animate" : ""}`}>
-                                    <div className="auth-input-wrap" style={{ position: 'relative' }}>
-                                        <SmoothInput
-                                            type="password"
-                                            placeholder="Enter your vault password"
-                                            value={enteredPin}
-                                            onChange={e => setEnteredPin(e.target.value)}
-                                            allowEmoji={true}
-                                        />
-                                    </div>
-                                    <button type="submit" className="auth-btn vault-setup-btn" style={{ marginTop: '15px', width: '100%' }}>
-                                        Next
-                                    </button>
+                            <div className={`auth-field ${shake ? "shake-animate" : ""}`} style={{ marginBottom: '15px' }}>
+                                <div className="auth-input-wrap" style={{ position: 'relative' }}>
+                                    <SmoothInput
+                                        type="password"
+                                        placeholder="Enter PIN / Password"
+                                        value={enteredPin}
+                                        onChange={e => {
+                                            let val = e.target.value;
+                                            if (pinType !== "custom") {
+                                                val = val.replace(/\D/g, "");
+                                                if (val.length > limit) {
+                                                    val = val.slice(0, limit);
+                                                }
+                                            }
+                                            setEnteredPin(val);
+                                        }}
+                                        autoFocus={true}
+                                        allowEmoji={true}
+                                    />
                                 </div>
-                            ) : (
-                                <div className={`numeric-entry-container ${shake ? "shake-animate" : ""}`}>
-                                    <div className="auth-field" style={{ marginBottom: '15px' }}>
-                                        <div className="auth-input-wrap" style={{ position: 'relative' }}>
-                                            <SmoothInput
-                                                type="password"
-                                                placeholder={`Enter your ${limit}-digit PIN`}
-                                                value={enteredPin}
-                                                onChange={e => setEnteredPin(e.target.value)}
-                                                allowEmoji={true}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="vault-keypad">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                                            <button key={num} type="button" className="keypad-btn" onClick={() => handleNumericKeyPress(num.toString())}>{num}</button>
-                                        ))}
-                                        <button type="button" className="keypad-btn danger-clear" onClick={() => setEnteredPin("")}>C</button>
-                                        <button type="button" className="keypad-btn" onClick={() => handleNumericKeyPress("0")}>0</button>
-                                        <button type="button" className="keypad-btn backspace" onClick={handleNumericBackspace}>⌫</button>
-                                    </div>
-                                </div>
-                            )}
-
+                                <button type="submit" className="auth-btn vault-setup-btn" style={{ marginTop: '15px', width: '100%' }}>
+                                    Next
+                                </button>
+                            </div>
                             {errorMsg && (
                                 <div className="vault-error-inline center" style={{ marginTop: '10px' }}>{errorMsg}</div>
                             )}
@@ -261,9 +217,9 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                 ) : (
                     <>
                         <div className="modal-header-section" style={{ textAlign: 'center' }}>
-                            <div className="center" style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--accent-soft)', margin: '0 auto 12px', color: 'var(--accent)', fontSize: '20px' }}>
-                                <FiCheck />
-                            </div>
+                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', background: 'var(--accent-soft)', margin: '0 auto 12px', color: 'var(--accent)', fontSize: '20px' }}>
+                                 <FiCheck />
+                             </div>
                             <h3 className="vault-modal-title">E2EE Verified</h3>
                             <p className="vault-modal-subtitle">Give this locked secret a label for your Shared Vault</p>
                         </div>

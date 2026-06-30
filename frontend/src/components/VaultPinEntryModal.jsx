@@ -200,21 +200,29 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
                             <h3 className="vault-modal-title">🔒 Vault Locked</h3>
                             <p className="vault-modal-subtitle">Enter your vault PIN to continue</p>
                         </div>
-
                         <form onSubmit={handleUnlockSubmit} className="vault-form">
                             <div className={`auth-field ${shake ? "shake-animate" : ""}`}>
                                 <div className="auth-input-wrap" style={{ position: 'relative' }}>
                                     <SmoothInput
                                         type="password"
-                                        placeholder="Enter your vault password"
+                                        placeholder="Enter PIN / Password"
                                         value={enteredPin}
-                                        onChange={e => setEnteredPin(e.target.value)}
+                                        onChange={e => {
+                                            let val = e.target.value;
+                                            if (pinType !== "custom") {
+                                                val = val.replace(/\D/g, "");
+                                                if (val.length > limit) {
+                                                    val = val.slice(0, limit);
+                                                }
+                                            }
+                                            setEnteredPin(val);
+                                        }}
                                         disabled={lockoutTime > 0}
                                         allowEmoji={true}
+                                        autoFocus={true}
                                     />
                                 </div>
                             </div>
-
                             {errorMsg && (
                                 <div className="vault-error-inline center">{errorMsg}</div>
                             )}

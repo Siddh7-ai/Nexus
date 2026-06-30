@@ -25,7 +25,7 @@ const VerifiedRoomBadge = ({ size = 15, style = {} }) => (
 );
 
 import OnlineUsers from "./OnlineUsers";
-import savedMessagesLogo from "../assets/saved_messages.png";
+import savedMessagesLogo from "../assets/saved_msg.png";
 import logo from "../assets/logo.png";
 import { setThemeBrightness } from "../utils/theme";
 import { ThemeToggleIcon } from "./ThemeToggleButton";

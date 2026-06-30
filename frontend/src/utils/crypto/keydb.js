@@ -201,6 +201,16 @@ export async function getFullSessionRecord(chatId) {
 export async function deleteSessionState(chatId) {
     const db = await openDatabase();
     const key = getSessionKey(chatId);
+    
+    // Non-blocking server sync
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (token && !token.startsWith("guest:")) {
+        fetch(`${getBackendUrl()}/api/keys/backup/session/${chatId}`, {
+            method: "DELETE",
+            headers: { "Authorization": `Bearer ${token}` }
+        }).catch(err => console.error("Error deleting session backup from server:", err));
+    }
+
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readwrite");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");

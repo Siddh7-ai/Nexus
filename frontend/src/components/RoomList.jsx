@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
-import savedMessagesLogo from "../assets/saved_messages.png";
+import savedMessagesLogo from "../assets/saved_msg.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import { toggleTheme } from "../utils/theme";
 import ThemeToggleButton from "./ThemeToggleButton";
+import { CustomSelect } from "./CustomSelect";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -350,7 +351,7 @@ function RoomList({
                                                             src={savedMessagesLogo} 
                                                             alt="Your Messages" 
                                                             className="dm-row-avatar" 
-                                                            style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }}
+                                                            style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }}
                                                         />
                                                     </div>
                                                     <span className="dm-row-name">
@@ -782,7 +783,7 @@ function RoomList({
                                                 <Avatar 
                                                     username={currentUser || "U"} 
                                                     avatarSrc={settingsProps.avatarVal || currentUserProfile?.avatar} 
-                                                    size={90} 
+                                                    size={120} 
                                                 />
                                             </div>
                                             {/* Name only below avatar */}
@@ -900,17 +901,18 @@ function RoomList({
 
                                         <div className="settings-form-group">
                                             <label>My Status</label>
-                                            <select 
+                                            <CustomSelect 
                                                 value={settingsProps.statusVal || "Online"}
-                                                onChange={(e) => settingsProps.setStatusVal(e.target.value)}
-                                                className="settings-select"
+                                                onChange={(val) => settingsProps.setStatusVal(val)}
+                                                options={["Online", "Away", "Busy", "Offline"]}
                                                 disabled={settingsProps.profileLoading}
-                                            >
-                                                <option value="Online">Online</option>
-                                                <option value="Away">Away</option>
-                                                <option value="Busy">Busy</option>
-                                                <option value="Offline">Offline</option>
-                                            </select>
+                                                colorMap={{
+                                                    Online: "#17d67e",
+                                                    Away: "#f59e0b",
+                                                    Busy: "#ef4444",
+                                                    Offline: "#6b7280"
+                                                }}
+                                            />
                                         </div>
 
                                         {settingsProps.profileError && !settingsProps.profileError.toLowerCase().includes("password") && !settingsProps.profileError.toLowerCase().includes("email") && (
@@ -1013,41 +1015,29 @@ function RoomList({
                                     <form onSubmit={settingsProps.handleOwnProfileUpdate} className="settings-form">
                                         <div className="settings-form-group">
                                             <label>Last Seen Visibility</label>
-                                            <select 
+                                            <CustomSelect 
                                                 value={settingsProps.privacyLastSeenVal || "Everyone"}
-                                                onChange={(e) => settingsProps.setPrivacyLastSeenVal(e.target.value)}
-                                                className="settings-select"
-                                            >
-                                                <option value="Everyone">Everyone</option>
-                                                <option value="Friends">Friends</option>
-                                                <option value="Nobody">Nobody</option>
-                                            </select>
+                                                onChange={(val) => settingsProps.setPrivacyLastSeenVal(val)}
+                                                options={["Everyone", "Friends", "Nobody"]}
+                                            />
                                         </div>
 
                                         <div className="settings-form-group">
                                             <label>Profile Picture Visibility</label>
-                                            <select 
+                                            <CustomSelect 
                                                 value={settingsProps.privacyAvatarVal || "Everyone"}
-                                                onChange={(e) => settingsProps.setPrivacyAvatarVal(e.target.value)}
-                                                className="settings-select"
-                                            >
-                                                <option value="Everyone">Everyone</option>
-                                                <option value="Friends">Friends</option>
-                                                <option value="Nobody">Nobody</option>
-                                            </select>
+                                                onChange={(val) => settingsProps.setPrivacyAvatarVal(val)}
+                                                options={["Everyone", "Friends", "Nobody"]}
+                                            />
                                         </div>
 
                                         <div className="settings-form-group">
                                             <label>Private Message Permissions</label>
-                                            <select 
+                                            <CustomSelect 
                                                 value={settingsProps.privacyPMVal || "Everyone"}
-                                                onChange={(e) => settingsProps.setPrivacyPMVal(e.target.value)}
-                                                className="settings-select"
-                                            >
-                                                <option value="Everyone">Everyone</option>
-                                                <option value="Friends">Friends</option>
-                                                <option value="Nobody">Nobody</option>
-                                            </select>
+                                                onChange={(val) => settingsProps.setPrivacyPMVal(val)}
+                                                options={["Everyone", "Friends", "Nobody"]}
+                                            />
                                         </div>
 
                                         <button type="submit" className="settings-save-btn" style={{ marginBottom: '20px' }}>
@@ -1301,7 +1291,7 @@ function RoomList({
                                                         src={savedMessagesLogo} 
                                                         alt="Your Messages" 
                                                         className="dm-row-avatar" 
-                                                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                                                        style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover' }}
                                                     />
                                                 </div>
                                                 <span className="dm-row-name">

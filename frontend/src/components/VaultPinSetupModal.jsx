@@ -6,6 +6,7 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
     const [pinType, setPinType] = useState("4digit"); // "4digit" | "6digit" | "custom"
     const [pin, setPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
+    const [statusMsg, setStatusMsg] = useState(null); // { type: 'success' | 'error', text: '...' }
 
     const limit = pinType === "4digit" ? 4 : 6;
 
@@ -14,6 +15,7 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
     const pinRef = useRef(pin);
     const confirmPinRef = useRef(confirmPin);
     const limitRef = useRef(limit);
+    const submitRef = useRef(null);
 
     useEffect(() => { pinRef.current = pin; }, [pin]);
     useEffect(() => { confirmPinRef.current = confirmPin; }, [confirmPin]);
@@ -68,6 +70,12 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                 } else {
                     setPin(prev => prev.slice(0, -1));
                 }
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                // Trigger the submit button click programmatically
+                if (submitRef.current) {
+                    submitRef.current.click();
+                }
             }
         };
 
@@ -97,10 +105,17 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
     const isLengthValid = pinType === "4digit" ? pin.length === 4 : (pinType === "6digit" ? pin.length === 6 : pin.length >= 4);
     const canSubmit = isMatching && isLengthValid;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         if (e) e.preventDefault();
         if (!canSubmit) return;
-        onSave(pin, pinType);
+        try {
+            await onSave(pin, pinType);
+            setStatusMsg({ type: 'success', text: '✅ Vault PIN saved successfully!' });
+            setTimeout(() => setStatusMsg(null), 3000);
+        } catch (err) {
+            setStatusMsg({ type: 'error', text: '❌ Failed to save Vault PIN. Please try again.' });
+            setTimeout(() => setStatusMsg(null), 4000);
+        }
     };
 
     return (
@@ -214,7 +229,24 @@ export default function VaultPinSetupModal({ onClose, onSave }) {
                         <div className="vault-error-inline">❌ PINs do not match</div>
                     )}
 
-                    <button type="submit" className="auth-btn vault-setup-btn" disabled={!canSubmit}>
+                    {statusMsg && (
+                        <div style={{
+                            padding: '10px 16px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            textAlign: 'center',
+                            fontFamily: 'Inter, system-ui, sans-serif',
+                            background: statusMsg.type === 'success' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                            color: statusMsg.type === 'success' ? '#10b981' : '#ef4444',
+                            border: `1px solid ${statusMsg.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            animation: 'fadeIn 0.3s ease'
+                        }}>
+                            {statusMsg.text}
+                        </div>
+                    )}
+
+                    <button ref={submitRef} type="submit" className="auth-btn vault-setup-btn" disabled={!canSubmit}>
                         Set PIN
                     </button>
                 </form>
