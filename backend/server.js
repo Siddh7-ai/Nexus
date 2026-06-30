@@ -1061,6 +1061,10 @@ io.on("connection", async (socket) => {
         // Notify sender their messages were seen
         const updatedMsgs = await Message.find({ privateChatId }).sort({ createdAt: 1 });
         io.to(`private_${privateChatId}`).emit("messagesSeenUpdate", updatedMsgs);
+        const parts = privateChatId.split("_");
+        parts.forEach(part => {
+            io.to(`user_${part.toLowerCase()}`).emit("messagesSeenUpdate", updatedMsgs);
+        });
     });
 
     socket.on("requestSessionReset", ({ privateChatId }) => {

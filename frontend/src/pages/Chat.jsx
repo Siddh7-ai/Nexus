@@ -1041,7 +1041,8 @@ function Chat() {
                             fileName: data.fileName,
                             fileType: data.fileType,
                             voiceMessage: data.voiceMessage,
-                            createdAt: data.createdAt
+                            createdAt: data.createdAt,
+                            seenBy: data.seenBy
                         };
                         if (index !== -1) {
                             const updated = [...prev];
@@ -1368,6 +1369,23 @@ function Chat() {
                     return prev.map(msg => {
                         const match = updatedMsgs.find(u => u._id === msg._id);
                         return match ? { ...msg, seenBy: match.seenBy } : msg;
+                    });
+                });
+                setConversationUsers((prev) => {
+                    return prev.map(user => {
+                        if (user.lastMessage) {
+                            const match = updatedMsgs.find(u => u._id === user.lastMessage._id);
+                            if (match) {
+                                return {
+                                    ...user,
+                                    lastMessage: {
+                                        ...user.lastMessage,
+                                        seenBy: match.seenBy
+                                    }
+                                };
+                            }
+                        }
+                        return user;
                     });
                 });
             }

@@ -12,6 +12,57 @@ const customSchema = {
     tagNames: [...(defaultSchema.tagNames || []), "u"]
 };
 
+function stripMarkdownAndHtml(text) {
+    if (!text) return "";
+    let clean = text;
+    // 1. Strip HTML tags (like <u>, </u>, etc.)
+    clean = clean.replace(/<[^>]*>/g, "");
+    // 2. Strip Markdown bold/italic/strikethrough/code markers
+    clean = clean.replace(/(\*\*\*|___)(.*?)\1/g, "$2");
+    clean = clean.replace(/(\*\*|__)(.*?)\1/g, "$2");
+    clean = clean.replace(/(\*|_)(.*?)\1/g, "$2");
+    clean = clean.replace(/~~(.*?)~~/g, "$2");
+    clean = clean.replace(/`(.*?)`/g, "$2");
+    // 3. Strip Code Blocks
+    clean = clean.replace(/```[a-z]*\n?([\s\S]*?)\n?```/g, "$1");
+    // 4. Strip Markdown links: [text](url) -> text
+    clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    // 5. Clean lists and blockquotes
+    clean = clean.replace(/^([\s\t]*)([-*+]|\d+\.)\s+/gm, "$1");
+    clean = clean.replace(/^([\s\t]*)>\s+/gm, "$1");
+    return clean;
+}
+
+function markdownToHtml(text) {
+    if (!text) return "";
+    let html = text;
+
+    // 1. Temporarily protect <u> and </u> tags
+    html = html.replace(/<u>/g, "___U_START___")
+               .replace(/<\/u>/g, "___U_END___");
+    
+    // Escape standard HTML tags/characters to prevent breaking structure
+    html = html.replace(/&/g, "&amp;")
+               .replace(/</g, "&lt;")
+               .replace(/>/g, "&gt;");
+               
+    // Restore <u> and </u> tags
+    html = html.replace(/___U_START___/g, "<u>")
+               .replace(/___U_END___/g, "</u>");
+
+    // 2. Parse Markdown formatting elements into corresponding HTML tags
+    html = html.replace(/(\*\*\*|___)(.*?)\1/g, "<strong><em>$2</em></strong>");
+    html = html.replace(/(\*\*|__)(.*?)\1/g, "<strong>$2</strong>");
+    html = html.replace(/(\*|_)(.*?)\1/g, "<em>$2</em>");
+    html = html.replace(/~~(.*?)~~/g, "<del>$1</del>");
+    html = html.replace(/`(.*?)`/g, "<code>$1</code>");
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    
+    // Convert newlines to HTML line breaks
+    html = html.replace(/\n/g, "<br />");
+    return html;
+}
+
 function formatTimestamp(dateStr) {
     if (!dateStr) return "";
     const msgDate = new Date(dateStr);
@@ -347,9 +398,34 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
     const handleCopy = () => {
         const textToCopy = msg.isLocked ? (msg.text || "Locked Message") : msg.text;
         if (!textToCopy) return;
-        navigator.clipboard.writeText(textToCopy);
-        if (onCopySuccess) {
-            onCopySuccess();
+
+        const plainText = stripMarkdownAndHtml(textToCopy);
+        const htmlText = markdownToHtml(textToCopy);
+
+        try {
+            const blobHtml = new Blob([htmlText], { type: "text/html" });
+            const blobText = new Blob([plainText], { type: "text/plain" });
+            const item = new ClipboardItem({
+                "text/html": blobHtml,
+                "text/plain": blobText
+            });
+            navigator.clipboard.write([item]).then(() => {
+                if (onCopySuccess) {
+                    onCopySuccess();
+                }
+            }).catch(err => {
+                console.error("Clipboard copy failed, fallback to plain text:", err);
+                navigator.clipboard.writeText(plainText);
+                if (onCopySuccess) {
+                    onCopySuccess();
+                }
+            });
+        } catch (e) {
+            console.error("ClipboardItem not supported, fallback to plain text:", e);
+            navigator.clipboard.writeText(plainText);
+            if (onCopySuccess) {
+                onCopySuccess();
+            }
         }
     };
 
@@ -365,7 +441,10 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
                         const isNearBottom = totalCount - index <= 2;
-                        if ((isNearBottom && spaceAbove > 120) || (spaceBelow < 120 && spaceAbove > spaceBelow)) {
+                        const isNearTop = index < 2;
+                        if (isNearTop) {
+                            setOpenUp(false);
+                        } else if ((isNearBottom && spaceAbove > 120) || (spaceBelow < 120 && spaceAbove > spaceBelow)) {
                             setOpenUp(true);
                         } else {
                             setOpenUp(false);
@@ -386,7 +465,10 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         const spaceBelow = window.innerHeight - rect.bottom;
                         const spaceAbove = rect.top;
                         const isNearBottom = totalCount - index <= 4;
-                        if ((isNearBottom && spaceAbove > 320) || (spaceBelow < 320 && spaceAbove > spaceBelow)) {
+                        const isNearTop = index < 3;
+                        if (isNearTop) {
+                            setOpenUp(false);
+                        } else if ((isNearBottom && spaceAbove > 320) || (spaceBelow < 320 && spaceAbove > spaceBelow)) {
                             setOpenUp(true);
                         } else {
                             setOpenUp(false);
