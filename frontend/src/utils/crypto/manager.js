@@ -266,7 +266,8 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
             fileName: attachment ? attachment.fileName : null,
             fileSize: attachment ? attachment.fileSize : null,
             fileType: attachment ? attachment.fileType : null,
-            fileQuality: attachment ? attachment.fileQuality : null
+            fileQuality: attachment ? attachment.fileQuality : null,
+            sticker: attachment ? attachment.sticker : null
         };
         const plaintextBytes = sodium.from_string(JSON.stringify(payload));
 
@@ -373,7 +374,8 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
             fileName: msg.fileName || null,
             fileSize: msg.fileSize || null,
             fileType: msg.fileType || null,
-            fileQuality: msg.fileQuality || null
+            fileQuality: msg.fileQuality || null,
+            sticker: msg.sticker || null
         };
     }
 

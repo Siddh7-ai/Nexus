@@ -20,7 +20,11 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
     const [submitting, setSubmitting] = useState(false);
     
     // Label input state
-    const [label, setLabel] = useState(`Locked Message (${new Date().toLocaleDateString()})`);
+    const [label, setLabel] = useState(
+        msg.sticker
+            ? `Sticker (${msg.sticker.packId || "custom"})`
+            : `Locked Message (${new Date().toLocaleDateString()})`
+    );
 
     const pinId = `vault_pin_${myUsername.toLowerCase()}_${privateChatId.toLowerCase()}`;
 
@@ -105,8 +109,14 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
         setErrorMsg("");
 
         try {
-            // 1. Encrypt message text with vault key
-            const plaintextMsg = msg.text || "";
+            // 1. Encrypt message text (or sticker data) with vault key
+            let plaintextMsg = msg.text || "";
+            if (msg.sticker) {
+                plaintextMsg = JSON.stringify({
+                    isSticker: true,
+                    sticker: msg.sticker
+                });
+            }
             const encryptedData = await encryptVaultItem({ label, secret: plaintextMsg }, vaultKey);
 
             // 2. POST to shared vault

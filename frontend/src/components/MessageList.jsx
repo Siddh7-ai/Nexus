@@ -6,6 +6,144 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock, Mic } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
+import sodium from "libsodium-wrappers-sumo";
+
+const stickerUrlCache = new Map();
+
+const StickerImage = ({ stickerUrl, alt, ...props }) => {
+    const [src, setSrc] = useState(stickerUrl);
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setSrc(stickerUrl);
+        setHasError(false);
+    }, [stickerUrl]);
+
+    const handleError = () => {
+        if (!hasError && stickerUrl && stickerUrl.includes("notoemoji")) {
+            setHasError(true);
+            const parts = stickerUrl.split("/");
+            const hex = parts[parts.length - 2];
+            if (hex) {
+                setSrc(`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${hex}.svg`);
+            }
+        }
+    };
+
+    return <img src={src} alt={alt} onError={handleError} {...props} />;
+};
+
+function StickerBubble({ msg }) {
+    const [url, setUrl] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+
+        const loadSticker = async () => {
+            if (!msg.sticker) return;
+
+            // 1. E2EE Custom Sticker
+            if (msg.sticker.isCustom && msg.sticker.fileKey) {
+                if (stickerUrlCache.has(msg._id)) {
+                    setUrl(stickerUrlCache.get(msg._id));
+                    return;
+                }
+
+                setLoading(true);
+                try {
+                    await sodium.ready;
+                    const res = await fetch(`${getBackendUrl()}/api/file/${msg.sticker.fileId}`);
+                    if (!res.ok) throw new Error("Sticker fetch failed");
+                    const arrayBuffer = await res.arrayBuffer();
+                    const encryptedBytes = new Uint8Array(arrayBuffer);
+
+                    const fileKey = sodium.from_base64(msg.sticker.fileKey);
+                    const fileNonce = sodium.from_base64(msg.sticker.nonce);
+                    const decryptedBytes = sodium.crypto_secretbox_open_easy(encryptedBytes, fileNonce, fileKey);
+
+                    if (!decryptedBytes) throw new Error("Sticker decryption failed");
+
+                    const blob = new Blob([decryptedBytes], { type: "image/webp" });
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    if (active) {
+                        stickerUrlCache.set(msg._id, blobUrl);
+                        setUrl(blobUrl);
+                    }
+                } catch (err) {
+                    console.error("Error decrypting custom sticker:", err);
+                } finally {
+                    if (active) setLoading(false);
+                }
+                return;
+            }
+
+            // 2. E2EE System Sticker (url is null, reconstruct from packId and stickerId)
+            if (!msg.sticker.isCustom && !msg.sticker.url) {
+                const STICKER_HEX_MAP = {
+                    funny: ["1f602", "1f923", "1f606", "1f61c", "1f61d", "1f92a", "1f921", "1f917", "1f92d", "1f92f", "1f60f", "1f60e", "1f92c", "1f922", "1f92e", "1f92b", "1f920", "1f61b", "1f601", "1f60a"],
+                    love: ["1f970", "1f60d", "1f618", "1f496", "1f49d", "1f49e", "1f49f", "1f48b", "1f495", "1f493", "1f494", "1f49c", "1f49a", "1f49b", "1f9e1", "1f90e", "1f5a4", "1f90f", "1f48d", "1f498"],
+                    celebrate: ["1f389", "1f38a", "1f382", "1f3c6", "1f3c5", "1f388", "1f381", "1f973", "1f525", "1f387", "1f386", "1f514", "1f4d6", "1f4e3", "1f4e2", "1f51e", "1f4bb", "1f4c8", "1f4b0", "1f385"],
+                    mood: ["1f620", "1f621", "1f624", "1f62d", "1f622", "1f62a", "1f634", "1f927", "1f97a", "1f631", "1f628", "1f627", "1f625", "1f612", "1f614", "1f61e", "1f62f", "1f62b", "1f629", "1f976"],
+                    thanks: ["1f64f", "1f44d", "1f44c", "1f44f", "1f4aa", "1f91d", "1f44e", "1f446", "1f447", "1f918", "1f596", "1f590", "1f595", "1f91f", "1f44b"],
+                    greetings: ["1f44b", "1f600", "1f604", "1f609", "1f607", "1f31e", "1f31c", "1f305", "1f307", "1f4ac", "1f441", "1f47d", "1f47e", "1f480", "1f916"],
+                    animals: ["1f436", "1f431", "1f98a", "1f43b", "1f438", "1f43c", "1f428", "1f42f", "1f435", "1f414", "1f41f", "1f419", "1f41d", "1f40c", "1f40e", "1f410", "1f411", "1f404", "1f412", "1f407"],
+                    aesthetic: ["2728", "2b50", "1f308", "1f319", "1f49f", "1f380", "1f338", "1f33f", "1f340", "1f341", "1f302", "1f30a", "1f324", "1f327", "1f32a"]
+                };
+                const index = parseInt(msg.sticker.stickerId.split("_").pop(), 10);
+                const hexes = STICKER_HEX_MAP[msg.sticker.packId] || [];
+                const hex = hexes[index - 1] || "1f600";
+                setUrl(`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${hex}.svg`);
+                return;
+            }
+
+            // 3. Regular System Sticker or Public Custom Sticker
+            const targetUrl = msg.sticker.url.startsWith("http")
+                ? msg.sticker.url
+                : `${getBackendUrl()}${msg.sticker.url}`;
+            setUrl(targetUrl);
+        };
+
+        loadSticker();
+
+        return () => {
+            active = false;
+        };
+    }, [msg]);
+
+    if (loading) {
+        return <div className="sticker-bubble-loading">Loading...</div>;
+    }
+
+    if (!url) return null;
+
+    const isCustom = msg.sticker.isCustom;
+
+    return (
+        <>
+            <div 
+                className="sticker-bubble-container"
+                onClick={() => setIsPreviewOpen(true)}
+            >
+                <StickerImage stickerUrl={url} alt="Sticker" className="sticker-img" />
+                {isCustom && <span className="sticker-badge">Custom</span>}
+            </div>
+
+            {isPreviewOpen && (
+                <div className="sticker-lightbox-overlay" onClick={() => setIsPreviewOpen(false)}>
+                    <div className="sticker-lightbox-content" onClick={(e) => e.stopPropagation()}>
+                        <StickerImage stickerUrl={url} alt="Sticker Preview" className="sticker-preview-img" />
+                        <button type="button" className="close-lightbox-btn" onClick={() => setIsPreviewOpen(false)}>
+                            <X size={20} />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
 
 const customSchema = {
     ...defaultSchema,
@@ -524,7 +662,7 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                         <CornerUpLeft size={16} className="menu-icon" />
                         <span>Reply</span>
                     </button>
-                    {!isVoice && !msg.isLocked && (
+                    {!isVoice && !msg.isLocked && !msg.sticker && (
                         <button className="menu-item" onClick={() => { handleCopy(); setShowMenu(false); }}>
                             <Copy size={16} className="menu-icon" />
                             <span>Copy</span>
@@ -536,14 +674,18 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Forward</span>
                         </button>
                     )}
-                    <button className="menu-item" onClick={() => { alert("Pinning will be available soon!"); setShowMenu(false); }}>
-                        <Pin size={16} className="menu-icon" />
-                        <span>Pin</span>
-                    </button>
-                    <button className="menu-item" onClick={() => { alert("Starring will be available soon!"); setShowMenu(false); }}>
-                        <Star size={16} className="menu-icon" />
-                        <span>Star</span>
-                    </button>
+                    {!msg.sticker && (
+                        <button className="menu-item" onClick={() => { alert("Pinning will be available soon!"); setShowMenu(false); }}>
+                            <Pin size={16} className="menu-icon" />
+                            <span>Pin</span>
+                        </button>
+                    )}
+                    {!msg.sticker && (
+                        <button className="menu-item" onClick={() => { alert("Starring will be available soon!"); setShowMenu(false); }}>
+                            <Star size={16} className="menu-icon" />
+                            <span>Star</span>
+                        </button>
+                    )}
                     {isOwn && !msg.isLocked && !isVoice && (
                         <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
                             <Pencil size={16} className="menu-icon" />
@@ -877,7 +1019,27 @@ function MessageList({
                                     totalCount={messages.length}
                                 />
 
-                                {msg.isLocked ? (
+                                {msg.sticker && !msg.isDeleted ? (
+                                    <div className={`message-sticker-container-bubble ${isOwn ? "own" : "other"}`}>
+                                        {!isOwn && (
+                                            <span 
+                                                className="message-username" 
+                                                onClick={() => onUserProfileClick(msg.username)}
+                                                style={{ cursor: "pointer", textDecoration: 'underline', display: 'block', marginBottom: '4px' }}
+                                                title="View Profile"
+                                            >
+                                                {msg.displayName || msg.username}
+                                                {msg.isGuest && <span className="guest-badge">[Guest]</span>}
+                                            </span>
+                                        )}
+                                        <StickerBubble msg={msg} />
+                                        <div className="message-meta">
+                                            <span className="message-time">
+                                                {formatTimestamp(msg.createdAt)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : msg.isLocked ? (
                                     <div 
                                         className={`message-bubble ${isOwn ? "own" : "other"} locked-message`}
                                         onClick={() => onUnlockLockedMessage(msg)}

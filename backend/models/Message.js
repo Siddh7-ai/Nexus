@@ -149,6 +149,16 @@ const messageSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    sticker: {
+        type: {
+            url: { type: String, required: true },
+            packId: { type: String, required: true },
+            stickerId: { type: String, required: true },
+            isCustom: { type: Boolean, default: false },
+            createdBy: { type: String, default: null }
+        },
+        default: null
+    },
     seenAt: {
         type: Date,
         default: null

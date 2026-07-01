@@ -11,6 +11,11 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@xenova/transformers']
   },
+  resolve: {
+    alias: {
+      'onnxruntime-web/webgpu': 'onnxruntime-web'
+    }
+  },
   worker: {
     format: 'es'
   }

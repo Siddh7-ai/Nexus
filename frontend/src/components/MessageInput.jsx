@@ -27,6 +27,9 @@ import {
 } from "lucide-react";
 import { SmoothInput } from "./SmoothInput";
 import VoiceRecorder from "./VoiceRecorder";
+import StickerPicker from "./StickerPicker";
+import StickerCreator from "./StickerCreator";
+import sodium from "libsodium-wrappers-sumo";
 import { motion, useMotionValue, animate } from "framer-motion";
 
 // Lazy load the full emoji picker for performance
@@ -335,6 +338,9 @@ function MessageInput({
     const docsInputRef = useRef(null);
 
     const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+    const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
+    const [stickerPickerDefaultPack, setStickerPickerDefaultPack] = useState("funny");
+    const [stickerCreatorOpen, setStickerCreatorOpen] = useState(false);
     const [permissionModalOpen, setPermissionModalOpen] = useState(false);
     const [permissionType, setPermissionType] = useState("photos");
     const [selectedFiles, setSelectedFiles] = useState([]);
@@ -839,6 +845,235 @@ function MessageInput({
                 };
             };
         });
+    };
+
+    const handleSendSticker = async (sticker) => {
+        setStickerPickerOpen(false);
+        if (activePrivate) {
+            if (sticker.isCustom) {
+                try {
+                    const stickerUrl = sticker.url.startsWith("http") ? sticker.url : `${getBackendUrl()}${sticker.url}`;
+                    const blobRes = await fetch(stickerUrl);
+                    const stickerBlob = await blobRes.blob();
+
+                    await sodium.ready;
+                    const fileKey = sodium.crypto_secretbox_keygen();
+                    const fileNonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+
+                    const arrayBuffer = await stickerBlob.arrayBuffer();
+                    const stickerBytes = new Uint8Array(arrayBuffer);
+                    const encryptedBytes = sodium.crypto_secretbox_easy(stickerBytes, fileNonce, fileKey);
+                    const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
+
+                    const formData = new FormData();
+                    formData.append("file", encryptedBlob, `sticker_${Date.now()}.enc`);
+                    const uploadRes = await fetch(`${getBackendUrl()}/api/upload`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    if (!uploadRes.ok) throw new Error("Upload failed");
+                    const uploadData = await uploadRes.json();
+                    const fileId = uploadData.fileUrl.split("/").pop();
+
+                    sendMessage({
+                        overrideText: "Sent a custom E2EE sticker",
+                        sticker: {
+                            fileId: fileId,
+                            fileKey: sodium.to_base64(fileKey),
+                            nonce: sodium.to_base64(fileNonce),
+                            isCustom: true,
+                            packId: sticker.packId || `custom_${username.toLowerCase()}`,
+                            stickerId: sticker.stickerId
+                        }
+                    });
+                } catch (err) {
+                    console.error("Failed to encrypt and send custom sticker:", err);
+                    alert("Failed to send custom sticker.");
+                }
+            } else {
+                sendMessage({
+                    overrideText: "Sent a sticker",
+                    sticker: {
+                        url: sticker.url,
+                        packId: sticker.packId,
+                        stickerId: sticker.stickerId,
+                        isCustom: false
+                    }
+                });
+            }
+        } else {
+            sendMessage({
+                overrideText: "Sent a sticker",
+                sticker: {
+                    url: sticker.url,
+                    packId: sticker.packId,
+                    stickerId: sticker.stickerId,
+                    isCustom: sticker.isCustom || false
+                }
+            });
+        }
+    };
+
+    const getAuthToken = () => {
+        let token = sessionStorage.getItem("token") || localStorage.getItem("token");
+        if (!token) {
+            const guestProfileStr = localStorage.getItem("guestProfile");
+            if (guestProfileStr) {
+                try {
+                    const profile = JSON.parse(guestProfileStr);
+                    if (profile && profile.username) {
+                        token = `guest:${profile.username}`;
+                        sessionStorage.setItem("token", token);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        }
+        return token;
+    };
+
+    const addStickerToFavorites = (stickerObj) => {
+        try {
+            const storedFavs = localStorage.getItem("nexus_favorite_stickers");
+            let favs = [];
+            if (storedFavs) {
+                favs = JSON.parse(storedFavs);
+            }
+            if (!favs.some(f => f.stickerId === stickerObj.stickerId)) {
+                favs = [stickerObj, ...favs];
+                localStorage.setItem("nexus_favorite_stickers", JSON.stringify(favs));
+            }
+        } catch (e) {
+            console.error("Failed to add sticker to favorites:", e);
+        }
+    };
+
+    const handleSendCustomSticker = async (stickerBlob) => {
+        setStickerCreatorOpen(false);
+        if (activePrivate) {
+            try {
+                await sodium.ready;
+                const fileKey = sodium.crypto_secretbox_keygen();
+                const fileNonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
+
+                const arrayBuffer = await stickerBlob.arrayBuffer();
+                const stickerBytes = new Uint8Array(arrayBuffer);
+                const encryptedBytes = sodium.crypto_secretbox_easy(stickerBytes, fileNonce, fileKey);
+                const encryptedBlob = new Blob([encryptedBytes], { type: 'application/octet-stream' });
+
+                const formData = new FormData();
+                formData.append("file", encryptedBlob, `sticker_${Date.now()}.enc`);
+                const uploadRes = await fetch(`${getBackendUrl()}/api/upload`, {
+                    method: "POST",
+                    body: formData
+                });
+                if (!uploadRes.ok) throw new Error("Upload failed");
+                const uploadData = await uploadRes.json();
+                const fileId = uploadData.fileUrl.split("/").pop();
+
+                const stickerObj = {
+                    fileId: fileId,
+                    fileKey: sodium.to_base64(fileKey),
+                    nonce: sodium.to_base64(fileNonce),
+                    isCustom: true,
+                    packId: `custom_${username.toLowerCase()}`,
+                    stickerId: `sticker_${Date.now()}`
+                };
+
+                sendMessage({
+                    overrideText: "Sent a custom E2EE sticker",
+                    sticker: stickerObj
+                });
+
+                // Save unencrypted copy to their custom pack and favorites in background
+                try {
+                    const token = getAuthToken();
+                    const saveFormData = new FormData();
+                    saveFormData.append("file", stickerBlob, `custom_${Date.now()}.webp`);
+                    fetch(`${getBackendUrl()}/api/stickers/custom`, {
+                        method: "POST",
+                        headers: { "Authorization": `Bearer ${token}` },
+                        body: saveFormData
+                    }).then(async (res) => {
+                        if (res.ok) {
+                            const data = await res.json();
+                            addStickerToFavorites({
+                                url: data.sticker.url,
+                                packId: data.pack.packId,
+                                stickerId: data.sticker.stickerId,
+                                isCustom: true
+                            });
+                        }
+                    });
+                } catch (err) {
+                    console.error("Failed to automatically save unencrypted E2EE custom sticker to favorites:", err);
+                }
+            } catch (err) {
+                console.error("Failed to encrypt and send custom sticker:", err);
+                alert("Failed to send custom sticker.");
+            }
+        } else {
+            try {
+                const token = getAuthToken();
+                const formData = new FormData();
+                formData.append("file", stickerBlob, `custom_${Date.now()}.webp`);
+                const res = await fetch(`${getBackendUrl()}/api/stickers/custom`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${token}` },
+                    body: formData
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const stickerObj = {
+                        url: data.sticker.url,
+                        packId: data.pack.packId,
+                        stickerId: data.sticker.stickerId,
+                        isCustom: true
+                    };
+                    addStickerToFavorites(stickerObj);
+                    sendMessage({
+                        overrideText: "Sent a custom sticker",
+                        sticker: stickerObj
+                    });
+                } else {
+                    alert("Failed to upload sticker.");
+                }
+            } catch (err) {
+                console.error("Error sending custom sticker:", err);
+            }
+        }
+    };
+
+    const handleSaveCustomSticker = async (stickerBlob) => {
+        setStickerCreatorOpen(false);
+        try {
+            const token = getAuthToken();
+            const formData = new FormData();
+            formData.append("file", stickerBlob, `custom_${Date.now()}.webp`);
+            const res = await fetch(`${getBackendUrl()}/api/stickers/custom`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` },
+                body: formData
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const stickerObj = {
+                    url: data.sticker.url,
+                    packId: data.pack.packId,
+                    stickerId: data.sticker.stickerId,
+                    isCustom: true
+                };
+                addStickerToFavorites(stickerObj);
+                setStickerPickerDefaultPack(data.pack.packId);
+                setStickerPickerOpen(true);
+            } else {
+                alert("Failed to save custom sticker.");
+            }
+        } catch (err) {
+            console.error("Error saving custom sticker:", err);
+            alert("Error saving custom sticker.");
+        }
     };
 
     const handlePhotosClick = () => {
@@ -1533,40 +1768,11 @@ function MessageInput({
                             </div>
                             <span>Camera</span>
                         </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
-                            <div className="popover-icon-wrapper orange-bg">
-                                <Headphones size={18} />
-                            </div>
-                            <span>Audio</span>
-                            <span className="coming-soon-badge">Soon</span>
-                        </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
-                            <div className="popover-icon-wrapper cyan-bg">
-                                <User size={18} />
-                            </div>
-                            <span>Contact</span>
-                            <span className="coming-soon-badge">Soon</span>
-                        </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
-                            <div className="popover-icon-wrapper yellow-bg">
-                                <BarChart2 size={18} />
-                            </div>
-                            <span>Poll</span>
-                            <span className="coming-soon-badge">Soon</span>
-                        </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
-                            <div className="popover-icon-wrapper magenta-bg">
-                                <Calendar size={18} />
-                            </div>
-                            <span>Event</span>
-                            <span className="coming-soon-badge">Soon</span>
-                        </button>
-                        <button type="button" className="popover-item disabled-item" onClick={() => {}}>
+                        <button type="button" className="popover-item" onClick={() => { setStickerPickerOpen(true); setAttachmentMenuOpen(false); }}>
                             <div className="popover-icon-wrapper green-bg">
                                 <Smile size={18} />
                             </div>
                             <span>New sticker</span>
-                            <span className="coming-soon-badge">Soon</span>
                         </button>
                     </div>
                 )}
@@ -2234,6 +2440,28 @@ function MessageInput({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* STICKER PICKER OVERLAY */}
+            {stickerPickerOpen && (
+                <StickerPicker
+                    initialPackId={stickerPickerDefaultPack}
+                    onSelectSticker={handleSendSticker}
+                    onCreateNewClick={() => {
+                        setStickerCreatorOpen(true);
+                        setStickerPickerOpen(false);
+                    }}
+                    onClose={() => setStickerPickerOpen(false)}
+                />
+            )}
+
+            {/* STICKER CREATOR MODAL */}
+            {stickerCreatorOpen && (
+                <StickerCreator
+                    onSendSticker={handleSendCustomSticker}
+                    onSaveSticker={handleSaveCustomSticker}
+                    onClose={() => setStickerCreatorOpen(false)}
+                />
             )}
         </div>
     );

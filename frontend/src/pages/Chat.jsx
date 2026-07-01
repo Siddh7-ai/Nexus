@@ -209,6 +209,21 @@ function Chat() {
         document.body.classList.add("chat-page-body");
         document.documentElement.classList.add("chat-page-html");
 
+        // Clear decrypted_messages IndexedDB store once on mount to force recalculating E2EE sticker fields
+        try {
+            const request = indexedDB.open("NexusMessenger");
+            request.onsuccess = (e) => {
+                const db = e.target.result;
+                if (db.objectStoreNames.contains("decrypted_messages")) {
+                    const transaction = db.transaction("decrypted_messages", "readwrite");
+                    transaction.objectStore("decrypted_messages").clear();
+                    console.log("Decrypted messages IndexedDB cache cleared successfully.");
+                }
+            };
+        } catch (err) {
+            console.error("Failed to clear decrypted messages cache:", err);
+        }
+
         // Auto-lock vault on tab switch, app switch, or page close/refresh
         const handleAutoLock = () => {
             clearVaultState();
@@ -2017,7 +2032,8 @@ function Chat() {
             fileSize: realAttachment ? realAttachment.fileSize : null,
             fileType: realAttachment ? realAttachment.fileType : null,
             fileQuality: realAttachment ? realAttachment.fileQuality : null,
-            replyTo: replyToPayload
+            replyTo: replyToPayload,
+            sticker: realAttachment?.sticker || null
         };
 
         if (activePrivate) {
@@ -2027,7 +2043,8 @@ function Chat() {
                 fileName: realAttachment ? realAttachment.fileName : null,
                 fileSize: realAttachment ? realAttachment.fileSize : null,
                 fileType: realAttachment ? realAttachment.fileType : null,
-                fileQuality: realAttachment ? realAttachment.fileQuality : null
+                fileQuality: realAttachment ? realAttachment.fileQuality : null,
+                sticker: realAttachment?.sticker || null
             };
             setDecryptedMessages(prev => ({
                 ...prev,
@@ -3310,7 +3327,8 @@ function Chat() {
                                                 fileName: decrypted.fileName || null,
                                                 fileSize: decrypted.fileSize || null,
                                                 fileType: decrypted.fileType || null,
-                                                fileQuality: decrypted.fileQuality || null
+                                                fileQuality: decrypted.fileQuality || null,
+                                                sticker: decrypted.sticker || null
                                             };
                                         } else {
                                             return {

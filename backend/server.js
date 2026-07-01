@@ -25,6 +25,7 @@ const ClearedChat = require("./models/ClearedChat");
 const Room = require("./models/Room");
 const VaultItem = require("./models/VaultItem");
 const VaultPin = require("./models/VaultPin");
+const StickerPack = require("./models/StickerPack");
 const express = require("express"); // trigger restart 2
 const http = require("http");
 const { Server } = require("socket.io");
@@ -300,6 +301,158 @@ app.post("/api/vault-pin/:pinId", userRoutes.authenticateToken, async (req, res)
     } catch (err) {
         console.error("Save vault PIN error:", err);
         res.status(500).json({ error: "Server error saving vault PIN." });
+    }
+});
+
+// GET /api/stickers/packs - Get all system packs + user's custom packs
+app.get("/api/stickers/packs", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        const username = req.user.username;
+        const packs = await StickerPack.find({
+            $or: [
+                { isSystem: true },
+                { createdBy: username }
+            ]
+        }).sort({ isSystem: -1, createdAt: 1 });
+        res.json(packs);
+    } catch (err) {
+        console.error("Failed to get sticker packs:", err);
+        res.status(500).json({ error: "Failed to fetch sticker packs" });
+    }
+});
+
+// GET /api/stickers/pack/:packId - Get all stickers in a pack
+app.get("/api/stickers/pack/:packId", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        const { packId } = req.params;
+        const pack = await StickerPack.findOne({ packId });
+        if (!pack) {
+            return res.status(404).json({ error: "Sticker pack not found" });
+        }
+        if (!pack.isSystem && pack.createdBy !== req.user.username) {
+            return res.status(403).json({ error: "Access denied to this sticker pack" });
+        }
+        res.json(pack.stickers);
+    } catch (err) {
+        console.error("Failed to get stickers in pack:", err);
+        res.status(500).json({ error: "Failed to fetch stickers" });
+    }
+});
+
+// POST /api/stickers/custom - Save a custom sticker (base64 WebP blob or uploaded file)
+app.post("/api/stickers/custom", upload.single("file"), userRoutes.authenticateToken, async (req, res) => {
+    try {
+        const username = req.user.username;
+        let buffer;
+        let originalname = `custom_${Date.now()}.webp`;
+
+        if (req.file) {
+            buffer = req.file.buffer;
+            originalname = req.file.originalname;
+        } else if (req.body.base64Data) {
+            const cleanBase64 = req.body.base64Data.replace(/^data:image\/\w+;base64,/, "");
+            buffer = Buffer.from(cleanBase64, "base64");
+        } else {
+            return res.status(400).json({ error: "Missing sticker image file or base64Data" });
+        }
+
+        if (!mongoose.connection.db) {
+            return res.status(500).json({ error: "Database connection not ready" });
+        }
+
+        const db = mongoose.connection.db;
+        const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+
+        const stickerId = new mongoose.Types.ObjectId().toString();
+        const filename = `custom_sticker_${username}_${stickerId}.webp`;
+
+        const uploadStream = bucket.openUploadStream(filename, {
+            contentType: "image/webp"
+        });
+
+        uploadStream.end(buffer);
+
+        uploadStream.on("finish", async () => {
+            const gridfsId = uploadStream.id.toString();
+            const fileUrl = `/api/file/${gridfsId}`;
+
+            const customPackId = `custom_${username.toLowerCase()}`;
+            let pack = await StickerPack.findOne({ packId: customPackId });
+            if (!pack) {
+                pack = await StickerPack.create({
+                    packId: customPackId,
+                    name: "My Stickers",
+                    emoji: "👤",
+                    isSystem: false,
+                    createdBy: username,
+                    stickers: []
+                });
+            }
+
+            const newSticker = {
+                stickerId: stickerId,
+                url: fileUrl,
+                order: pack.stickers.length + 1
+            };
+
+            pack.stickers.push(newSticker);
+            await pack.save();
+
+            res.status(201).json({
+                message: "Custom sticker saved successfully",
+                sticker: newSticker,
+                pack: pack
+            });
+        });
+
+        uploadStream.on("error", (err) => {
+            console.error("GridFS upload stream error:", err);
+            res.status(500).json({ error: "Failed to save sticker file to database" });
+        });
+
+    } catch (err) {
+        console.error("Failed to save custom sticker:", err);
+        res.status(500).json({ error: "Failed to save custom sticker" });
+    }
+});
+
+// DELETE /api/stickers/custom/:id - Delete a custom sticker
+app.delete("/api/stickers/custom/:id", userRoutes.authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const username = req.user.username;
+        const customPackId = `custom_${username.toLowerCase()}`;
+
+        const pack = await StickerPack.findOne({ packId: customPackId });
+        if (!pack) {
+            return res.status(404).json({ error: "Custom sticker pack not found" });
+        }
+
+        const stickerIdx = pack.stickers.findIndex(s => s.stickerId === id);
+        if (stickerIdx === -1) {
+            return res.status(404).json({ error: "Sticker not found in your custom pack" });
+        }
+
+        const sticker = pack.stickers[stickerIdx];
+        const parts = sticker.url.split("/");
+        const gridfsId = parts[parts.length - 1];
+
+        if (mongoose.connection.db) {
+            try {
+                const bucket = new GridFSBucket(mongoose.connection.db, { bucketName: "uploads" });
+                await bucket.delete(new ObjectId(gridfsId));
+            } catch (fileErr) {
+                console.error("Error deleting sticker file from GridFS:", fileErr.message);
+            }
+        }
+
+        pack.stickers.splice(stickerIdx, 1);
+        await pack.save();
+
+        res.json({ message: "Custom sticker deleted successfully", pack });
+    } catch (err) {
+        console.error("Failed to delete custom sticker:", err);
+        res.status(500).json({ error: "Failed to delete custom sticker" });
     }
 });
 
@@ -589,8 +742,89 @@ const io = new Server(server, {
 
 app.set("io", io);
 
+const STICKER_HEX_MAP = {
+    funny: [
+        "1f602", "1f923", "1f606", "1f61c", "1f61d", "1f92a", "1f921", "1f917", "1f92d", "1f92f",
+        "1f60f", "1f60e", "1f92c", "1f922", "1f92e", "1f92b", "1f920", "1f61b", "1f601", "1f60a"
+    ],
+    love: [
+        "1f970", "1f60d", "1f618", "1f496", "1f49d", "1f49e", "1f49f", "1f48b", "1f495", "1f493",
+        "1f494", "1f49c", "1f49a", "1f49b", "1f9e1", "1f90e", "1f5a4", "1f90f", "1f48d", "1f498"
+    ],
+    celebrate: [
+        "1f389", "1f38a", "1f382", "1f3c6", "1f3c5", "1f388", "1f381", "1f973", "1f525", "1f387",
+        "1f386", "1f514", "1f4d6", "1f4e3", "1f4e2", "1f51e", "1f4bb", "1f4c8", "1f4b0", "1f385"
+    ],
+    mood: [
+        "1f620", "1f621", "1f624", "1f62d", "1f622", "1f62a", "1f634", "1f927", "1f97a", "1f631",
+        "1f628", "1f627", "1f625", "1f612", "1f614", "1f61e", "1f62f", "1f62b", "1f629", "1f976"
+    ],
+    thanks: [
+        "1f64f", "1f44d", "1f44c", "1f44f", "1f4aa", "1f91d", "1f44e", "1f446", "1f447", "1f918",
+        "1f596", "1f590", "1f595", "1f91f", "1f44b"
+    ],
+    greetings: [
+        "1f44b", "1f600", "1f604", "1f609", "1f607", "1f31e", "1f31c", "1f305", "1f307", "1f4ac",
+        "1f441", "1f47d", "1f47e", "1f480", "1f916"
+    ],
+    animals: [
+        "1f436", "1f431", "1f98a", "1f43b", "1f438", "1f43c", "1f428", "1f42f", "1f435", "1f414",
+        "1f41f", "1f419", "1f41d", "1f40c", "1f40e", "1f410", "1f411", "1f404", "1f412", "1f407"
+    ],
+    aesthetic: [
+        "2728", "2b50", "1f308", "1f319", "1f49f", "1f380", "1f338", "1f33f", "1f340", "1f341",
+        "1f302", "1f30a", "1f324", "1f327", "1f32a"
+    ]
+};
+
+async function seedSystemStickers() {
+    const packsData = [
+        { packId: 'funny', name: 'Funny', emoji: '😂', isSystem: true, stickersCount: 20 },
+        { packId: 'love', name: 'Love', emoji: '❤️', isSystem: true, stickersCount: 20 },
+        { packId: 'celebrate', name: 'Celebrate', emoji: '🎉', isSystem: true, stickersCount: 20 },
+        { packId: 'mood', name: 'Mood', emoji: '😤', isSystem: true, stickersCount: 20 },
+        { packId: 'thanks', name: 'Thanks', emoji: '🙏', isSystem: true, stickersCount: 15 },
+        { packId: 'greetings', name: 'Greetings', emoji: '👋', isSystem: true, stickersCount: 15 },
+        { packId: 'animals', name: 'Animals', emoji: '🐶', isSystem: true, stickersCount: 20 },
+        { packId: 'aesthetic', name: 'Aesthetic', emoji: '✨', isSystem: true, stickersCount: 15 }
+    ];
+
+    try {
+        for (const data of packsData) {
+            const stickers = [];
+            const hexes = STICKER_HEX_MAP[data.packId] || [];
+            for (let i = 1; i <= data.stickersCount; i++) {
+                const hex = hexes[i - 1] || "1f600";
+                stickers.push({
+                    stickerId: `${data.packId}_sticker_${i}`,
+                    url: `https://fonts.gstatic.com/s/e/notoemoji/latest/${hex}/512.webp`,
+                    order: i
+                });
+            }
+
+            await StickerPack.findOneAndUpdate(
+                { packId: data.packId },
+                {
+                    packId: data.packId,
+                    name: data.name,
+                    emoji: data.emoji,
+                    isSystem: true,
+                    stickers
+                },
+                { upsert: true, new: true }
+            );
+        }
+        console.log("System sticker packs seeded successfully with Google Noto Emoji CDN.");
+    } catch (err) {
+        console.error("Error seeding system sticker packs:", err);
+    }
+}
+
 mongoose.connect("mongodb://127.0.0.1:27017/Chatapp")
-    .then(() => console.log("MongoDB Connected"))
+    .then(() => {
+        console.log("MongoDB Connected");
+        seedSystemStickers();
+    })
     .catch((err) => console.log(err));
 
 // REST: get all users (for private messaging user list)
@@ -1352,7 +1586,8 @@ io.on("connection", async (socket) => {
                 ratchetHeader: data.ratchetHeader || null,
                 handshakePayload: data.handshakePayload || null,
                 senderCiphertext: data.senderCiphertext || null,
-                replyTo: data.replyTo || null
+                replyTo: data.replyTo || null,
+                sticker: data.sticker || null
             };
 
             if (data.privateChatId) {
