@@ -11,7 +11,17 @@ router.post("/register", async (req, res) => {
 
     try {
 
-        const { username, email, password, identityPublicKey, signedPrekey, oneTimePrekeys } = req.body;
+        const { 
+            username, 
+            email, 
+            password, 
+            identityPublicKey, 
+            signedPrekey, 
+            oneTimePrekeys,
+            encryptedIdentityPrivateKey,
+            encryptedSignedPrekeyPrivateKey,
+            encryptedOneTimePrekeys
+        } = req.body;
 
         const existingEmail = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, "i") } });
         if (existingEmail) {
@@ -42,7 +52,10 @@ router.post("/register", async (req, res) => {
             oneTimePrekeys: Array.isArray(oneTimePrekeys) ? oneTimePrekeys.map(k => ({
                 keyId: k.keyId,
                 publicKey: k.publicKey
-            })) : []
+            })) : [],
+            encryptedIdentityPrivateKey: encryptedIdentityPrivateKey || undefined,
+            encryptedSignedPrekeyPrivateKey: encryptedSignedPrekeyPrivateKey || undefined,
+            encryptedOneTimePrekeys: encryptedOneTimePrekeys || undefined
         });
 
         res.status(201).json({

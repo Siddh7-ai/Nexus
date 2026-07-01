@@ -1056,7 +1056,10 @@ io.on("connection", async (socket) => {
                 username: { $ne: socket.username },
                 seenBy: { $ne: socket.username }
             },
-            { $push: { seenBy: socket.username } }
+            { 
+                $push: { seenBy: socket.username },
+                $set: { seenAt: new Date() }
+            }
         );
         // Notify sender their messages were seen
         const updatedMsgs = await Message.find({ privateChatId }).sort({ createdAt: 1 });
@@ -1395,7 +1398,10 @@ io.on("connection", async (socket) => {
         try {
             const msg = await Message.findByIdAndUpdate(
                 messageId,
-                { $addToSet: { seenBy: socket.username } },
+                { 
+                    $addToSet: { seenBy: socket.username },
+                    $set: { seenAt: new Date() }
+                },
                 { new: true }
             );
             if (!msg) return;

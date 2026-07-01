@@ -361,7 +361,6 @@ function Chat() {
                     if (socketRef.current && msg.privateChatId && !requestedResendsRef.current.has(msg._id)) {
                         requestedResendsRef.current.add(msg._id);
                         console.log(`[E2EE Self-Heal] Triggering session reset and resend request for message: ${msg._id}`);
-                        await deleteSessionState(msg.privateChatId);
                         socketRef.current.emit("requestSessionResetAndResend", { messageId: msg._id, privateChatId: msg.privateChatId });
                     }
                 }
@@ -1495,12 +1494,21 @@ function Chat() {
                 // Get partner name
                 const partnerName = privateChatId.split("_").find(u => u.toLowerCase() !== usernameRef.current.toLowerCase());
 
+                // Reconstruct attachment object from decrypted payload fields if they exist
+                const attachment = decryptedPayload.fileUrl ? {
+                    fileUrl: decryptedPayload.fileUrl,
+                    fileName: decryptedPayload.fileName,
+                    fileSize: decryptedPayload.fileSize,
+                    fileType: decryptedPayload.fileType,
+                    fileQuality: decryptedPayload.fileQuality
+                } : null;
+
                 // Encrypt outgoing message (this will automatically fetch partner's bundle, create a new session and handshake)
                 const encryptedMsg = await encryptOutgoingMessage(
                     partnerName,
                     privateChatId,
                     decryptedPayload.text,
-                    decryptedPayload.attachment || null,
+                    attachment,
                     token
                 );
 
@@ -2893,12 +2901,17 @@ function Chat() {
                     const isOwnMsg = msg.username?.toLowerCase() === username?.toLowerCase();
 
                     if (isOwnMsg) {
-                        if (msg.createdAt) {
-                            const relativeTime = formatRelativeTime(msg.createdAt);
-                            const hasSeen = msg.seenBy?.filter(u => u?.toLowerCase() !== username?.toLowerCase()).length > 0;
-                            lastMsgText = hasSeen ? `Seen ${relativeTime}` : `Sent ${relativeTime}`;
+                        const hasSeen = msg.seenBy?.filter(u => u?.toLowerCase() !== username?.toLowerCase()).length > 0;
+                        if (hasSeen) {
+                            const seenTime = msg.seenAt ? formatRelativeTime(msg.seenAt) : (msg.createdAt ? formatRelativeTime(msg.createdAt) : "");
+                            lastMsgText = seenTime ? `Seen ${seenTime}` : "Seen";
                         } else {
-                            lastMsgText = "Sent";
+                            if (msg.createdAt) {
+                                const relativeTime = formatRelativeTime(msg.createdAt);
+                                lastMsgText = `Sent ${relativeTime}`;
+                            } else {
+                                lastMsgText = "Sent";
+                            }
                         }
                     } else {
                         let innerText = "";

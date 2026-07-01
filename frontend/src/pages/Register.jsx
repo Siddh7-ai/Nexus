@@ -61,7 +61,10 @@ function Register() {
             password,
             identityPublicKey: bundle.identityPublicKey,
             signedPrekey: bundle.signedPrekey,
-            oneTimePrekeys: bundle.oneTimePrekeys
+            oneTimePrekeys: bundle.oneTimePrekeys,
+            encryptedIdentityPrivateKey: bundle.encryptedIdentityPrivateKey,
+            encryptedSignedPrekeyPrivateKey: bundle.encryptedSignedPrekeyPrivateKey,
+            encryptedOneTimePrekeys: bundle.encryptedOneTimePrekeys
           })
         }
       );

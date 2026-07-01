@@ -1057,7 +1057,7 @@ function MessageList({
                                     currentUser={currentUser}
                                 />
 
-                                {index === messages.length - 1 && isOwn && isPrivate && !msg.isDeleted && (
+                                {index === messages.length - 1 && isOwn && isPrivate && !msg.isDeleted && msg.seenBy?.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase()).length > 0 && (
                                     <div className="last-message-status" style={{ 
                                         fontSize: '11.5px', 
                                         color: 'var(--muted)', 
@@ -1069,11 +1069,7 @@ function MessageList({
                                         fontWeight: '500',
                                         whiteSpace: 'nowrap'
                                     }}>
-                                        {msg.seenBy?.filter(u => u?.toLowerCase() !== currentUser?.toLowerCase()).length > 0 ? (
-                                            <span>Seen {formatRelativeTime(msg.createdAt)}</span>
-                                        ) : (
-                                            <span>Sent {formatRelativeTime(msg.createdAt)}</span>
-                                        )}
+                                        <span>Seen {formatRelativeTime(msg.seenAt || msg.createdAt)}</span>
                                     </div>
                                 )}
                             </div>
