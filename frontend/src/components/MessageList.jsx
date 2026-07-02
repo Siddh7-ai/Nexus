@@ -1019,7 +1019,24 @@ function MessageList({
                                     totalCount={messages.length}
                                 />
 
-                                {msg.sticker && !msg.isDeleted ? (
+                                {msg.isLocked ? (
+                                    <div 
+                                        className={`message-bubble ${isOwn ? "own" : "other"} locked-message`}
+                                        onClick={() => onUnlockLockedMessage(msg)}
+                                        style={{ cursor: 'pointer' }}
+                                        title="Locked message. Click to unlock."
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px' }}>
+                                            <Lock size={16} className="lock-symbol" />
+                                            <span style={{ fontSize: '13.5px', fontWeight: '600', fontStyle: 'italic' }}>Locked Message</span>
+                                        </div>
+                                        <div className="message-meta">
+                                            <span className="message-time">
+                                                {formatTimestamp(msg.createdAt)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : msg.sticker && !msg.isDeleted ? (
                                     <div className={`message-sticker-container-bubble ${isOwn ? "own" : "other"}`}>
                                         {!isOwn && (
                                             <span 
@@ -1033,23 +1050,6 @@ function MessageList({
                                             </span>
                                         )}
                                         <StickerBubble msg={msg} />
-                                        <div className="message-meta">
-                                            <span className="message-time">
-                                                {formatTimestamp(msg.createdAt)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ) : msg.isLocked ? (
-                                    <div 
-                                        className={`message-bubble ${isOwn ? "own" : "other"} locked-message`}
-                                        onClick={() => onUnlockLockedMessage(msg)}
-                                        style={{ cursor: 'pointer' }}
-                                        title="Locked message. Click to unlock."
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px' }}>
-                                            <Lock size={16} className="lock-symbol" />
-                                            <span style={{ fontSize: '13.5px', fontWeight: '600', fontStyle: 'italic' }}>Locked Message</span>
-                                        </div>
                                         <div className="message-meta">
                                             <span className="message-time">
                                                 {formatTimestamp(msg.createdAt)}
