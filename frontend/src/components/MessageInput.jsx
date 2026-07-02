@@ -1769,7 +1769,7 @@ function MessageInput({
                             <span>Camera</span>
                         </button>
                         <button type="button" className="popover-item" onClick={() => { setStickerPickerOpen(true); setAttachmentMenuOpen(false); }}>
-                            <div className="popover-icon-wrapper green-bg">
+                            <div className="popover-icon-wrapper yellow-bg">
                                 <Smile size={18} />
                             </div>
                             <span>New sticker</span>

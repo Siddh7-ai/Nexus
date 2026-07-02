@@ -3076,6 +3076,26 @@ body.dark-theme .cyber-logo-text {
   -webkit-text-fill-color: transparent;
 }
 
+.empty-chat-corner-brand {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  z-index: 10;
+  font-size: 30px;
+  font-weight: 950;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, #0f172a 40%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+body.dark-theme .empty-chat-corner-brand {
+  background: linear-gradient(90deg, #ffffff 40%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .live-status-dot-only {
   display: flex;
   align-items: center;

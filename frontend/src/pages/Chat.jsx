@@ -28,6 +28,8 @@ import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys, get
 import Vault from "../components/Vault";
 import MessageInfoModal from "../components/MessageInfoModal";
 import LockMessageModal from "../components/LockMessageModal";
+import WorkspacePage from "../components/WorkspacePage";
+import AddToWorkModal from "../components/AddToWorkModal";
 import VaultPinEntryModal from "../components/VaultPinEntryModal";
 import sodium from "libsodium-wrappers-sumo";
 
@@ -198,6 +200,16 @@ function Chat() {
     useEffect(() => {
         usernameRef.current = username;
     }, [username]);
+
+    // Clear room and private search params on initial load to start on Crowd Canvas page
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("room") || params.has("private")) {
+            params.delete("room");
+            params.delete("private");
+            setSearchParams(params, { replace: true });
+        }
+    }, [setSearchParams]);
 
     const [theme, setTheme] = useState("light");
     const [unreadCounts, setUnreadCounts] = useState({});
@@ -705,6 +717,10 @@ function Chat() {
     const glowTimeoutRef = useRef(null);
     const toastTimeoutRef = useRef(null);
 
+    const [workspaceUsers, setWorkspaceUsers] = useState([]);
+    const [addToWorkMsg, setAddToWorkMsg] = useState(null);
+    const [highlightMessageId, setHighlightMessageId] = useState(null);
+
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -786,6 +802,25 @@ function Chat() {
 
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, []);
+
+    useEffect(() => {
+        const tokenVal = getAuthToken();
+        if (!tokenVal) return;
+        const fetchWorkspaceUsers = async () => {
+            try {
+                const res = await fetch(`${getBackendUrl()}/api/user/list`, {
+                    headers: { "Authorization": `Bearer ${tokenVal}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setWorkspaceUsers(data.users || []);
+                }
+            } catch (err) {
+                console.error("Failed to load workspace users list:", err);
+            }
+        };
+        fetchWorkspaceUsers();
     }, []);
 
     // Notification permission hook
@@ -1374,6 +1409,25 @@ function Chat() {
         newSocket.on("onlineUsers", (count) => setOnlineUsers(count));
         newSocket.on("onlineUserList", (list) => setOnlineUserList(list));
 
+        newSocket.on("taskAssigned", (task) => {
+            playNotificationSound();
+            setActiveToast({
+                sender: "Workspace Manager",
+                text: `You have been assigned a new task: "${task.title}"`,
+                avatar: ""
+            });
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => {
+                setActiveToast(null);
+            }, 5000);
+
+            triggerDesktopNotification({
+                username: "Workspace",
+                text: `You have been assigned a new task: "${task.title}"`,
+                displayName: "Workspace Manager"
+            });
+        });
+
         newSocket.on("messageUpdated", (updatedMsg) => {
             const isMatch = updatedMsg.privateChatId
                 ? (activePrivateRef.current?.toLowerCase() === updatedMsg.privateChatId?.toLowerCase())
@@ -1719,6 +1773,7 @@ function Chat() {
         setSidebarOpen(false);
         setTypingUser(null);
         setRecordingUser(null);
+        setActiveSidebarTab("rooms");
         setUnreadCounts(prev => ({ ...prev, [room]: 0 }));
         socketRef.current?.emit("joinRoom", room);
     }
@@ -1739,6 +1794,7 @@ function Chat() {
         setSidebarOpen(false);
         setTypingUser(null);
         setRecordingUser(null);
+        setActiveSidebarTab("messages");
         setUnreadCounts(prev => {
             const next = { ...prev };
             const lowerId = privateChatId.toLowerCase();
@@ -1840,17 +1896,13 @@ function Chat() {
     };
 
     const switchToDefaultRoom = (deletedList = []) => {
-        // If we are on mobile, first screen should be chats list, so don't auto-select a room
-        // unless they explicitly have a room/private param in the URL (e.g. refresh / deep link)
-        if (window.innerWidth <= 768) {
-            const currentParams = new URLSearchParams(window.location.search);
-            const hasRoomParam = currentParams.get("room") || currentParams.get("private");
-            if (!hasRoomParam) {
-                setSearchParams({});
-                setActiveRoom(null);
-                setActiveRoomDetails(null);
-                return;
-            }
+        // Do not auto-select a room on initial load or if no room is selected,
+        // so that the user stays on the Crowd Canvas page.
+        if (!activeRoomRef.current && !activePrivateRef.current) {
+            setSearchParams({});
+            setActiveRoom(null);
+            setActiveRoomDetails(null);
+            return;
         }
 
         // If there's already an active room/private chat in current ref states, check if it's still valid
@@ -1873,7 +1925,7 @@ function Chat() {
             }
         }
 
-        // Otherwise, fall back to the first non-deleted system room
+        // Otherwise, fall back to the first non-deleted system room (or Crowd Canvas page if none)
         const ROOMS = ["Nexus Official"];
         const remaining = ROOMS.filter(r => !deletedList.includes(r));
         if (remaining.length > 0) {
@@ -2434,6 +2486,50 @@ function Chat() {
     function handleLockMessageSuccess(messageId, lockedItemId) {
         socketRef.current?.emit("lockMessage", { messageId, lockedItemId });
         setLockingMessage(null);
+    }
+
+    function handleOpenAddToWorkModal(msg) {
+        setAddToWorkMsg(msg);
+    }
+
+    async function handleCreateTaskFromModal(taskPayload) {
+        try {
+            const tokenVal = getAuthToken();
+            const res = await fetch(`${getBackendUrl()}/api/workspace/tasks`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${tokenVal}`
+                },
+                body: JSON.stringify(taskPayload)
+            });
+            if (res.ok) {
+                setAddToWorkMsg(null);
+                setActiveSidebarTab("workspace");
+            } else {
+                alert("Failed to add task to workspace.");
+            }
+        } catch (err) {
+            console.error("Failed to add task to workspace:", err);
+            alert("Error adding task to workspace.");
+        }
+    }
+
+    function handleNavigateToMessage(chatId, messageId) {
+        setActiveRoom(null);
+        setActivePrivate(null);
+        setHighlightMessageId(messageId);
+
+        if (chatId.includes("_")) {
+            const users = chatId.split("_");
+            const otherUser = users.find(u => u.toLowerCase() !== username.toLowerCase());
+            setActivePrivate(chatId);
+            setActivePrivateName(otherUser);
+            setActiveSidebarTab("messages");
+        } else {
+            setActiveRoom(chatId);
+            setActiveSidebarTab("rooms");
+        }
     }
 
     async function handleUnlockLockedMessage(msg) {
@@ -3143,7 +3239,15 @@ function Chat() {
 
                 {/* Main chat */}
                 <div className="chat-container">
-                    {!activeRoom && !activePrivate ? (
+                    {activeSidebarTab === "workspace" ? (
+                        <WorkspacePage 
+                            myUsername={username}
+                            token={getAuthToken()}
+                            theme={theme}
+                            onNavigateToMessage={handleNavigateToMessage}
+                            socket={socketRef.current}
+                        />
+                    ) : !activeRoom && !activePrivate ? (
                         <div className="empty-chat-placeholder" style={{ 
                             position: 'relative',
                             display: 'flex', 
@@ -3157,16 +3261,7 @@ function Chat() {
                             background: 'var(--page)',
                             overflow: 'hidden'
                         }}>
-                            <div className="empty-chat-corner-brand" style={{
-                                position: 'absolute',
-                                top: '24px',
-                                left: '28px',
-                                zIndex: 10,
-                                fontSize: '30px',
-                                fontWeight: '850',
-                                color: 'var(--text)',
-                                letterSpacing: '-0.3px'
-                            }}>
+                            <div className="empty-chat-corner-brand">
                                 Nexus.
                             </div>
                             <div className="empty-chat-online-users-wrapper">
@@ -3200,7 +3295,7 @@ function Chat() {
                                     color: 'var(--text)',
                                     letterSpacing: '-0.5px'
                                 }}>
-                                    Select a room to start
+                                    Select a chat to start
                                 </h2>
                                 <p style={{
                                     margin: '0',
@@ -3365,6 +3460,8 @@ function Chat() {
                                         isSelectionMode={isSelectionMode}
                                         selectedMessageIds={selectedMessageIds}
                                         onToggleMessageSelection={toggleMessageSelection}
+                                        onAddToWork={handleOpenAddToWorkModal}
+                                        highlightMessageId={highlightMessageId}
                                     />
                                 );
                             })()}
@@ -3540,6 +3637,17 @@ function Chat() {
                 isOpen={showVisualizer}
                 onClose={() => setShowVisualizer(false)}
                 visualizerData={visualizerData}
+            />
+
+            <AddToWorkModal
+                isOpen={!!addToWorkMsg}
+                message={addToWorkMsg}
+                users={workspaceUsers}
+                myUsername={username}
+                isPrivateChat={!!activePrivate}
+                activeChatId={activePrivate ? activePrivate : activeRoom}
+                onClose={() => setAddToWorkMsg(null)}
+                onSubmit={handleCreateTaskFromModal}
             />
 
             {/* Block Target Confirmation Modal */}

@@ -647,5 +647,16 @@ router.get("/friend-requests/pending", authenticateToken, async (req, res) => {
     }
 });
 
+// 13. Get all registered users in the system for task assignee selection
+router.get("/list", authenticateToken, async (req, res) => {
+    try {
+        const users = await User.find({}, "username displayName avatar");
+        res.json({ users });
+    } catch (err) {
+        console.error("Error fetching users list:", err);
+        res.status(500).json({ message: "Server error fetching user list" });
+    }
+});
+
 router.authenticateToken = authenticateToken;
 module.exports = router;

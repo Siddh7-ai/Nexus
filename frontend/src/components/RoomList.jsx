@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import savedMessagesLogo from "../assets/saved_msg.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import { toggleTheme } from "../utils/theme";
 import ThemeToggleButton from "./ThemeToggleButton";
@@ -235,9 +235,13 @@ function RoomList({
                         >
                             <FiUsers />
                         </button>
-
-
-
+                        <button 
+                            className={`narrow-nav-btn ${activeSidebarTab === "workspace" ? "active" : ""}`}
+                            onClick={() => setActiveSidebarTab("workspace")}
+                            title="Workspace"
+                        >
+                            <FiBriefcase />
+                        </button>
                         {!isGuest && (
                             <button 
                                 className="narrow-nav-btn"

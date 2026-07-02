@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import VoiceMessageBubble from "./VoiceMessageBubble";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock, Mic } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock, Mic, Briefcase } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 import sodium from "libsodium-wrappers-sumo";
 
@@ -523,7 +523,7 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount, onAddToWork }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [openUp, setOpenUp] = useState(false);
@@ -686,6 +686,12 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Star</span>
                         </button>
                     )}
+                    {!msg.isLocked && !isVoice && onAddToWork && (
+                        <button className="menu-item" onClick={() => { onAddToWork(msg); setShowMenu(false); }}>
+                            <Briefcase size={16} className="menu-icon" />
+                            <span>Add to work</span>
+                        </button>
+                    )}
                     {isOwn && !msg.isLocked && !isVoice && (
                         <button className="menu-item" onClick={() => { onEdit(); setShowMenu(false); }}>
                             <Pencil size={16} className="menu-icon" />
@@ -736,7 +742,9 @@ function MessageList({
     onUnlockLockedMessage,
     isSelectionMode = false,
     selectedMessageIds = new Set(),
-    onToggleMessageSelection
+    onToggleMessageSelection,
+    onAddToWork,
+    highlightMessageId
 }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
@@ -750,6 +758,21 @@ function MessageList({
         }, 30000);
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        if (highlightMessageId) {
+            const el = document.getElementById(`message_${highlightMessageId}`);
+            if (el) {
+                setTimeout(() => {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add("highlighted-message-flash");
+                    setTimeout(() => {
+                        el.classList.remove("highlighted-message-flash");
+                    }, 4000);
+                }, 300);
+            }
+        }
+    }, [highlightMessageId, messages]);
 
     const activeReactionMsg = messages.find(m => m._id === selectedReactionMsgId);
 
@@ -930,8 +953,9 @@ function MessageList({
                             )}
 
                             <div 
-                                className={`message-row ${isOwn ? "own" : "other"} ${selectionClass} ${selectedClass}`} 
-                            key={msg._id || index}
+                                id={`message_${msg._id}`}
+                                className={`message-row ${isOwn ? "own" : "other"} ${selectionClass} ${selectedClass} ${highlightMessageId === msg._id ? "highlighted-message-flash" : ""}`} 
+                                key={msg._id || index}
                             style={{
                                 marginBottom: isLastStatus ? '20px' : '0px'
                             }}
@@ -1017,6 +1041,7 @@ function MessageList({
                                     isSelectionMode={isSelectionMode}
                                     index={index}
                                     totalCount={messages.length}
+                                    onAddToWork={onAddToWork}
                                 />
 
                                 {msg.isLocked ? (

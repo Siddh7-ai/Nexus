@@ -85,3 +85,25 @@ input {
     height: 156px !important;    /* 30% longer string on mobile */
   }
 }
+
+/* Custom styled select elements globally to match system theme */
+select {
+  background: var(--soft, #1e293b);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--text, #f8fafc);
+  padding: 6.5px 12px;
+  font-size: 13.5px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+select:focus {
+  border-color: var(--accent, #12c7bd);
+}
+
+select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}

@@ -54,6 +54,8 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/keys", keyRoutes);
+const workspaceRoutes = require("./routes/workspaceRoutes");
+app.use("/api/workspace", workspaceRoutes);
 
 // Endpoint for transcription config queries
 app.get("/api/config/transcription", (req, res) => {
@@ -1674,6 +1676,45 @@ io.on("connection", async (socket) => {
 
             await msg.save();
 
+            // Auto-complete task if emoji is ✅ and reactor has access
+            if (emoji === "✅") {
+                try {
+                    const Task = require("./models/Task");
+                    const linkedTasks = await Task.find({ "created_from.message_id": messageId });
+                    for (const t of linkedTasks) {
+                        let isAuthorized = false;
+                        if (t.room_id) {
+                            const Room = require("./models/Room");
+                            const room = await Room.findById(t.room_id);
+                            if (room) {
+                                const isMember = room.admin.toString() === socket.userId ||
+                                                 room.members.some(mId => mId.toString() === socket.userId);
+                                if (isMember) {
+                                    const isRoomAdmin = room.admin.toString() === socket.userId;
+                                    const isCreatorOrAssignee = (t.created_by.toLowerCase() === socket.username.toLowerCase() || 
+                                                                 t.assignee_id.toLowerCase() === socket.username.toLowerCase());
+                                    if (isRoomAdmin || isCreatorOrAssignee) {
+                                        isAuthorized = true;
+                                    }
+                                }
+                            }
+                        } else {
+                            isAuthorized = (t.created_by.toLowerCase() === socket.username.toLowerCase() || 
+                                            t.assignee_id.toLowerCase() === socket.username.toLowerCase());
+                        }
+
+                        if (isAuthorized) {
+                            t.status = t.type === "issue" ? "resolved" : "completed";
+                            await t.save();
+                            // Notify clients of task update
+                            io.emit("taskUpdated", t);
+                        }
+                    }
+                } catch (taskErr) {
+                    console.error("Error auto-completing task on reaction:", taskErr);
+                }
+            }
+
             const room = msg.privateChatId
                 ? `private_${msg.privateChatId}`
                 : msg.room;
@@ -2182,23 +2223,35 @@ io.on("connection", async (socket) => {
             const uniqueRoomId = room._id.toString();
             const realRoomName = room.name;
 
-            if (room.admin.toString() === userId.toString()) {
-                io.to(uniqueRoomId).emit("roomDeleted", { roomName: realRoomName });
-                
-                const socketsInRoom = await io.in(uniqueRoomId).fetchSockets();
-                socketsInRoom.forEach(s => s.leave(uniqueRoomId));
-                
+            // Pull the leaving member first
+            await Room.findByIdAndUpdate(room._id, { $pull: { members: userId } });
+            socket.leave(uniqueRoomId);
+            console.log(`User ${username} left room: ${realRoomName}`);
+
+            // Fetch updated room
+            let updatedRoom = await Room.findById(room._id);
+            if (!updatedRoom || updatedRoom.members.length === 0) {
+                // No members left, delete room and its tasks
                 await Room.findByIdAndDelete(room._id);
-                console.log(`Room ${realRoomName} deleted by admin: ${username}`);
+                const Task = require("./models/Task");
+                await Task.deleteMany({ room_id: room._id });
+                console.log(`Room ${realRoomName} deleted because it has zero members.`);
+                io.to(uniqueRoomId).emit("roomDeleted", { roomName: realRoomName });
             } else {
-                await Room.findByIdAndUpdate(room._id, { $pull: { members: userId } });
-                socket.leave(uniqueRoomId);
-                console.log(`User ${username} left room: ${realRoomName}`);
-                
-                const updatedRoom = await Room.findById(room._id)
+                // There are members left
+                if (room.admin.toString() === userId.toString()) {
+                    // Admin left without transferring. Promote oldest member
+                    const oldestMemberId = updatedRoom.members[0];
+                    updatedRoom.admin = oldestMemberId;
+                    await updatedRoom.save();
+                    console.log(`Admin left room ${realRoomName}. Promoted oldest member ${oldestMemberId} to admin.`);
+                }
+
+                // Populate and emit updates
+                const populatedRoom = await Room.findById(updatedRoom._id)
                     .populate("admin", "username displayName avatar")
                     .populate("members", "username displayName avatar _id status");
-                io.to(uniqueRoomId).emit("roomMemberUpdate", updatedRoom);
+                io.to(uniqueRoomId).emit("roomMemberUpdate", populatedRoom);
             }
             
             const rooms = await Room.find({ members: userId })
@@ -2208,6 +2261,58 @@ io.on("connection", async (socket) => {
         } catch (err) {
             console.error("Error leaving room:", err);
             socket.emit("error", { message: "Failed to leave room." });
+        }
+    });
+
+    socket.on("transferRoomAdmin", async ({ roomName, newAdminUsername }) => {
+        if (!userGuard(socket)) return;
+        try {
+            const userId = socket.request.user.id;
+            
+            let room = null;
+            if (mongoose.Types.ObjectId.isValid(roomName)) {
+                room = await Room.findById(roomName);
+            } else {
+                room = await Room.findOne({ name: roomName });
+            }
+
+            if (!room) {
+                socket.emit("error", { message: "Room not found." });
+                return;
+            }
+
+            if (room.admin.toString() !== userId.toString()) {
+                socket.emit("error", { message: "Unauthorized. Only room admin can transfer ownership." });
+                return;
+            }
+
+            const newAdminUser = await User.findOne({ username: newAdminUsername });
+            if (!newAdminUser) {
+                socket.emit("error", { message: "New admin user not found." });
+                return;
+            }
+
+            const isMember = room.members.some(mId => mId.toString() === newAdminUser._id.toString());
+            if (!isMember) {
+                socket.emit("error", { message: "New admin must be a member of the room." });
+                return;
+            }
+
+            room.admin = newAdminUser._id;
+            await room.save();
+
+            const updatedRoom = await Room.findById(room._id)
+                .populate("admin", "username displayName avatar")
+                .populate("members", "username displayName avatar _id status");
+            io.to(room._id.toString()).emit("roomMemberUpdate", updatedRoom);
+            
+            const roomsList = await Room.find({ members: userId })
+                .sort({ createdAt: -1 })
+                .populate("admin", "username");
+            socket.emit("customRoomsList", roomsList);
+        } catch (err) {
+            console.error("Error transferring room admin:", err);
+            socket.emit("error", { message: "Failed to transfer room admin." });
         }
     });
 
@@ -2243,6 +2348,9 @@ io.on("connection", async (socket) => {
             socketsInRoom.forEach(s => s.leave(uniqueRoomId));
             
             await Room.findByIdAndDelete(room._id);
+            // Cascade delete room tasks
+            const Task = require("./models/Task");
+            await Task.deleteMany({ room_id: room._id });
             console.log(`Room ${realRoomName} deleted by admin: ${username}`);
             
             const rooms = await Room.find({ members: userId })
