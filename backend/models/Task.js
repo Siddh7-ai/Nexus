@@ -17,8 +17,8 @@ const TaskSchema = new mongoose.Schema({
     },
     visibility: {
         type: String,
-        enum: ["private", "room", "workspace"],
-        default: "workspace"
+        enum: ["private", "room", "nextask"],
+        default: "nextask"
     },
     created_from: {
         chat_id: {
@@ -44,8 +44,17 @@ const TaskSchema = new mongoose.Schema({
     },
     assignee_id: {
         type: String,
-        required: true,
+        required: false,
+        default: "",
         trim: true
+    },
+    assignees: {
+        type: [String],
+        default: []
+    },
+    encryptedPayload: {
+        nonce: { type: String, default: null },
+        ciphertext: { type: String, default: null }
     },
     priority: {
         type: String,

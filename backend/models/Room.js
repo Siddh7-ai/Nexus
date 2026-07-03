@@ -32,6 +32,14 @@ const roomSchema = new mongoose.Schema({
         type: Number,
         default: 50
     },
+    slaThreshold: {
+        type: Number,
+        default: 48
+    },
+    webhooks: {
+        type: [String],
+        default: []
+    },
     createdAt: {
         type: Date,
         default: Date.now

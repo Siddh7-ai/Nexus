@@ -1,4 +1,6 @@
 import React, { useRef, useState, useEffect, Suspense } from "react";
+import { useTheme } from "../context/ThemeContext";
+import { playPop } from "../utils/audio";
 import { 
     Bold, 
     Italic, 
@@ -321,6 +323,78 @@ function MessageInput({
     onRecordingStart,
     onRecordingStop
 }) {
+    const { toggleTheme } = useTheme();
+    const [showSlashMenu, setShowSlashMenu] = useState(false);
+    const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+
+    const slashCommandsList = [
+        { name: "/assign", desc: "Assign task member", usage: "/assign @username" },
+        { name: "/clear", desc: "Clear composer text", usage: "/clear" },
+        { name: "/gif", desc: "Search & insert a GIF", usage: "/gif [search-term]" },
+        { name: "/help", desc: "Display bot help options", usage: "/help" },
+        { name: "/task", desc: "Create a new Kanban task", usage: "/task [title]" },
+        { name: "/theme", desc: "Toggle light/dark theme", usage: "/theme [light|dark]" }
+    ];
+
+    const getFilteredCommands = () => {
+        if (!message || !message.startsWith("/")) return [];
+        const inputWord = message.split(" ")[0];
+        return slashCommandsList.filter(cmd => 
+            cmd.name.startsWith(inputWord.toLowerCase())
+        );
+    };
+    const filteredCommands = getFilteredCommands();
+
+    useEffect(() => {
+        if (message && message.startsWith("/")) {
+            setShowSlashMenu(true);
+        } else {
+            setShowSlashMenu(false);
+        }
+        setActiveCommandIndex(0);
+    }, [message]);
+
+    const selectSlashCommand = (cmd) => {
+        if (!cmd) return;
+        if (cmd.name === "/clear") {
+            if (inputRef.current) inputRef.current.innerHTML = "";
+            setMessage("");
+            setShowSlashMenu(false);
+            return;
+        }
+        if (cmd.name === "/theme") {
+            if (toggleTheme) toggleTheme();
+            if (inputRef.current) inputRef.current.innerHTML = "";
+            setMessage("");
+            setShowSlashMenu(false);
+            return;
+        }
+        if (cmd.name === "/help") {
+            if (inputRef.current) {
+                inputRef.current.innerHTML = "Available commands: /assign, /clear, /gif, /help, /task, /theme";
+                setMessage("Available commands: /assign, /clear, /gif, /help, /task, /theme");
+            }
+            setShowSlashMenu(false);
+            return;
+        }
+        
+        // Autocomplete
+        if (inputRef.current) {
+            inputRef.current.innerHTML = cmd.name + " ";
+            setMessage(cmd.name + " ");
+            inputRef.current.focus();
+            setTimeout(() => {
+                const range = document.createRange();
+                range.selectNodeContents(inputRef.current);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }, 10);
+        }
+        setShowSlashMenu(false);
+    };
+
     const [hoveredButton, setHoveredButton] = useState(null);
     const [tooltipPos, setTooltipPos] = useState({ left: 0, bottom: 0 });
     const [tooltipAlign, setTooltipAlign] = useState("edge-center");
@@ -1802,6 +1876,56 @@ function MessageInput({
                 )}
 
                 <div style={{ position: "relative", flex: 1, display: "flex", borderRadius: "24px", overflow: "hidden" }}>
+                    {/* SLASH COMMANDS MENU OVERLAY */}
+                    {showSlashMenu && filteredCommands.length > 0 && (
+                        <div className="slash-commands-popover" style={{
+                            position: "absolute",
+                            bottom: "100%",
+                            left: "12px",
+                            marginBottom: "8px",
+                            width: "280px",
+                            background: "var(--panel, #ffffff)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "12px",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                            zIndex: 1000,
+                            overflow: "hidden",
+                            display: "flex",
+                            flexDirection: "column"
+                        }}>
+                            <div style={{ padding: "8px 12px", fontSize: "10px", fontWeight: "bold", color: "var(--accent)", borderBottom: "1px solid var(--border)", textTransform: "uppercase" }}>
+                                Commands list
+                            </div>
+                            <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                                {filteredCommands.map((cmd, idx) => {
+                                    const isSelected = idx === activeCommandIndex;
+                                    return (
+                                        <div 
+                                            key={cmd.name}
+                                            onClick={() => selectSlashCommand(cmd)}
+                                            onMouseEnter={() => setActiveCommandIndex(idx)}
+                                            style={{
+                                                padding: "8px 14px",
+                                                cursor: "pointer",
+                                                background: isSelected ? "var(--soft, rgba(0,0,0,0.03))" : "transparent",
+                                                borderLeft: isSelected ? "3px solid var(--accent)" : "3px solid transparent",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: "2px",
+                                                transition: "background 0.15s"
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                <span style={{ fontWeight: "bold", fontSize: "12px", color: isSelected ? "var(--accent)" : "var(--text)" }}>{cmd.name}</span>
+                                                <span style={{ fontSize: "8.5px", opacity: 0.5, color: "var(--muted)" }}>{cmd.usage}</span>
+                                            </div>
+                                            <span style={{ fontSize: "9.5px", color: "var(--muted)", opacity: 0.8 }}>{cmd.desc}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                     <div
                         ref={inputRef}
                         className="composer-textarea-editable"
@@ -1833,7 +1957,27 @@ function MessageInput({
                             editorCaretOpacity.set(0);
                         }}
                         onKeyDown={(e) => {
-                            // Keyboard shortcuts for formatting
+                             if (showSlashMenu && filteredCommands.length > 0) {
+                                 if (e.key === "ArrowDown") {
+                                     e.preventDefault();
+                                     setActiveCommandIndex(prev => (prev + 1) % filteredCommands.length);
+                                     return;
+                                 } else if (e.key === "ArrowUp") {
+                                     e.preventDefault();
+                                     setActiveCommandIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+                                     return;
+                                 } else if (e.key === "Enter" || e.key === "Tab") {
+                                     e.preventDefault();
+                                     selectSlashCommand(filteredCommands[activeCommandIndex]);
+                                     return;
+                                 } else if (e.key === "Escape") {
+                                     e.preventDefault();
+                                     setShowSlashMenu(false);
+                                     return;
+                                 }
+                             }
+                             
+                             // Keyboard shortcuts for formatting
                             if (e.ctrlKey || e.metaKey) {
                                 const key = e.key.toLowerCase();
                                 if (key === "b") {

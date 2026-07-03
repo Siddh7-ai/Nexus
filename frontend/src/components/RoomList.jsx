@@ -11,6 +11,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import { useTheme, accentColors } from "../context/ThemeContext";
 
 const customSchema = {
     ...defaultSchema,
@@ -101,6 +102,9 @@ function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = 
 }
 
 function RoomList({ 
+    nextaskTasks = [],
+    nextaskBoard = "personal",
+    nextaskRooms = [],
     activeRoom, 
     activePrivate, 
     onSelectRoom, 
@@ -128,6 +132,8 @@ function RoomList({
     const [dmSearch, setDmSearch] = useState("");
     const [settingsSubpage, setSettingsSubpage] = useState("main");
     const [settingsSearch, setSettingsSearch] = useState("");
+
+    const { accentColor, setAccentColor, soundEnabled, setSoundEnabled } = useTheme();
 
     React.useEffect(() => {
         if (activeSidebarTab !== "settings") {
@@ -236,9 +242,9 @@ function RoomList({
                             <FiUsers />
                         </button>
                         <button 
-                            className={`narrow-nav-btn ${activeSidebarTab === "workspace" ? "active" : ""}`}
-                            onClick={() => setActiveSidebarTab("workspace")}
-                            title="Workspace"
+                            className={`narrow-nav-btn ${activeSidebarTab === "nextask" ? "active" : ""}`}
+                            onClick={() => setActiveSidebarTab("nextask")}
+                            title="NexTask"
                         >
                             <FiBriefcase />
                         </button>
@@ -1134,9 +1140,8 @@ function RoomList({
                                         </div>
                                         <ThemeToggleButton 
                                             theme={settingsProps.theme} 
-                                            onToggle={() => {
-                                                const nextTheme = toggleTheme();
-                                                settingsProps.setTheme(nextTheme);
+                                            onToggle={(e) => {
+                                                toggleTheme(e, settingsProps.setTheme);
                                             }}
                                             className="empty-chat-theme-toggle"
                                             style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--border)' }}
@@ -1155,6 +1160,53 @@ function RoomList({
                                         >
                                             Configure
                                         </button>
+                                    </div>
+
+                                    {/* Mute/Unmute Sound Effects Toggle */}
+                                    <div className="settings-field-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: '12px', background: 'var(--soft)', border: '1px solid var(--border)', marginTop: '12px' }}>
+                                        <div>
+                                            <span style={{ fontWeight: 'bold', display: 'block' }}>Sound Effects</span>
+                                            <span style={{ fontSize: '12px', opacity: 0.6 }}>Play pop sound on actions</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => setSoundEnabled(!soundEnabled)}
+                                            className={`settings-action-pill ${soundEnabled ? "accept" : "cancel"}`}
+                                            style={{ minWidth: '80px', padding: '8px 12px' }}
+                                        >
+                                            {soundEnabled ? "Enabled" : "Muted"}
+                                        </button>
+                                    </div>
+
+                                    {/* Accent Color Grid Selector */}
+                                    <div className="settings-field-card" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px', borderRadius: '12px', background: 'var(--soft)', border: '1px solid var(--border)', marginTop: '12px' }}>
+                                        <div>
+                                            <span style={{ fontWeight: 'bold', display: 'block' }}>Accent Color Palette</span>
+                                            <span style={{ fontSize: '12px', opacity: 0.6 }}>Customize primary highlights</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+                                            {Object.keys(accentColors).map(key => {
+                                                const colorObj = accentColors[key];
+                                                const isSelected = accentColor === key;
+                                                return (
+                                                    <button 
+                                                        key={key}
+                                                        onClick={() => setAccentColor(key)}
+                                                        title={colorObj.name}
+                                                        style={{
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            borderRadius: '50%',
+                                                            background: colorObj.accent,
+                                                            border: isSelected ? '3px solid var(--text)' : '2px solid transparent',
+                                                            cursor: 'pointer',
+                                                            boxShadow: isSelected ? '0 0 10px rgba(0,0,0,0.2)' : 'none',
+                                                            transition: 'all 0.2s',
+                                                            padding: 0
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1255,6 +1307,12 @@ function RoomList({
                             </div>
                         ) : null
                     )
+                ) : activeSidebarTab === "nextask" ? (
+                    <NexTaskDashboard 
+                        tasks={nextaskTasks}
+                        board={nextaskBoard}
+                        rooms={nextaskRooms}
+                    />
                 ) : (
                     <>
                         <div className="panel-header-section">
@@ -1431,6 +1489,198 @@ function RoomList({
                         </div>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function NexTaskDashboard({ tasks = [], board = "personal", rooms = [] }) {
+    const boardTitle = board === "personal" 
+        ? "Personal Board" 
+        : (rooms.find(r => r._id === board)?.name || "Room Board");
+
+    const totalTasks = tasks.length;
+    const todoTasks = tasks.filter(t => t.type === "task" && t.status === "open").length;
+    const progressTasks = tasks.filter(t => t.type === "task" && t.status === "in_progress").length;
+    const completedTasks = tasks.filter(t => t.type === "task" && t.status === "completed").length;
+    
+    const activeIssues = tasks.filter(t => t.type === "issue" && t.status !== "resolved").length;
+    const resolvedIssues = tasks.filter(t => t.type === "issue" && t.status === "resolved").length;
+    
+    const criticalCount = tasks.filter(t => t.priority === "critical").length;
+    const highCount = tasks.filter(t => t.priority === "high").length;
+    const mediumCount = tasks.filter(t => t.priority === "medium").length;
+    const lowCount = tasks.filter(t => t.priority === "low").length;
+
+    const completedTotal = completedTasks + resolvedIssues;
+    const completionRate = totalTasks > 0 
+        ? Math.round((completedTotal / totalTasks) * 100) 
+        : 0;
+
+    return (
+        <div className="nextask-dashboard" style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            color: 'var(--text)',
+            animation: 'fadeInUp 0.3s ease-out'
+        }}>
+            <div className="panel-header-section" style={{ borderBottom: '1px solid var(--border)' }}>
+                <h3 className="panel-header-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
+                    💼 Work Summary
+                </h3>
+                <span style={{ 
+                    fontSize: '11px', 
+                    color: 'var(--accent)', 
+                    fontWeight: '800',
+                    display: 'block',
+                    marginTop: '2px',
+                    opacity: 0.9
+                }}>
+                    {boardTitle}
+                </span>
+            </div>
+
+            <div style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+            }}>
+                {/* KPI Metrics */}
+                <div style={{
+                    background: 'linear-gradient(135deg, var(--accent-deep) 0%, var(--accent) 100%)',
+                    borderRadius: '16px',
+                    padding: '16px',
+                    color: '#ffffff',
+                    boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.15)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}>
+                    <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.8 }}>Total Items</span>
+                    <h2 style={{ margin: '4px 0 0 0', fontSize: '28px', fontWeight: '800' }}>{totalTasks}</h2>
+                    <span style={{ fontSize: '10px', opacity: 0.9, display: 'block', marginTop: '6px' }}>
+                        {completedTotal} of {totalTasks} items resolved
+                    </span>
+                    <div style={{
+                        position: 'absolute',
+                        right: '-20px',
+                        bottom: '-20px',
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.1)',
+                        pointerEvents: 'none'
+                    }} />
+                </div>
+
+                {/* Progress bar card */}
+                <div style={{
+                    background: 'var(--soft)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '16px',
+                    padding: '14px'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', marginBottom: '8px' }}>
+                        <span>Completion Rate</span>
+                        <span style={{ color: 'var(--accent)' }}>{completionRate}%</span>
+                    </div>
+                    <div style={{
+                        width: '100%',
+                        height: '8px',
+                        background: 'rgba(0,0,0,0.06)',
+                        borderRadius: '10px',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{
+                            width: `${completionRate}%`,
+                            height: '100%',
+                            background: 'var(--accent)',
+                            borderRadius: '10px',
+                            transition: 'width 0.4s ease-out'
+                        }} />
+                    </div>
+                </div>
+
+                {/* Columns breakdown */}
+                <div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--muted)' }}>Columns Summary</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[
+                            { name: "To Do", count: todoTasks, color: '#3b82f6' },
+                            { name: "In Progress", count: progressTasks, color: '#fbbf24' },
+                            { name: "Completed", count: completedTasks, color: '#10b981' },
+                            { name: "Issues", count: activeIssues, color: '#ef4444' }
+                        ].map(col => {
+                            const pct = totalTasks > 0 ? (col.count / totalTasks) * 100 : 0;
+                            return (
+                                <div key={col.name} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    padding: '8px 12px',
+                                    borderRadius: '12px',
+                                    background: 'var(--panel)',
+                                    border: '1px solid var(--border)',
+                                    justifyContent: 'space-between',
+                                    fontSize: '11px'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.color }} />
+                                        <span style={{ fontWeight: '600' }}>{col.name}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '10px', opacity: 0.6 }}>{col.count}</span>
+                                        <span style={{ 
+                                            background: col.color + '15', 
+                                            color: col.color, 
+                                            padding: '1px 5px', 
+                                            borderRadius: '4px',
+                                            fontWeight: 'bold',
+                                            fontSize: '9px'
+                                        }}>
+                                            {Math.round(pct)}%
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Priority distribution */}
+                <div>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--muted)' }}>Priority Level</h4>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px'
+                    }}>
+                        {[
+                            { name: "Critical", count: criticalCount, color: '#f43f5e' },
+                            { name: "High", count: highCount, color: '#fbbf24' },
+                            { name: "Medium", count: mediumCount, color: '#3b82f6' },
+                            { name: "Low", count: lowCount, color: '#64748b' }
+                        ].map(pri => (
+                            <div key={pri.name} style={{
+                                padding: '8px 10px',
+                                borderRadius: '12px',
+                                background: 'var(--panel)',
+                                border: '1px solid var(--border)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px'
+                            }}>
+                                <span style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--muted)', textTransform: 'uppercase' }}>{pri.name}</span>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: '800', fontSize: '14px' }}>{pri.count}</span>
+                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: pri.color, boxShadow: `0 0 6px ${pri.color}` }} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );

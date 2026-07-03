@@ -54,8 +54,8 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/keys", keyRoutes);
-const workspaceRoutes = require("./routes/workspaceRoutes");
-app.use("/api/workspace", workspaceRoutes);
+const nexTaskRoutes = require("./routes/nexTaskRoutes");
+app.use("/api/nextask", nexTaskRoutes);
 
 // Endpoint for transcription config queries
 app.get("/api/config/transcription", (req, res) => {
@@ -2479,7 +2479,67 @@ process.on("SIGTERM", () => {
     process.exit();
 });
 
+function startSLABreachChecker(io) {
+    const Task = require("./models/Task");
+    // Run SLA check every 2 minutes (120,000 ms)
+    setInterval(async () => {
+        try {
+            console.log("[SLA Checker] Running background breach verification...");
+            const openTasks = await Task.find({
+                status: { $in: ["open", "in_progress"] },
+                room_id: { $ne: null }
+            });
+
+            const now = new Date();
+
+            for (const task of openTasks) {
+                const room = await Room.findById(task.room_id).populate("admin");
+                if (!room) continue;
+
+                // Determine threshold. Use room threshold if configured, otherwise default 48h
+                const thresholdHours = room.slaThreshold || 48;
+                const hoursElapsed = (now - new Date(task.createdAt)) / (1000 * 60 * 60);
+
+                if (hoursElapsed > thresholdHours) {
+                    const adminUsername = room.admin.username;
+                    
+                    if (task.assignee_id !== adminUsername) {
+                        console.log(`[SLA Escalation] Task "${task.title}" breached SLA. Reassigning from @${task.assignee_id} to room admin @${adminUsername}`);
+                        
+                        const oldAssignee = task.assignee_id;
+                        task.assignee_id = adminUsername;
+                        task.assignees = [adminUsername];
+                        await task.save();
+
+                        // Notify via Socket
+                        io.to(`user_${adminUsername.toLowerCase()}`).emit("taskAssigned", task);
+
+                        // Post a system message alert to the room chat!
+                        const systemMsgData = {
+                            username: "System",
+                            text: `🚨 **NexTask SLA Breach Alert:** The task **"${task.title}"** (assigned to @${oldAssignee}) has been open for ${Math.round(hoursElapsed)}h, exceeding the ${thresholdHours}h SLA threshold! It has been auto-reassigned to room admin @${adminUsername}.`,
+                            room: room._id.toString(),
+                            displayName: "System Bot",
+                            avatar: "",
+                            seenBy: [adminUsername]
+                        };
+
+                        const savedSystemMsg = await Message.create(systemMsgData);
+                        const clientMsg = savedSystemMsg.toObject();
+                        clientMsg.room = room.name;
+                        
+                        io.to(room._id.toString()).emit("reply", clientMsg);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("[SLA Checker] Error in SLA background checker loop:", err);
+        }
+    }, 120000);
+}
+
 server.listen(5000, () => {
     console.log("Server started on port 5000");
     startPythonASR(); // Auto-spawn Python speech recognition microservice if enabled ASR
+    startSLABreachChecker(io); // Start background SLA breach check
 });

@@ -499,7 +499,7 @@ export function initTheme() {
 }
 
 export function toggleTheme(clickEvent, updateStateFn) {
-    const currentTheme = localStorage.getItem("theme") || "light";
+    const currentTheme = (document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme")) ? "dark" : "light";
     const nextTheme = currentTheme === "light" ? "dark" : "light";
     localStorage.setItem("theme", nextTheme);
 

@@ -28,10 +28,12 @@ import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys, get
 import Vault from "../components/Vault";
 import MessageInfoModal from "../components/MessageInfoModal";
 import LockMessageModal from "../components/LockMessageModal";
-import WorkspacePage from "../components/WorkspacePage";
+import NexTaskPage from "../components/NexTaskPage";
 import AddToWorkModal from "../components/AddToWorkModal";
+import CommandPalette from "../components/CommandPalette";
 import VaultPinEntryModal from "../components/VaultPinEntryModal";
 import sodium from "libsodium-wrappers-sumo";
+import { playPop } from "../utils/audio";
 
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
@@ -211,7 +213,7 @@ function Chat() {
         }
     }, [setSearchParams]);
 
-    const [theme, setTheme] = useState("light");
+    const [theme, setTheme] = useState(() => initTheme());
     const [unreadCounts, setUnreadCounts] = useState({});
 
     useEffect(() => {
@@ -570,6 +572,19 @@ function Chat() {
     const [activeSidebarTab, setActiveSidebarTab] = useState("messages"); // "messages" or "rooms"
     const [deletedSystemRooms, setDeletedSystemRooms] = useState([]);
 
+    // NexTask global state for sidebar dashboard and command palette
+    const [nextaskTasks, setNextaskTasks] = useState([]);
+    const [nextaskBoard, setNextaskBoard] = useState("personal");
+    const [nextaskRooms, setNextaskRooms] = useState([]);
+    const [nextaskActiveTab, setNextaskActiveTab] = useState("board");
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+    const handleTasksUpdate = (tasksList, boardName, roomsList) => {
+        setNextaskTasks(tasksList);
+        setNextaskBoard(boardName);
+        setNextaskRooms(roomsList);
+    };
+
     const [pendingRequests, setPendingRequests] = useState([]);
 
     const [activeModalTab, setActiveModalTab] = useState("create"); // "create" or "join"
@@ -618,6 +633,17 @@ function Chat() {
             unsubY();
         };
     }, [springX, springY]);
+
+    useEffect(() => {
+        const handleGlobalKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+                e.preventDefault();
+                setIsCommandPaletteOpen(prev => !prev);
+            }
+        };
+        window.addEventListener("keydown", handleGlobalKeyDown);
+        return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    }, []);
 
     useEffect(() => {
         if (!selectedProfileUsername) {
@@ -717,7 +743,7 @@ function Chat() {
     const glowTimeoutRef = useRef(null);
     const toastTimeoutRef = useRef(null);
 
-    const [workspaceUsers, setWorkspaceUsers] = useState([]);
+    const [nextaskUsers, setNexTaskUsers] = useState([]);
     const [addToWorkMsg, setAddToWorkMsg] = useState(null);
     const [highlightMessageId, setHighlightMessageId] = useState(null);
 
@@ -807,20 +833,20 @@ function Chat() {
     useEffect(() => {
         const tokenVal = getAuthToken();
         if (!tokenVal) return;
-        const fetchWorkspaceUsers = async () => {
+        const fetchNexTaskUsers = async () => {
             try {
                 const res = await fetch(`${getBackendUrl()}/api/user/list`, {
                     headers: { "Authorization": `Bearer ${tokenVal}` }
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setWorkspaceUsers(data.users || []);
+                    setNexTaskUsers(data.users || []);
                 }
             } catch (err) {
-                console.error("Failed to load workspace users list:", err);
+                console.error("Failed to load nextask users list:", err);
             }
         };
-        fetchWorkspaceUsers();
+        fetchNexTaskUsers();
     }, []);
 
     // Notification permission hook
@@ -1412,7 +1438,7 @@ function Chat() {
         newSocket.on("taskAssigned", (task) => {
             playNotificationSound();
             setActiveToast({
-                sender: "Workspace Manager",
+                sender: "NexTask Manager",
                 text: `You have been assigned a new task: "${task.title}"`,
                 avatar: ""
             });
@@ -1422,9 +1448,9 @@ function Chat() {
             }, 5000);
 
             triggerDesktopNotification({
-                username: "Workspace",
+                username: "NexTask",
                 text: `You have been assigned a new task: "${task.title}"`,
-                displayName: "Workspace Manager"
+                displayName: "NexTask Manager"
             });
         });
 
@@ -2057,6 +2083,9 @@ function Chat() {
 
         if (!realAttachment && !message.trim()) return;
 
+        // Play pop sound feedback
+        playPop();
+
         console.log("DEBUG SENDING MESSAGE: [Content Redacted for E2EE]");
 
         const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
@@ -2495,7 +2524,7 @@ function Chat() {
     async function handleCreateTaskFromModal(taskPayload) {
         try {
             const tokenVal = getAuthToken();
-            const res = await fetch(`${getBackendUrl()}/api/workspace/tasks`, {
+            const res = await fetch(`${getBackendUrl()}/api/nextask/tasks`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -2505,13 +2534,13 @@ function Chat() {
             });
             if (res.ok) {
                 setAddToWorkMsg(null);
-                setActiveSidebarTab("workspace");
+                setActiveSidebarTab("nextask");
             } else {
-                alert("Failed to add task to workspace.");
+                alert("Failed to add task to nextask.");
             }
         } catch (err) {
-            console.error("Failed to add task to workspace:", err);
-            alert("Error adding task to workspace.");
+            console.error("Failed to add task to nextask:", err);
+            alert("Error adding task to nextask.");
         }
     }
 
@@ -3159,6 +3188,9 @@ function Chat() {
                 {/* Sidebar */}
                 <div className={`sidebar-panel ${sidebarOpen ? "open" : ""}`}>
                     <RoomList
+                        nextaskTasks={nextaskTasks}
+                        nextaskBoard={nextaskBoard}
+                        nextaskRooms={nextaskRooms}
                         activeRoom={activeRoom}
                         activePrivate={activePrivate}
                         onSelectRoom={selectRoom}
@@ -3239,13 +3271,18 @@ function Chat() {
 
                 {/* Main chat */}
                 <div className="chat-container">
-                    {activeSidebarTab === "workspace" ? (
-                        <WorkspacePage 
+                    {activeSidebarTab === "nextask" ? (
+                        <NexTaskPage 
                             myUsername={username}
                             token={getAuthToken()}
                             theme={theme}
                             onNavigateToMessage={handleNavigateToMessage}
                             socket={socketRef.current}
+                            activeTab={nextaskActiveTab}
+                            setActiveTab={setNextaskActiveTab}
+                            selectedNexTask={nextaskBoard}
+                            setSelectedNexTask={setNextaskBoard}
+                            onTasksUpdate={handleTasksUpdate}
                         />
                     ) : !activeRoom && !activePrivate ? (
                         <div className="empty-chat-placeholder" style={{ 
@@ -3515,6 +3552,15 @@ function Chat() {
                                     setVaultKey={setVaultKey}
                                 />
                             )}
+                            <CommandPalette 
+                                isOpen={isCommandPaletteOpen}
+                                onClose={() => setIsCommandPaletteOpen(false)}
+                                setActiveSidebarTab={setActiveSidebarTab}
+                                setSelectedNexTask={setNextaskBoard}
+                                rooms={customRooms}
+                                activeTab={nextaskActiveTab}
+                                setActiveTab={setNextaskActiveTab}
+                            />
                         </>
                     )}
                 </div>
@@ -3642,7 +3688,7 @@ function Chat() {
             <AddToWorkModal
                 isOpen={!!addToWorkMsg}
                 message={addToWorkMsg}
-                users={workspaceUsers}
+                users={nextaskUsers}
                 myUsername={username}
                 isPrivateChat={!!activePrivate}
                 activeChatId={activePrivate ? activePrivate : activeRoom}

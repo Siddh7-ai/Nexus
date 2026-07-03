@@ -5,7 +5,43 @@ const Room = require("../models/Room");
 const User = require("../models/User");
 const { authenticateToken } = require("./userRoutes");
 
-// In-Memory Rate Limiting for Workspace Bot
+const triggerTaskWebhook = async (action, task) => {
+    if (!task.room_id) return;
+    try {
+        const room = await Room.findById(task.room_id);
+        if (!room || !room.webhooks || room.webhooks.length === 0) return;
+
+        const payload = {
+            event: `task.${action}`,
+            timestamp: new Date().toISOString(),
+            task: {
+                id: task._id,
+                title: task.title,
+                description: task.description,
+                type: task.type,
+                status: task.status,
+                priority: task.priority,
+                assignees: task.assignees,
+                due_date: task.due_date,
+                created_by: task.created_by,
+                room_id: task.room_id
+            }
+        };
+
+        for (const url of room.webhooks) {
+            console.log(`[Webhook Trigger] Sending ${payload.event} event payload to: ${url}`);
+            fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            }).catch(e => console.error(`[Webhook Trigger] Error sending to ${url}:`, e.message));
+        }
+    } catch (err) {
+        console.error("[Webhook Trigger] Failed to trigger webhooks:", err);
+    }
+};
+
+// In-Memory Rate Limiting for NexTask Bot
 const botRateLimits = new Map(); // username -> { count, resetTime }
 
 const checkBotRateLimit = (username) => {
@@ -50,7 +86,7 @@ router.get("/rooms", authenticateToken, async (req, res) => {
         .populate("members", "username displayName avatar");
         res.json(rooms);
     } catch (err) {
-        console.error("Error fetching rooms for workspace switcher:", err);
+        console.error("Error fetching rooms for nextask switcher:", err);
         res.status(500).json({ message: "Server error fetching rooms" });
     }
 });
@@ -114,7 +150,7 @@ router.get("/tasks", authenticateToken, async (req, res) => {
             totalTasks
         });
     } catch (err) {
-        console.error("Error fetching workspace tasks:", err);
+        console.error("Error fetching nextask tasks:", err);
         res.status(500).json({ message: "Server error fetching tasks" });
     }
 });
@@ -174,7 +210,21 @@ router.post("/tasks", authenticateToken, async (req, res) => {
 
             if (isAdmin) {
                 // Admin user can create "task" or "issue", and assign to any room member/admin
-                if (taskData.assignee_id) {
+                if (taskData.assignees && taskData.assignees.length > 0) {
+                    // Check all assignees
+                    for (const aName of taskData.assignees) {
+                        const assigneeUser = await User.findOne({ username: aName });
+                        if (!assigneeUser) {
+                            return res.status(400).json({ message: `Assignee @${aName} not found` });
+                        }
+                        const isAssigneeMember = room.admin._id.toString() === assigneeUser._id.toString() ||
+                                                 room.members.some(mId => mId.toString() === assigneeUser._id.toString());
+                        if (!isAssigneeMember) {
+                            return res.status(400).json({ message: `Assignee @${aName} is not a member of this room.` });
+                        }
+                    }
+                    taskData.assignee_id = taskData.assignees[0];
+                } else if (taskData.assignee_id) {
                     const assigneeUser = await User.findOne({ username: taskData.assignee_id });
                     if (!assigneeUser) {
                         return res.status(400).json({ message: "Assignee user not found" });
@@ -184,8 +234,10 @@ router.post("/tasks", authenticateToken, async (req, res) => {
                     if (!isAssigneeMember) {
                         return res.status(400).json({ message: "Assignee is not a member of this room." });
                     }
+                    taskData.assignees = [taskData.assignee_id];
                 } else {
                     taskData.assignee_id = username;
+                    taskData.assignees = [username];
                 }
             } else {
                 // Non-admin Room member
@@ -196,24 +248,39 @@ router.post("/tasks", authenticateToken, async (req, res) => {
                 taskData.type = "issue";
                 // Assignee forced to Room admin username
                 taskData.assignee_id = room.admin.username;
+                taskData.assignees = [room.admin.username];
                 // reported_by is set to the requester's username
                 taskData.reported_by = username;
             }
         } else {
-            // Personal workspace task
+            // Personal nextask task
             taskData.room_id = null;
-            if (taskData.assignee_id) {
+            if (taskData.assignees && taskData.assignees.length > 0) {
+                // For personal task, just check if assignee users exist
+                for (const aName of taskData.assignees) {
+                    const assigneeUser = await User.findOne({ username: aName });
+                    if (!assigneeUser) {
+                        // fallback or skip
+                    }
+                }
+                taskData.assignee_id = taskData.assignees[0];
+            } else if (taskData.assignee_id) {
                 const assigneeUser = await User.findOne({ username: taskData.assignee_id });
                 if (!assigneeUser) {
                     taskData.assignee_id = username;
                 }
+                taskData.assignees = [taskData.assignee_id];
             } else {
                 taskData.assignee_id = username;
+                taskData.assignees = [username];
             }
         }
 
         const task = new Task(taskData);
         await task.save();
+
+        // Trigger webhook notifications
+        triggerTaskWebhook("create", task);
 
         // Trigger socket notification to assignee
         notifyAssignee(req, task);
@@ -225,7 +292,7 @@ router.post("/tasks", authenticateToken, async (req, res) => {
     }
 });
 
-// 4. Update a task (Restricted based on workspace roles)
+// 4. Update a task (Restricted based on nextask roles)
 router.put("/tasks/:id", authenticateToken, async (req, res) => {
     try {
         const username = req.user.username;
@@ -236,6 +303,42 @@ router.put("/tasks/:id", authenticateToken, async (req, res) => {
 
         const oldAssignee = task.assignee_id;
         let isRoomAdmin = false;
+
+        // Perform Cross-Board transfer validation if room_id is changing
+        if (req.body.room_id !== undefined && req.body.room_id !== (task.room_id ? task.room_id.toString() : null)) {
+            const newRoomId = req.body.room_id;
+            if (newRoomId) {
+                // Verify user is a member of target room
+                const targetRoom = await Room.findById(newRoomId);
+                if (!targetRoom) {
+                    return res.status(404).json({ message: "Target room not found" });
+                }
+                const isMemberOfTarget = targetRoom.admin.toString() === req.user.userId ||
+                                         targetRoom.members.some(mId => mId.toString() === req.user.userId);
+                if (!isMemberOfTarget) {
+                    return res.status(403).json({ message: "Access denied. You are not a member of the target room." });
+                }
+
+                // Verify that all current/new assignees are members of the target room
+                const assigneesToCheck = req.body.assignees || task.assignees || (task.assignee_id ? [task.assignee_id] : []);
+                for (const aName of assigneesToCheck) {
+                    const assigneeUser = await User.findOne({ username: aName });
+                    if (!assigneeUser) {
+                        return res.status(400).json({ message: `Assignee @${aName} not found` });
+                    }
+                    const isAssigneeMemberOfTarget = targetRoom.admin.toString() === assigneeUser._id.toString() ||
+                                                     targetRoom.members.some(mId => mId.toString() === assigneeUser._id.toString());
+                    if (!isAssigneeMemberOfTarget) {
+                        return res.status(400).json({ message: `Assignee @${aName} is not a member of the target room. Please assign to members of the target room first.` });
+                    }
+                }
+                task.room_id = newRoomId;
+                task.visibility = "room"; // Force room visibility
+            } else {
+                task.room_id = null;
+                task.visibility = "nextask"; // Reset to personal visibility
+            }
+        }
 
         if (task.room_id) {
             const room = await Room.findById(task.room_id).populate("admin");
@@ -248,13 +351,13 @@ router.put("/tasks/:id", authenticateToken, async (req, res) => {
                 return res.status(403).json({ message: "Access denied. You are not a member of this room." });
             }
 
-            if (!isRoomAdmin && task.assignee_id === username) {
+            if (!isRoomAdmin && (task.assignees.includes(username) || task.assignee_id === username)) {
                 // Room member assignee can update status and checklist
                 if (req.body.status !== undefined) task.status = req.body.status;
                 if (req.body.checklist !== undefined) task.checklist = req.body.checklist;
             } else if (isRoomAdmin) {
                 // Room admin gets full update permissions
-                const fields = ["title", "description", "status", "priority", "due_date", "start_date", "assignee_id", "severity", "visibility", "type", "checklist"];
+                const fields = ["title", "description", "status", "priority", "due_date", "start_date", "assignee_id", "assignees", "encryptedPayload", "severity", "visibility", "type", "checklist"];
                 fields.forEach(field => {
                     if (req.body[field] !== undefined) {
                         task[field] = req.body[field];
@@ -264,16 +367,16 @@ router.put("/tasks/:id", authenticateToken, async (req, res) => {
                 return res.status(403).json({ message: "Access denied. Unauthorized to update this task." });
             }
         } else {
-            // Personal workspace task
+            // Personal nextask task
             const isCreator = task.created_by === username;
-            const isAssignee = task.assignee_id === username;
+            const isAssignee = task.assignees.includes(username) || task.assignee_id === username;
 
             if (!isCreator && !isAssignee) {
                 return res.status(403).json({ message: "Access denied. Unauthorized to update this task." });
             }
 
             if (isCreator) {
-                const fields = ["title", "description", "status", "priority", "due_date", "start_date", "assignee_id", "severity", "visibility", "type", "checklist"];
+                const fields = ["title", "description", "status", "priority", "due_date", "start_date", "assignee_id", "assignees", "encryptedPayload", "severity", "visibility", "type", "checklist"];
                 fields.forEach(field => {
                     if (req.body[field] !== undefined) {
                         task[field] = req.body[field];
@@ -285,7 +388,19 @@ router.put("/tasks/:id", authenticateToken, async (req, res) => {
             }
         }
 
+        // Keep assignee_id and assignees array in sync
+        if (req.body.assignees !== undefined) {
+            task.assignees = req.body.assignees;
+            task.assignee_id = req.body.assignees[0] || "";
+        } else if (req.body.assignee_id !== undefined) {
+            task.assignee_id = req.body.assignee_id;
+            task.assignees = [req.body.assignee_id];
+        }
+
         await task.save();
+
+        // Trigger webhook notifications
+        triggerTaskWebhook("update", task);
 
         // Emit assignment notification if assignee changed
         if (task.assignee_id !== oldAssignee) {
@@ -324,6 +439,9 @@ router.delete("/tasks/:id", authenticateToken, async (req, res) => {
             }
         }
 
+        // Trigger webhook notifications
+        triggerTaskWebhook("delete", task);
+
         await Task.deleteOne({ _id: task._id });
         res.json({ message: "Task deleted successfully" });
     } catch (err) {
@@ -357,7 +475,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
     const lowerPrompt = cleanPrompt.toLowerCase();
 
     try {
-        // Fetch all active workspace tasks for context
+        // Fetch all active nextask tasks for context
         let query = {};
         if (room_id && room_id !== "personal") {
             query.room_id = room_id;
@@ -377,13 +495,13 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
         const helpRequests = ["who are you", "what can you do", "help", "how do you work", "commands"];
         const isHelpRequest = helpRequests.some(h => lowerPrompt.includes(h));
 
-        // Workspace keywords to check query context
-        const workspaceKeywords = [
+        // NexTask keywords to check query context
+        const nextaskKeywords = [
             "task", "issue", "bug", "ticket", "work", "assignee", "assign", "priority", 
             "sla", "status", "summary", "create", "add", "open", "resolve", "complete", 
-            "todo", "progress", "member", "room", "workspace", "severity", "due", "overdue", "list"
+            "todo", "progress", "member", "room", "nextask", "severity", "due", "overdue", "list"
         ];
-        const isWorkspaceQuery = workspaceKeywords.some(kw => lowerPrompt.includes(kw));
+        const isNexTaskQuery = nextaskKeywords.some(kw => lowerPrompt.includes(kw));
 
         // A helper to detect creation intent
         const isCreationIntent = /(?:create|add|open|new|make|register)\s+(?:task|issue|bug|ticket)/i.test(lowerPrompt) ||
@@ -392,22 +510,22 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
         // Local Fallback Parser function
         const runFallbackParser = async () => {
             // Check for Escape Guard
-            if (!isGreeting && !isHelpRequest && !isWorkspaceQuery && !isCreationIntent) {
-                return { reply: "I'm not made for this. I can only do workspace-related work." };
+            if (!isGreeting && !isHelpRequest && !isNexTaskQuery && !isCreationIntent) {
+                return { reply: "I'm not made for this. I can only do nextask-related work." };
             }
 
             if (isGreeting) {
-                return { reply: "🤖 **Workspace AI Assistant:** Hello! How can I help you manage your tasks or issues in your workspace today?" };
+                return { reply: "🤖 **NexTask AI Assistant:** Hello! How can I help you manage your tasks or issues in your nextask today?" };
             }
 
             if (isHelpRequest) {
-                let helpText = "🤖 **Workspace AI Assistant:** I am your dedicated workspace assistant. I can help you create, list, and summarize tasks and issues.\n\n";
-                helpText += "**Available workspace actions:**\n";
+                let helpText = "🤖 **NexTask AI Assistant:** I am your dedicated nextask assistant. I can help you create, list, and summarize tasks and issues.\n\n";
+                helpText += "**Available nextask actions:**\n";
                 helpText += "*   **Create items:** 'Create a critical task for Rahul due tomorrow' or 'Open a high severity issue for Siddh'\n";
                 helpText += "*   **List items:** 'Show my tasks', 'What is Siddh working on?', or 'List all open issues'\n";
-                helpText += "*   **Summarize workspace status:** 'Workspace summary' or 'How many tasks do we have?'\n";
+                helpText += "*   **Summarize nextask status:** 'NexTask summary' or 'How many tasks do we have?'\n";
                 helpText += "*   **Track breached SLAs:** 'Show breached issues'\n\n";
-                helpText += "*Note: I can only answer workspace-related queries. Other topics are outside my scope.*";
+                helpText += "*Note: I can only answer nextask-related queries. Other topics are outside my scope.*";
                 return { reply: helpText };
             }
 
@@ -476,7 +594,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                     }
                 }
 
-                // Scoping & validation for Room Workspaces
+                // Scoping & validation for Room NexTasks
                 let targetRoomId = room_id || null;
                 if (targetRoomId && targetRoomId !== "personal") {
                     const room = await Room.findById(targetRoomId).populate("admin");
@@ -525,6 +643,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                     title: title || "New Task from AI Bot",
                     description: `Automatically parsed from user command: "${cleanPrompt}"${isTranscribedText ? " (Transcribed from Voice Note)" : ""}`,
                     type,
+                    assignees: [assignee],
                     assignee_id: assignee,
                     priority,
                     severity,
@@ -538,9 +657,9 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 await task.save();
                 notifyAssignee(req, task);
 
-                let reply = `🤖 **Workspace Bot:** I've parsed your request and created a new **${type}**:\n\n`;
+                let reply = `🤖 **NexTask Bot:** I've parsed your request and created a new **${type}**:\n\n`;
                 reply += `*   **Title:** ${task.title}\n`;
-                reply += `*   **Assignee:** ${task.assignee_id}\n`;
+                reply += `*   **Assignees:** ${task.assignees.join(", ")}\n`;
                 reply += `*   **Priority:** ${task.priority}\n`;
                 if (dueDate) reply += `*   **Due Date:** ${dueDate.toLocaleDateString()}\n`;
                 if (type === "issue") reply += `*   **Severity:** ${task.severity}\n`;
@@ -560,10 +679,10 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 });
 
                 if (breached.length === 0) {
-                    return { reply: "🤖 **Workspace AI Assistant:** There are no breached support issues in the active workspace. Good job!" };
+                    return { reply: "🤖 **NexTask AI Assistant:** There are no breached support issues in the active nextask. Good job!" };
                 }
 
-                let reply = `🤖 **Workspace AI Assistant:** Found **${breached.length}** breached issues in this workspace:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Found **${breached.length}** breached issues in this nextask:\n\n`;
                 breached.forEach((t, i) => {
                     const hours = Math.round((Date.now() - new Date(t.createdAt).getTime()) / (1000 * 60 * 60));
                     reply += `${i + 1}. **${t.title}** (Assigned to: @${t.assignee_id}) — Opened ${hours} hours ago (Breached SLA)\n`;
@@ -588,10 +707,10 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 const assigneeLabel = mentionedUser.toLowerCase() === username.toLowerCase() ? "you" : `@${mentionedUser}`;
                 
                 if (userTasks.length === 0) {
-                    return { reply: `🤖 **Workspace AI Assistant:** There are no active tasks assigned to ${assigneeLabel} in this workspace.` };
+                    return { reply: `🤖 **NexTask AI Assistant:** There are no active tasks assigned to ${assigneeLabel} in this nextask.` };
                 }
 
-                let reply = `🤖 **Workspace AI Assistant:** Here are the active items assigned to ${assigneeLabel} in this workspace:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Here are the active items assigned to ${assigneeLabel} in this nextask:\n\n`;
                 userTasks.forEach((t, i) => {
                     reply += `*   **${t.title}** (Type: ${t.type}, Priority: ${t.priority}, Status: ${t.status})\n`;
                 });
@@ -607,7 +726,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 const criticalCount = tasks.filter(t => t.priority === "critical" && t.status !== "completed" && t.status !== "resolved").length;
                 const issuesCount = tasks.filter(t => t.type === "issue" && t.status !== "resolved").length;
 
-                let reply = `🤖 **Workspace AI Assistant:** Here is the status summary for this workspace:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Here is the status summary for this nextask:\n\n`;
                 reply += `*   **Total Items:** ${total}\n`;
                 reply += `*   **Open Tasks (To Do):** ${open}\n`;
                 reply += `*   **In Progress / Investigating:** ${inProgress}\n`;
@@ -626,10 +745,10 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
             if (lowerPrompt.includes("critical") || lowerPrompt.includes("high priority")) {
                 const critTasks = tasks.filter(t => (t.priority === "critical" || t.priority === "high") && t.status !== "completed" && t.status !== "resolved");
                 if (critTasks.length === 0) {
-                    return { reply: "🤖 **Workspace AI Assistant:** There are no unresolved critical or high priority items in this workspace." };
+                    return { reply: "🤖 **NexTask AI Assistant:** There are no unresolved critical or high priority items in this nextask." };
                 }
 
-                let reply = `🤖 **Workspace AI Assistant:** Found **${critTasks.length}** unresolved high priority / critical items:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Found **${critTasks.length}** unresolved high priority / critical items:\n\n`;
                 critTasks.forEach((t, i) => {
                     reply += `${i + 1}. **${t.title}** (Priority: ${t.priority}, Assigned to: @${t.assignee_id})\n`;
                 });
@@ -640,9 +759,9 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
             if (lowerPrompt.includes("my tasks") || lowerPrompt.includes("what are my") || lowerPrompt.includes("show my") || lowerPrompt.includes("assigned to me")) {
                 const myActiveTasks = tasks.filter(t => t.assignee_id === username && t.status !== "completed" && t.status !== "resolved");
                 if (myActiveTasks.length === 0) {
-                    return { reply: "🤖 **Workspace AI Assistant:** You have no pending tasks assigned in this workspace!" };
+                    return { reply: "🤖 **NexTask AI Assistant:** You have no pending tasks assigned in this nextask!" };
                 }
-                let reply = `🤖 **Workspace AI Assistant:** Here are your active tasks:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Here are your active tasks:\n\n`;
                 myActiveTasks.forEach((t, i) => {
                     reply += `*   **${t.title}** (Priority: ${t.priority}, Type: ${t.type})\n`;
                 });
@@ -653,9 +772,9 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
             if (lowerPrompt.includes("tasks") || lowerPrompt.includes("issues") || lowerPrompt.includes("items") || lowerPrompt.includes("list")) {
                 const active = tasks.filter(t => t.status !== "completed" && t.status !== "resolved");
                 if (active.length === 0) {
-                    return { reply: "🤖 **Workspace AI Assistant:** There are no active tasks or issues in this workspace." };
+                    return { reply: "🤖 **NexTask AI Assistant:** There are no active tasks or issues in this nextask." };
                 }
-                let reply = `🤖 **Workspace AI Assistant:** Here are all active items in this workspace:\n\n`;
+                let reply = `🤖 **NexTask AI Assistant:** Here are all active items in this nextask:\n\n`;
                 active.forEach((t, i) => {
                     reply += `*   **${t.title}** (Assigned to: @${t.assignee_id}, Type: ${t.type}, Status: ${t.status})\n`;
                 });
@@ -663,14 +782,14 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
             }
 
             // G. Keyword Search Fallback
-            const searchTerms = lowerPrompt.split(/\s+/).filter(word => word.length > 3 && !workspaceKeywords.includes(word));
+            const searchTerms = lowerPrompt.split(/\s+/).filter(word => word.length > 3 && !nextaskKeywords.includes(word));
             if (searchTerms.length > 0) {
                 const matches = tasks.filter(t => {
                     return searchTerms.some(term => t.title.toLowerCase().includes(term) || (t.description && t.description.toLowerCase().includes(term)));
                 });
 
                 if (matches.length > 0) {
-                    let reply = `🤖 **Workspace AI Assistant:** I found **${matches.length}** items matching your query:\n\n`;
+                    let reply = `🤖 **NexTask AI Assistant:** I found **${matches.length}** items matching your query:\n\n`;
                     matches.forEach((t, i) => {
                         reply += `*   **${t.title}** (Assigned to: @${t.assignee_id}, Status: ${t.status})\n`;
                     });
@@ -678,7 +797,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 }
             }
 
-            return { reply: "🤖 **Workspace AI Assistant:** I'm not sure how to answer that specific question, but I can help you list tasks, show a summary, or create new items! Try asking: 'Show my tasks' or 'Workspace summary'." };
+            return { reply: "🤖 **NexTask AI Assistant:** I'm not sure how to answer that specific question, but I can help you list tasks, show a summary, or create new items! Try asking: 'Show my tasks' or 'NexTask summary'." };
         };
 
         // If API Key is present, run Claude messages integration
@@ -687,14 +806,14 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 return `- Title: "${t.title}", Type: "${t.type}", Assignee: "${t.assignee_id}", Priority: "${t.priority}", Status: "${t.status}", Due Date: "${t.due_date ? new Date(t.due_date).toLocaleDateString() : 'N/A'}", Severity: "${t.severity || 'N/A'}", Created By: "${t.created_by}"`;
             }).join("\n");
 
-            const systemInstruction = `You are a dedicated Workspace AI Assistant. You can create tasks and issues, answer questions about the current workspace tasks, and list them.
+            const systemInstruction = `You are a dedicated NexTask AI Assistant. You can create tasks and issues, answer questions about the current nextask tasks, and list them.
 
-Here are all active tasks and issues in this workspace:
+Here are all active tasks and issues in this nextask:
 ${activeTasksSummary}
 
 Your constraints:
-1. ONLY assist with workspace-related work (creating, listing, detailing, and summarizing tasks or issues).
-2. If the user asks anything unrelated to the workspace (e.g. general knowledge, writing code, jokes, other topics), you MUST strictly reply with EXACTLY: "I'm not made for this. I can only do workspace-related work."
+1. ONLY assist with nextask-related work (creating, listing, detailing, and summarizing tasks or issues).
+2. If the user asks anything unrelated to the nextask (e.g. general knowledge, writing code, jokes, other topics), you MUST strictly reply with EXACTLY: "I'm not made for this. I can only do nextask-related work."
 3. You have a tool called "create_task" which you can invoke to create items when the user asks you to create/open/add a task or issue.`;
 
             const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
@@ -712,7 +831,7 @@ Your constraints:
                     messages: [{ role: "user", content: prompt }],
                     tools: [{
                         name: "create_task",
-                        description: "Creates a new task or issue in the workspace.",
+                        description: "Creates a new task or issue in the nextask.",
                         input_schema: {
                             type: "object",
                             properties: {
@@ -720,7 +839,11 @@ Your constraints:
                                 description: { type: "string", description: "Description or detail of the task" },
                                 type: { type: "string", enum: ["task", "issue"], description: "Type of item" },
                                 due_date: { type: "string", description: "Due date in YYYY-MM-DD format" },
-                                assignee: { type: "string", description: "Username of assignee (defaults to self if not specified)" },
+                                assignees: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                    description: "Usernames of assignees (defaults to self if not specified)"
+                                },
                                 priority: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Priority level" },
                                 severity: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Severity of issue (required if type is issue)" },
                                 reported_by: { type: "string", description: "Reporter username (for issue)" }
@@ -734,16 +857,16 @@ Your constraints:
             if (response.ok) {
                 const data = await response.json();
                 
-                // Check if user is asking non-workspace queries and Claude returns non-workspace answer (guard against Claude escaping instructions)
+                // Check if user is asking non-nextask queries and Claude returns non-nextask answer (guard against Claude escaping instructions)
                 const textRes = data.content.find(c => c.type === "text");
                 const replyText = textRes ? textRes.text : "";
                 
                 // Run a validation checklist on Claude text response
                 const lowerReply = replyText.toLowerCase();
-                const isNonWorkspaceReply = !workspaceKeywords.some(kw => lowerReply.includes(kw)) && 
-                                            !lowerPrompt.split(/\s+/).some(w => workspaceKeywords.includes(w.toLowerCase()));
-                if (isNonWorkspaceReply && lowerPrompt !== "hello" && lowerPrompt !== "hi") {
-                    return res.json({ reply: "I'm not made for this. I can only do workspace-related work." });
+                const isNonNexTaskReply = !nextaskKeywords.some(kw => lowerReply.includes(kw)) && 
+                                            !lowerPrompt.split(/\s+/).some(w => nextaskKeywords.includes(w.toLowerCase()));
+                if (isNonNexTaskReply && lowerPrompt !== "hello" && lowerPrompt !== "hi") {
+                    return res.json({ reply: "I'm not made for this. I can only do nextask-related work." });
                 }
 
                 const toolCall = data.content.find(c => c.type === "tool_use");
@@ -756,7 +879,7 @@ Your constraints:
                     let targetRoomId = room_id || null;
 
                     if (targetRoomId && targetRoomId !== "personal") {
-                        const room = await Room.findById(targetRoomId).populate("admin");
+                        const room = await Room.findById(targetRoomId).populate("admin", "username").populate("members", "username");
                         if (!room) {
                             return res.status(404).json({ message: "Room not found" });
                         }
@@ -765,40 +888,50 @@ Your constraints:
                         if (!isMember) {
                             return res.status(403).json({ message: "Access denied. You are not a member of this room." });
                         }
-
-                        if (isAdmin) {
-                            if (args.assignee) {
-                                const targetUser = await User.findOne({ username: new RegExp(`^${args.assignee}$`, "i") });
-                                if (targetUser) {
-                                    const isAssigneeMember = room.admin._id.toString() === targetUser._id.toString() ||
-                                                             room.members.some(mId => mId.toString() === targetUser._id.toString());
-                                    if (isAssigneeMember) {
-                                        targetAssignee = targetUser.username;
-                                    } else {
-                                        targetAssignee = room.admin.username;
+                        if (room && room.isNexTaskMode) {
+                            if (args.assignees && args.assignees.length > 0) {
+                                targetAssignees = [];
+                                for (const assignee of args.assignees) {
+                                    const targetUser = await User.findOne({ username: new RegExp(`^${assignee}$`, "i") });
+                                    if (targetUser) {
+                                        const isAssigneeMember = room.admin._id.toString() === targetUser._id.toString() ||
+                                                                 room.members.some(m => m._id.toString() === targetUser._id.toString());
+                                        if (isAssigneeMember) {
+                                            targetAssignees.push(targetUser.username);
+                                        }
                                     }
-                                } else {
-                                    targetAssignee = room.admin.username;
+                                }
+                                if (targetAssignees.length === 0) {
+                                    targetAssignees = [room.admin.username];
                                 }
                             }
                         } else {
                             targetType = "issue";
-                            targetAssignee = room.admin.username;
+                            targetAssignees = [room.admin.username];
                             targetReportedBy = username;
                         }
                     } else {
                         targetRoomId = null;
-                        if (args.assignee) {
-                            const targetUser = await User.findOne({ username: new RegExp(`^${args.assignee}$`, "i") });
-                            if (targetUser) targetAssignee = targetUser.username;
+                        if (args.assignees && args.assignees.length > 0) {
+                            targetAssignees = [];
+                            for (const assignee of args.assignees) {
+                                const targetUser = await User.findOne({ username: new RegExp(`^${assignee}$`, "i") });
+                                if (targetUser) {
+                                    targetAssignees.push(targetUser.username);
+                                }
+                            }
+                            if (targetAssignees.length === 0) {
+                                targetAssignees = [username];
+                            }
                         }
                     }
 
                     const task = new Task({
                         title: args.title,
-                        description: args.description || "Created via Workspace AI Assistant.",
+                        description: args.description || "Created via NexTask AI Assistant.",
                         type: targetType,
-                        assignee_id: targetAssignee,
+                        assignees: targetAssignees,
+                        assignee_id: targetAssignees[0],
                         priority: args.priority || "medium",
                         severity: args.severity || "medium",
                         status: "open",
@@ -811,10 +944,10 @@ Your constraints:
                     await task.save();
                     notifyAssignee(req, task);
 
-                    let reply = `🤖 **Workspace Bot:** I've invoked my tool to successfully create the following workspace item:\n\n`;
+                    let reply = `🤖 **NexTask Bot:** I've invoked my tool to successfully create the following nextask item:\n\n`;
                     reply += `*   **Title:** ${task.title}\n`;
                     reply += `*   **Type:** ${task.type}\n`;
-                    reply += `*   **Assignee:** ${task.assignee_id}\n`;
+                    reply += `*   **Assignees:** ${task.assignees.join(", ")}\n`;
                     reply += `*   **Priority:** ${task.priority}\n`;
                     if (task.due_date) reply += `*   **Due Date:** ${task.due_date.toLocaleDateString()}\n`;
                     
@@ -833,7 +966,94 @@ Your constraints:
         }
     } catch (err) {
         console.error("Bot chat failed:", err);
-        return res.status(500).json({ message: "Workspace Bot service error" });
+        return res.status(500).json({ message: "NexTask Bot service error" });
+    }
+});
+
+// SLA Configuration Endpoint
+router.put("/rooms/:id/sla", authenticateToken, async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) {
+            return res.status(404).json({ message: "Room not found" });
+        }
+        if (room.admin.toString() !== req.user.userId) {
+            return res.status(403).json({ message: "Only the room admin can configure SLA." });
+        }
+        const { slaThreshold } = req.body;
+        if (typeof slaThreshold !== "number" || slaThreshold < 1) {
+            return res.status(400).json({ message: "Invalid SLA threshold." });
+        }
+        room.slaThreshold = slaThreshold;
+        await room.save();
+        res.json({ message: "SLA threshold updated successfully.", slaThreshold });
+    } catch (err) {
+        console.error("Error updating SLA threshold:", err);
+        res.status(500).json({ message: "Server error updating SLA threshold" });
+    }
+});
+
+// Webhook URLs Endpoint
+router.get("/rooms/:id/webhooks", authenticateToken, async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) {
+            return res.status(404).json({ message: "Room not found" });
+        }
+        const isMember = room.admin.toString() === req.user.userId ||
+                         room.members.some(mId => mId.toString() === req.user.userId);
+        if (!isMember) {
+            return res.status(403).json({ message: "Access denied." });
+        }
+        res.json({ webhooks: room.webhooks || [] });
+    } catch (err) {
+        console.error("Error fetching webhooks:", err);
+        res.status(500).json({ message: "Server error fetching webhooks" });
+    }
+});
+
+router.post("/rooms/:id/webhooks", authenticateToken, async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) {
+            return res.status(404).json({ message: "Room not found" });
+        }
+        if (room.admin.toString() !== req.user.userId) {
+            return res.status(403).json({ message: "Only the room admin can configure webhooks." });
+        }
+        const { url } = req.body;
+        if (!url || typeof url !== "string" || !url.startsWith("http")) {
+            return res.status(400).json({ message: "Invalid webhook URL." });
+        }
+        if (!room.webhooks) room.webhooks = [];
+        if (!room.webhooks.includes(url)) {
+            room.webhooks.push(url);
+            await room.save();
+        }
+        res.json({ message: "Webhook URL configured successfully.", webhooks: room.webhooks });
+    } catch (err) {
+        console.error("Error configuring webhook:", err);
+        res.status(500).json({ message: "Server error configuring webhook" });
+    }
+});
+
+router.delete("/rooms/:id/webhooks", authenticateToken, async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) {
+            return res.status(404).json({ message: "Room not found" });
+        }
+        if (room.admin.toString() !== req.user.userId) {
+            return res.status(403).json({ message: "Only the room admin can configure webhooks." });
+        }
+        const { url } = req.body;
+        if (!room.webhooks) room.webhooks = [];
+        room.webhooks = room.webhooks.filter(w => w !== url);
+        await room.save();
+        res.json({ message: "Webhook URL deleted successfully.", webhooks: room.webhooks });
+    } catch (err) {
+        console.error("Error deleting webhook:", err);
+        res.status(500).json({ message: "Server error deleting webhook" });
     }
 });
 

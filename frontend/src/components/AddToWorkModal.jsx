@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FiX, FiAlertTriangle } from "react-icons/fi";
+import { encryptVaultItem, getVaultKeyFromSession } from "../utils/crypto/vault";
 
 export default function AddToWorkModal({ isOpen, message, users, myUsername, isPrivateChat, activeChatId, onClose, onSubmit }) {
     const [form, setForm] = useState({
@@ -8,6 +9,7 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
         type: "task",
         priority: "medium",
         assignee_id: myUsername,
+        assignees: [myUsername],
         due_date: "",
         visibility: isPrivateChat ? "private" : "workspace",
         severity: "medium"
@@ -21,6 +23,7 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
                 type: "task",
                 priority: "medium",
                 assignee_id: myUsername,
+                assignees: [myUsername],
                 due_date: "",
                 visibility: isPrivateChat ? "private" : "workspace",
                 severity: "medium"
@@ -30,14 +33,40 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
 
     if (!isOpen || !message) return null;
 
-    const handleSubmitForm = (e) => {
+    const handleSubmitForm = async (e) => {
         e.preventDefault();
+        
+        let encryptedPayload = null;
+        let finalTitle = form.title;
+        let finalDescription = form.description;
+
+        if (isPrivateChat) {
+            try {
+                const vaultKey = await getVaultKeyFromSession(activeChatId);
+                if (vaultKey) {
+                    const encrypted = await encryptVaultItem({
+                        title: form.title,
+                        description: form.description
+                    }, vaultKey);
+                    encryptedPayload = encrypted;
+                    finalTitle = "🔒 Encrypted Task";
+                    finalDescription = "🔒 Encrypted Description";
+                } else {
+                    console.warn("Vault key not found for private chat, falling back to plaintext");
+                }
+            } catch (err) {
+                console.error("Failed to encrypt task payload:", err);
+            }
+        }
+
         onSubmit({
-            title: form.title,
-            description: form.description,
+            title: finalTitle,
+            description: finalDescription,
             type: form.type,
             priority: form.priority,
             assignee_id: form.assignee_id,
+            assignees: form.assignees,
+            encryptedPayload,
             due_date: form.due_date || null,
             visibility: form.visibility,
             severity: form.type === "issue" ? form.severity : null,
@@ -64,7 +93,7 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
                         <div className="e2ee-disclosure-box">
                             <FiAlertTriangle className="e2ee-disclosure-icon" size={16} />
                             <span>
-                                This text will be saved outside the encrypted chat and visible to @{form.assignee_id || myUsername}.
+                                This task will be client-side encrypted and securely stored in the database.
                             </span>
                         </div>
                     )}
@@ -103,16 +132,43 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
                     </div>
 
                     <div className="form-group">
-                        <label>Assignee</label>
-                        <select
-                            className="form-control"
-                            value={form.assignee_id}
-                            onChange={(e) => setForm(prev => ({ ...prev, assignee_id: e.target.value }))}
-                        >
-                            {users.map(u => (
-                                <option key={u.username} value={u.username}>@{u.username}</option>
-                            ))}
-                        </select>
+                        <label>Assignees</label>
+                        <div className="multi-select-checkboxes" style={{
+                            maxHeight: '120px',
+                            overflowY: 'auto',
+                            border: '1px solid var(--border)',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            background: 'var(--panel)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px'
+                        }}>
+                            {users.map(u => {
+                                const isChecked = form.assignees.includes(u.username);
+                                return (
+                                    <label key={u.username} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                                setForm(prev => {
+                                                    const updated = isChecked
+                                                        ? prev.assignees.filter(name => name !== u.username)
+                                                        : [...prev.assignees, u.username];
+                                                    return {
+                                                        ...prev,
+                                                        assignees: updated,
+                                                        assignee_id: updated[0] || ""
+                                                    };
+                                                });
+                                            }}
+                                        />
+                                        @{u.username}
+                                    </label>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     <div className="form-group">
