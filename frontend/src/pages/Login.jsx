@@ -5,7 +5,7 @@ import { getBackendUrl } from "../utils/config";
 import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
-import { FiArrowLeft } from "react-icons/fi";
+import { FiArrowLeft, FiEye, FiEyeOff } from "react-icons/fi";
 import { 
   deriveKeysFromPassword, 
   setMasterKey, 
@@ -30,8 +30,12 @@ function GoogleLogo() {
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
 
   const navigate = useNavigate();
 
@@ -44,8 +48,15 @@ function Login() {
   }
 
   async function handleLogin() {
+    setErrorMsg("");
+
     if (!email || !password) {
-      alert("Please fill in all fields");
+      setErrorMsg("Please fill in all fields.");
+      return;
+    }
+
+    if (failedAttempts >= 3 && !captchaVerified) {
+      setErrorMsg("Please verify that you are not a robot.");
       return;
     }
 
@@ -65,8 +76,10 @@ function Login() {
 
       if (response.ok) {
         sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem("refreshToken", data.refreshToken);
         sessionStorage.setItem("username", data.username);
         localStorage.setItem("token", data.token);
+        localStorage.setItem("refreshToken", data.refreshToken);
         localStorage.setItem("username", data.username);
 
         // 1. Derive the master key from the password
@@ -101,11 +114,12 @@ function Login() {
 
         navigate("/chat");
       } else {
-        alert(data.message);
+        setErrorMsg(data.message || "Invalid email or password.");
+        setFailedAttempts(prev => prev + 1);
       }
     } catch (error) {
       console.log(error);
-      alert("Cannot connect to server");
+      setErrorMsg("Cannot connect to server. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -138,12 +152,26 @@ function Login() {
             <p>Sign in to your account</p>
           </div>
 
+          {errorMsg && (
+            <div style={{
+              background: "rgba(239, 68, 68, 0.15)",
+              color: "#ef4444",
+              padding: "12px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              marginBottom: "16px",
+              fontWeight: 500
+            }}>
+              {errorMsg}
+            </div>
+          )}
+
           <div className="auth-field">
             <label>Email</label>
             <div className="auth-input-wrap">
               <SmoothInput
-                type="email"
-                placeholder="Enter your email"
+                type="text"
+                placeholder="Enter your email or username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -153,18 +181,62 @@ function Login() {
 
           <div className="auth-field">
             <label>Password</label>
-            <div className="auth-input-wrap">
+            <div className="auth-input-wrap" style={{ position: "relative" }}>
               <SmoothInput
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                style={{
+                  position: "absolute",
+                  right: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  color: "var(--muted)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+              </button>
             </div>
           </div>
 
-          <button className="auth-forgot" type="button">Forgot password?</button>
+          {/* CAPTCHA / Bot Protection Checkbox */}
+          {failedAttempts >= 3 && (
+            <div className="captcha-container" style={{
+              margin: "12px 0 16px 0",
+              padding: "10px 12px",
+              background: "var(--soft)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              textAlign: "left"
+            }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "12px", cursor: "pointer", userSelect: "none" }}>
+                <input 
+                  type="checkbox" 
+                  checked={captchaVerified} 
+                  onChange={(e) => setCaptchaVerified(e.target.checked)} 
+                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                />
+                <span>I am not a robot (Bot Protection)</span>
+              </label>
+            </div>
+          )}
+
+          <button className="auth-forgot" type="button" onClick={() => navigate("/forgot-password")}>
+            Forgot password?
+          </button>
 
           <button className="auth-btn" onClick={handleLogin} disabled={loading}>
             {loading ? "Logging in..." : "Login"}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { FiBriefcase, FiMessageSquare, FiPlus, FiFilter, FiSearch, FiClock, FiCornerUpRight, FiUnlock, FiLock, FiAlertTriangle, FiSend, FiX, FiCheck, FiPlay, FiTrash2, FiUser, FiUsers, FiChevronDown, FiGrid, FiHelpCircle } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import "./NexTask.css";
+import logo from "../assets/logo.png";
 import { CustomSelect } from "./CustomSelect";
 import { getVaultKeyFromSession, decryptVaultItem } from "../utils/crypto/vault";
 import EmptyState from "./EmptyState";
@@ -21,6 +22,16 @@ const renderFormattedText = (text) => {
         }
         return part;
     });
+};
+
+const getUserColor = (username) => {
+    if (!username) return "#bff7f2";
+    const colors = ["#bff7f2", "#c8eeff", "#d8f7cf", "#ffe1b8", "#e7dcff"];
+    let colorIndex = 0;
+    for (let i = 0; i < username.length; i++) {
+        colorIndex += username.charCodeAt(i);
+    }
+    return colors[colorIndex % colors.length];
 };
 
 export default function NexTaskPage({ 
@@ -102,13 +113,13 @@ export default function NexTaskPage({
         {
             title: "3. Check Gantt Timeline 🗂️",
             text: "👉 Click on the 'Gantt Timeline' tab above. This lets you view task durations and track due dates on a 14-day schedule.",
-            targetSelector: "#nextask-tab-bar",
+            targetSelector: "#nextask-tab-timeline",
             requiresAction: true
         },
         {
             title: "4. Meet NexTask AI Bot 🤖",
             text: "👉 Click on the 'NexTask AI Bot' tab above. This is your conversational helper.",
-            targetSelector: "#nextask-tab-bar",
+            targetSelector: "#nextask-tab-bot",
             requiresAction: true
         },
         {
@@ -122,6 +133,8 @@ export default function NexTaskPage({
     useEffect(() => {
         const completed = localStorage.getItem("nextask_tour_completed");
         if (!completed) {
+            setActiveTab("board");
+            setIsNexTaskDropdownOpen(false);
             setTourStep(1);
         }
     }, []);
@@ -134,13 +147,19 @@ export default function NexTaskPage({
     }, [isNexTaskDropdownOpen, tourStep]);
 
     useEffect(() => {
-        if (tourStep === 4 && activeTab === "timeline") {
+        if (tourStep === 3 && selectedTask !== null) {
+            setTourStep(4);
+        }
+    }, [selectedTask, tourStep]);
+
+    useEffect(() => {
+        if ((tourStep === 3 || tourStep === 4) && activeTab === "timeline") {
             setTourStep(5);
         }
     }, [activeTab, tourStep]);
 
     useEffect(() => {
-        if (tourStep === 5 && activeTab === "bot") {
+        if ((tourStep === 4 || tourStep === 5) && activeTab === "bot") {
             setTourStep(6);
         }
     }, [activeTab, tourStep]);
@@ -170,6 +189,8 @@ export default function NexTaskPage({
     }, [tourStep]);
 
     const startTour = () => {
+        setActiveTab("board");
+        setIsNexTaskDropdownOpen(false);
         setTourStep(1);
     };
 
@@ -183,7 +204,16 @@ export default function NexTaskPage({
 
     const handlePrevTourStep = () => {
         if (tourStep > 1) {
-            setTourStep(prev => prev - 1);
+            const prevStep = tourStep - 1;
+            // Reset relevant UI states when navigating backward to prevent auto-forward progression loops
+            if (prevStep === 2) {
+                setIsNexTaskDropdownOpen(false);
+            } else if (prevStep === 4) {
+                setActiveTab("board");
+            } else if (prevStep === 5) {
+                setActiveTab("timeline");
+            }
+            setTourStep(prevStep);
         }
     };
 
@@ -288,6 +318,10 @@ export default function NexTaskPage({
     const [botLoading, setBotLoading] = useState(false);
     const messagesEndRef = useRef(null);
     const botChatContainerRef = useRef(null);
+
+    const [undoClearBotInfo, setUndoClearBotInfo] = useState(null);
+    const [showClearBotConfirm, setShowClearBotConfirm] = useState(false);
+    const clearBotTimeoutRef = useRef(null);
 
     // Fetch rooms & users list on mount
     useEffect(() => {
@@ -466,6 +500,10 @@ export default function NexTaskPage({
 
         const currentTask = tasks.find(t => t._id === taskId);
         if (!currentTask) return;
+
+        if (tourStep === 3) {
+            setTourStep(4);
+        }
 
         let targetType = currentTask.type;
         if (targetStatus === "investigating") {
@@ -696,13 +734,44 @@ export default function NexTaskPage({
     };
 
     const handleClearBotHistory = () => {
-        if (window.confirm("Clear all AI bot messages?")) {
-            setBotMessages([
-                {
-                    sender: "bot",
-                    text: "Hello! I am your NexTask AI Assistant. You can ask me to create tasks or issues by typing natural language commands like:\n\n*   `Create high priority task to review frontend PR for Siddh due tomorrow`\n*   `Open critical severity issue Login auth bug for Rahul`"
-                }
-            ]);
+        setShowClearBotConfirm(true);
+    };
+
+    const executeClearBotHistory = () => {
+        const welcomeMessage = [
+            {
+                sender: "bot",
+                text: "Hello! I am your NexTask AI Assistant. You can ask me to create tasks or issues by typing natural language commands like:\n\n*   `Create high priority task to review frontend PR for Siddh due tomorrow`\n*   `Open critical severity issue Login auth bug for Rahul`"
+            }
+        ];
+
+        setUndoClearBotInfo({
+            originalMessages: [...botMessages]
+        });
+        setBotMessages(welcomeMessage);
+        setShowClearBotConfirm(false);
+
+        if (clearBotTimeoutRef.current) {
+            clearTimeout(clearBotTimeoutRef.current);
+        }
+
+        clearBotTimeoutRef.current = setTimeout(() => {
+            localStorage.setItem("nexus_bot_messages", JSON.stringify(welcomeMessage));
+            setUndoClearBotInfo(null);
+            clearBotTimeoutRef.current = null;
+        }, 5000);
+    };
+
+    const executeUndoClearBot = () => {
+        if (clearBotTimeoutRef.current) {
+            clearTimeout(clearBotTimeoutRef.current);
+            clearBotTimeoutRef.current = null;
+        }
+
+        if (undoClearBotInfo) {
+            setBotMessages(undoClearBotInfo.originalMessages);
+            localStorage.setItem("nexus_bot_messages", JSON.stringify(undoClearBotInfo.originalMessages));
+            setUndoClearBotInfo(null);
         }
     };
 
@@ -713,6 +782,7 @@ export default function NexTaskPage({
         <div className="nextask-page-container">
             {/* Nav Header */}
             <div className="nextask-nav-header">
+                <div className="nextask-brand-logo">NexTask.</div>
                 <div id="nextask-board-switcher" className={`custom-select-container ${isNexTaskDropdownOpen ? 'is-open' : ''}`} ref={nextaskDropdownRef} style={{ width: 'auto', minWidth: '220px' }}>
                     <div className="custom-select-trigger" onClick={() => setIsNexTaskDropdownOpen(!isNexTaskDropdownOpen)}>
                         <div className="custom-select-trigger-content">
@@ -754,18 +824,21 @@ export default function NexTaskPage({
                 </div>
                 <div id="nextask-tab-bar" className="nextask-tabs">
                     <button
+                        id="nextask-tab-board"
                         className={`nextask-tab-btn ${activeTab === "board" ? "active" : ""}`}
                         onClick={() => setActiveTab("board")}
                     >
                         <FiBriefcase size={15} /> Task Board
                     </button>
                     <button
+                        id="nextask-tab-timeline"
                         className={`nextask-tab-btn ${activeTab === "timeline" ? "active" : ""}`}
                         onClick={() => setActiveTab("timeline")}
                     >
                         <FiGrid size={15} /> Gantt Timeline
                     </button>
                     <button
+                        id="nextask-tab-bot"
                         className={`nextask-tab-btn ${activeTab === "bot" ? "active" : ""}`}
                         onClick={() => setActiveTab("bot")}
                     >
@@ -1027,7 +1100,7 @@ export default function NexTaskPage({
                                         {filteredList.filter(t => t.type === "task" && t.status === "open").length}
                                     </span>
                                 </div>
-                                <div className="kanban-cards-list">
+                                <div className="kanban-cards-list" style={{ paddingBottom: '30px' }}>
                                     {filteredList.filter(t => t.type === "task" && t.status === "open").length === 0 ? (
                                         <EmptyState title="No Tasks To Do" description="Drag tasks here or click 'New Item' to create a new task." iconType="todo" />
                                     ) : (
@@ -1044,6 +1117,7 @@ export default function NexTaskPage({
                                                 onShareToChat={handleShareToChat}
                                                 onQuickAssign={handleQuickAssign}
                                                 onQuickComplete={handleQuickComplete}
+                                                users={users}
                                             />
                                         ))
                                     )}
@@ -1067,13 +1141,14 @@ export default function NexTaskPage({
                                         {filteredList.filter(t => t.type === "task" && t.status === "in_progress").length}
                                     </span>
                                 </div>
-                                <div className="kanban-cards-list">
+                                <div className="kanban-cards-list" style={{ paddingBottom: '30px' }}>
                                     {filteredList.filter(t => t.type === "task" && t.status === "in_progress").length === 0 ? (
                                         <EmptyState title="No Tasks In Progress" description="Drag tasks here from 'To Do' when you start working on them." iconType="progress" />
                                     ) : (
                                         filteredList.filter(t => t.type === "task" && t.status === "in_progress").map(task => (
                                             <KanbanCard
                                                 key={task._id}
+                                                users={users}
                                                 task={task}
                                                 onDragStart={onDragStart}
                                                 onClick={() => setSelectedTask(task)}
@@ -1107,13 +1182,14 @@ export default function NexTaskPage({
                                         {filteredList.filter(t => t.type === "task" && t.status === "completed").length}
                                     </span>
                                 </div>
-                                <div className="kanban-cards-list">
+                                <div className="kanban-cards-list" style={{ paddingBottom: '30px' }}>
                                     {filteredList.filter(t => t.type === "task" && t.status === "completed").length === 0 ? (
                                         <EmptyState title="No Completed Tasks" description="Move tasks here once they are finished to celebrate completion!" iconType="completed" />
                                     ) : (
                                         filteredList.filter(t => t.type === "task" && t.status === "completed").map(task => (
                                             <KanbanCard
                                                 key={task._id}
+                                                users={users}
                                                 task={task}
                                                 onDragStart={onDragStart}
                                                 onClick={() => setSelectedTask(task)}
@@ -1147,7 +1223,7 @@ export default function NexTaskPage({
                                         {filteredList.filter(t => t.type === "issue" && t.status !== "resolved").length}
                                     </span>
                                 </div>
-                                <div className="kanban-cards-list">
+                                <div className="kanban-cards-list" style={{ paddingBottom: '30px' }}>
                                     {filteredList.filter(t => t.type === "issue").length === 0 ? (
                                         <EmptyState title="No Room Issues" description="No active or resolved bugs. Great job keeping the room healthy!" iconType="issues" />
                                     ) : (
@@ -1167,6 +1243,7 @@ export default function NexTaskPage({
                                                     onShareToChat={handleShareToChat}
                                                     onQuickAssign={handleQuickAssign}
                                                     onQuickComplete={handleQuickComplete}
+                                                    users={users}
                                                 />
                                             ))}
                                             {/* Sub-divider for resolved issues */}
@@ -1195,6 +1272,7 @@ export default function NexTaskPage({
                                                     onShareToChat={handleShareToChat}
                                                     onQuickAssign={handleQuickAssign}
                                                     onQuickComplete={handleQuickComplete}
+                                                    users={users}
                                                 />
                                             ))}
                                         </>
@@ -1209,31 +1287,50 @@ export default function NexTaskPage({
             {/* TAB 2: AI BOT CONVERSATION */}
             {activeTab === "bot" && (
                 <div className="bot-chat-container">
-                    <div className="bot-chat-messages">
-                        {botMessages.map((msg, index) => (
-                            <div key={index} className={`bot-msg-row ${msg.sender}`}>
-                                <div className={`bot-avatar ${msg.sender === "bot" ? "ai" : ""}`}>
-                                    {msg.sender === "bot" ? "🤖" : <FiUser />}
-                                </div>
-                                <div className="bot-msg-bubble">
-                                    {msg.text.split("\n").map((line, lIdx) => {
-                                        if (line.trim().startsWith("*")) {
-                                            const cleanLine = line.replace(/^\*\s*/, "").replace(/`/g, "");
+                    <div className="bot-chat-messages" ref={botChatContainerRef}>
+                        {botMessages.map((msg, index) => {
+                            const isBot = msg.sender === "bot";
+                            const userObj = users.find(u => u.username === myUsername);
+                            const userAvatar = userObj ? userObj.avatar : null;
+                            return (
+                                <div key={index} className={`bot-msg-row ${msg.sender}`}>
+                                    <div 
+                                        className={`bot-avatar ${isBot ? "ai" : ""}`}
+                                        style={!isBot ? { 
+                                            backgroundColor: userAvatar ? "transparent" : getUserColor(myUsername), 
+                                            color: "#23303d", 
+                                            fontWeight: "800", 
+                                            fontSize: "13px" 
+                                        } : {}}
+                                    >
+                                        {isBot ? (
+                                            <img src={logo} alt="Nexus Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }} />
+                                        ) : userAvatar ? (
+                                            <img src={userAvatar} alt={myUsername} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                                        ) : (
+                                            (myUsername || "U").charAt(0).toUpperCase()
+                                        )}
+                                    </div>
+                                    <div className="bot-msg-bubble">
+                                        {msg.text.split("\n").map((line, lIdx) => {
+                                            if (line.trim().startsWith("*")) {
+                                                const cleanLine = line.replace(/^\*\s*/, "").replace(/`/g, "");
+                                                return (
+                                                    <li key={lIdx} style={{ marginLeft: "16px", marginBottom: "4px" }}>
+                                                        {renderFormattedText(cleanLine)}
+                                                    </li>
+                                                );
+                                            }
                                             return (
-                                                <li key={lIdx} style={{ marginLeft: "16px", marginBottom: "4px" }}>
-                                                    {renderFormattedText(cleanLine)}
-                                                </li>
+                                                <p key={lIdx} style={{ margin: "0 0 6px 0" }}>
+                                                    {renderFormattedText(line)}
+                                                </p>
                                             );
-                                        }
-                                        return (
-                                            <p key={lIdx} style={{ margin: "0 0 6px 0" }}>
-                                                {renderFormattedText(line)}
-                                            </p>
-                                        );
-                                    })}
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {botLoading && (
                             <div className="bot-typing-indicator">
                                 <div className="spinner" style={{ width: "12px", height: "12px" }}></div>
@@ -1477,7 +1574,7 @@ export default function NexTaskPage({
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        zIndex: 10000,
+                        zIndex: 20000,
                         pointerEvents: 'none'
                     }}>
                         <div style={{ pointerEvents: 'auto' }} onClick={(e) => e.stopPropagation()}>
@@ -1496,6 +1593,53 @@ export default function NexTaskPage({
                     </div>
                 </>
             )}
+            {/* Clear Bot Chat Confirmation Modal */}
+            {showClearBotConfirm && (
+                <div className="nextask-detail-overlay" onClick={() => setShowClearBotConfirm(false)}>
+                    <div className="nextask-detail-modal" style={{ maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>Clear Bot History</h3>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ margin: 0, fontSize: "14px", opacity: 0.8 }}>
+                                Are you sure you want to clear all your conversational AI bot messages?
+                            </p>
+                        </div>
+                        <div className="modal-footer" style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "15px" }}>
+                            <button 
+                                className="modal-btn cancel" 
+                                onClick={() => setShowClearBotConfirm(false)}
+                                style={{ minHeight: "36px", width: "auto" }}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                className="modal-btn danger" 
+                                onClick={executeClearBotHistory}
+                                style={{ minHeight: "36px", width: "auto", background: "#ef4444", color: "#fff", border: "none" }}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Undo Bot Clear Toast */}
+            {undoClearBotInfo && (
+                <div className="undo-delete-toast" style={{ position: 'fixed', bottom: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 10005 }}>
+                    <span className="undo-delete-toast-text">
+                        &bull; Bot history cleared
+                    </span>
+                    <button 
+                        type="button" 
+                        className="undo-delete-toast-btn" 
+                        onClick={executeUndoClearBot}
+                    >
+                        Undo
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -1513,7 +1657,8 @@ function KanbanCard({
     isRoomNexTask,
     onShareToChat,
     onQuickAssign,
-    onQuickComplete
+    onQuickComplete,
+    users = []
 }) {
     const [isDragging, setIsDragging] = useState(false);
     const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== "completed" && task.status !== "resolved";
@@ -1618,19 +1763,44 @@ function KanbanCard({
                 </div>
 
                 <div className="card-assignees-pile" style={{ display: "flex", alignItems: "center" }}>
-                    {(task.assignees && task.assignees.length > 0 ? task.assignees : (task.assignee_id ? [task.assignee_id] : [])).slice(0, 3).map((aId, aIdx) => (
-                        <div 
-                            key={aId} 
-                            className="card-assignee-avatar" 
-                            title={`Assigned to: @${aId}`}
-                            style={{
-                                marginLeft: aIdx > 0 ? "-8px" : "0",
-                                zIndex: 10 - aIdx
-                            }}
-                        >
-                            {aId.substring(0, 2)}
-                        </div>
-                    ))}
+                    {(task.assignees && task.assignees.length > 0 ? task.assignees : (task.assignee_id ? [task.assignee_id] : [])).slice(0, 3).map((aId, aIdx) => {
+                        const userObj = users.find(u => u.username.toLowerCase() === aId.toLowerCase());
+                        const avatarSrc = userObj ? userObj.avatar : null;
+                        
+                        return (
+                            <div 
+                                key={aId} 
+                                className="card-assignee-avatar" 
+                                title={`Assigned to: @${aId}`}
+                                style={{
+                                    marginLeft: aIdx > 0 ? "-8px" : "0",
+                                    zIndex: 10 - aIdx,
+                                    width: "26px",
+                                    height: "26px",
+                                    borderRadius: "50%",
+                                    overflow: "hidden",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "10px",
+                                    fontWeight: "bold",
+                                    background: avatarSrc ? "transparent" : "var(--accent-soft)",
+                                    color: "var(--accent-deep)",
+                                    border: "1.5px solid var(--border)"
+                                }}
+                            >
+                                {avatarSrc ? (
+                                    <img 
+                                        src={avatarSrc} 
+                                        alt={aId} 
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                                    />
+                                ) : (
+                                    aId.substring(0, 2).toUpperCase()
+                                )}
+                            </div>
+                        );
+                    })}
                     {(task.assignees ? task.assignees.length : (task.assignee_id ? 1 : 0)) > 3 && (
                         <div 
                             className="card-assignee-avatar-more" 
@@ -2367,6 +2537,8 @@ const GanttTimeline = ({ tasks, onTaskClick }) => {
 
 const OnboardingTooltip = ({ step, totalSteps, title, text, targetSelector, requiresAction, onNext, onPrev, onSkip }) => {
     const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
     useEffect(() => {
         if (!targetSelector) {
@@ -2382,11 +2554,30 @@ const OnboardingTooltip = ({ step, totalSteps, title, text, targetSelector, requ
             const el = document.querySelector(targetSelector);
             if (el) {
                 const rect = el.getBoundingClientRect();
-                // Position tooltip below the element
-                setCoords({
-                    top: rect.bottom + window.scrollY + 12,
-                    left: rect.left + window.scrollX + (rect.width / 2) - 160
-                });
+                const tooltipHeight = 180; // approximate height of the tooltip
+                const tooltipWidth = 320;
+                
+                // Position tooltip below the element by default
+                let top = rect.bottom + 12;
+                let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+                
+                // If it goes off the bottom of the screen, place it above
+                if (top + tooltipHeight > window.innerHeight) {
+                    top = rect.top - tooltipHeight - 12;
+                }
+                
+                // If it goes off the top or the element is very large (taking up > 60% of viewport)
+                if (top < 10 || rect.height > window.innerHeight * 0.6) {
+                    // Float it at the bottom-center of the viewport
+                    top = window.innerHeight - tooltipHeight - 30;
+                    left = window.innerWidth / 2 - tooltipWidth / 2;
+                }
+                
+                // Clamp within viewport margins
+                left = Math.max(10, Math.min(left, window.innerWidth - tooltipWidth - 10));
+                top = Math.max(10, Math.min(top, window.innerHeight - tooltipHeight - 10));
+                
+                setCoords({ top, left });
             } else {
                 // Fallback to center
                 setCoords({
@@ -2406,32 +2597,72 @@ const OnboardingTooltip = ({ step, totalSteps, title, text, targetSelector, requ
         };
     }, [targetSelector, step]);
 
+    const handleMouseDown = (e) => {
+        if (e.button !== 0) return;
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+            return;
+        }
+        setIsDragging(true);
+        setDragStart({
+            x: e.clientX - coords.left,
+            y: e.clientY - coords.top
+        });
+    };
+
+    useEffect(() => {
+        if (!isDragging) return;
+
+        const handleMouseMove = (e) => {
+            setCoords({
+                left: e.clientX - dragStart.x,
+                top: e.clientY - dragStart.y
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, dragStart]);
+
     return (
-        <div style={{
-            position: 'absolute',
-            top: `${coords.top}px`,
-            left: `${coords.left}px`,
-            width: '320px',
-            background: 'var(--panel)',
-            border: '2px solid var(--accent)',
-            borderRadius: '12px',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
-            padding: '16px',
-            zIndex: 10002,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            transition: 'all 0.3s ease',
-            color: 'var(--text)',
-            animation: 'fadeInUp 0.3s ease-out'
-        }}>
+        <div 
+            onMouseDown={handleMouseDown}
+            style={{
+                position: 'fixed',
+                top: `${coords.top}px`,
+                left: `${coords.left}px`,
+                width: '320px',
+                background: 'var(--panel, #1e293b)',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.5)' : '0 8px 30px rgba(0,0,0,0.3)',
+                padding: '16px',
+                zIndex: 20002,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                transition: isDragging ? 'none' : 'transform 0.15s ease-out, opacity 0.15s ease-out',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                color: 'var(--text, #f8fafc)',
+                animation: 'fadeInUp 0.3s ease-out',
+                userSelect: 'none'
+            }}
+        >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent)', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--accent, #12c7bd)', textTransform: 'uppercase' }}>
                     Step {step} of {totalSteps}
                 </span>
                 <button 
                     onClick={onSkip} 
-                    style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '11px' }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--muted, #94a3b8)', cursor: 'pointer', fontSize: '11px' }}
                 >
                     Skip
                 </button>
@@ -2440,26 +2671,57 @@ const OnboardingTooltip = ({ step, totalSteps, title, text, targetSelector, requ
             <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800' }}>{title}</h4>
             <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.4', opacity: 0.8 }}>{text}</p>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', alignItems: 'center', width: '100%' }}>
                 {step > 1 ? (
                     <button 
                         onClick={onPrev}
-                        className="modal-btn cancel"
-                        style={{ padding: '6px 12px', fontSize: '12px', height: 'auto' }}
+                        style={{
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border, rgba(255,255,255,0.15))',
+                            background: 'transparent',
+                            color: 'var(--text, #f8fafc)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            width: 'auto',
+                            minHeight: 'auto',
+                            height: '30px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
                     >
                         Back
                     </button>
                 ) : <div />}
                 
                 {requiresAction ? (
-                    <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--accent, #12c7bd)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         ⚡ Perform action to advance...
                     </span>
                 ) : (
                     <button 
                         onClick={onNext}
-                        className="modal-btn submit"
-                        style={{ padding: '6px 16px', fontSize: '12px', height: 'auto' }}
+                        style={{
+                            padding: '6px 14px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: 'var(--accent, #12c7bd)',
+                            color: '#030407',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            width: 'auto',
+                            minHeight: 'auto',
+                            height: '30px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(18, 199, 189, 0.25)'
+                        }}
                     >
                         {step === totalSteps ? "Finish" : "Next"}
                     </button>
@@ -2470,88 +2732,5 @@ const OnboardingTooltip = ({ step, totalSteps, title, text, targetSelector, requ
 };
 
 const SpotlightMask = ({ targetSelector }) => {
-    const [coords, setCoords] = useState(null);
-
-    useEffect(() => {
-        if (!targetSelector) {
-            setCoords(null);
-            return;
-        }
-
-        const updatePosition = () => {
-            const el = document.querySelector(targetSelector);
-            if (el) {
-                const rect = el.getBoundingClientRect();
-                setCoords({
-                    top: rect.top,
-                    left: rect.left,
-                    width: rect.width,
-                    height: rect.height
-                });
-            } else {
-                setCoords(null);
-            }
-        };
-
-        updatePosition();
-        const timer = setTimeout(updatePosition, 100);
-
-        window.addEventListener('resize', updatePosition);
-        window.addEventListener('scroll', updatePosition, true);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('resize', updatePosition);
-            window.removeEventListener('scroll', updatePosition, true);
-        };
-    }, [targetSelector]);
-
-    if (!coords) return null;
-
-    const leftVal = coords.left;
-    const topVal = coords.top;
-    const rightVal = coords.left + coords.width;
-    const bottomVal = coords.top + coords.height;
-
-    const clipPathVal = `polygon(
-        0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
-        ${leftVal - 4}px ${topVal - 4}px,
-        ${leftVal - 4}px ${bottomVal + 4}px,
-        ${rightVal + 4}px ${bottomVal + 4}px,
-        ${rightVal + 4}px ${topVal - 4}px,
-        ${leftVal - 4}px ${topVal - 4}px
-    )`;
-
-    return (
-        <>
-            {/* Dark & Blurred Backdrop with Cutout */}
-            <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(15, 23, 42, 0.55)',
-                backdropFilter: 'blur(3px)',
-                zIndex: 9998,
-                clipPath: clipPathVal,
-                pointerEvents: 'none',
-                transition: 'all 0.25s ease-out'
-            }} />
-            
-            {/* Accent Border frame around cutout */}
-            <div style={{
-                position: 'fixed',
-                top: `${coords.top - 6}px`,
-                left: `${coords.left - 6}px`,
-                width: `${coords.width + 12}px`,
-                height: `${coords.height + 12}px`,
-                borderRadius: '8px',
-                border: '3px solid var(--accent, #12c7bd)',
-                boxShadow: '0 0 15px var(--accent, #12c7bd)',
-                zIndex: 9999,
-                pointerEvents: 'none',
-                transition: 'all 0.25s ease-out'
-            }} />
-        </>
-    );
+    return null;
 };

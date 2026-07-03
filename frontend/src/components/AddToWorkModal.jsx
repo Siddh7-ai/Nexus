@@ -79,8 +79,8 @@ export default function AddToWorkModal({ isOpen, message, users, myUsername, isP
     };
 
     return (
-        <div className="workspace-detail-overlay">
-            <form className="workspace-detail-modal" onSubmit={handleSubmitForm}>
+        <div className="nextask-detail-overlay">
+            <form className="nextask-detail-modal" onSubmit={handleSubmitForm}>
                 <div className="modal-header">
                     <h3>Add to Workspace</h3>
                     <button type="button" className="modal-close-btn" onClick={onClose}>

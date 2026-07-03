@@ -488,24 +488,29 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
         }
         const tasks = await Task.find(query);
 
-        // Greetings and Help intents
-        const greetings = ["hello", "hi", "hey", "hola", "yo", "greetings"];
+        // Greetings and Help intents (English, Hindi/Hinglish, Spanish)
+        const greetings = ["hello", "hi", "hey", "hola", "yo", "greetings", "namaste", "pranam", "ram ram"];
         const isGreeting = greetings.some(g => lowerPrompt === g || lowerPrompt.startsWith(g + " ") || lowerPrompt.endsWith(" " + g));
 
-        const helpRequests = ["who are you", "what can you do", "help", "how do you work", "commands"];
+        const helpRequests = ["who are you", "what can you do", "help", "how do you work", "commands", "madad", "kya kar", "ayuda"];
         const isHelpRequest = helpRequests.some(h => lowerPrompt.includes(h));
 
-        // NexTask keywords to check query context
+        // Multilingual keywords for Nextask domain context
         const nextaskKeywords = [
             "task", "issue", "bug", "ticket", "work", "assignee", "assign", "priority", 
             "sla", "status", "summary", "create", "add", "open", "resolve", "complete", 
-            "todo", "progress", "member", "room", "nextask", "severity", "due", "overdue", "list"
+            "todo", "progress", "member", "room", "nextask", "severity", "due", "overdue", "list",
+            "kaam", "karya", "samasya", "takleef", "dikhao", "dikhayein", "banao", "karo", "rakho",
+            "tarea", "problema", "crear", "añadir", "mostrar", "lista", "hola"
         ];
         const isNexTaskQuery = nextaskKeywords.some(kw => lowerPrompt.includes(kw));
 
-        // A helper to detect creation intent
-        const isCreationIntent = /(?:create|add|open|new|make|register)\s+(?:task|issue|bug|ticket)/i.test(lowerPrompt) ||
-                                 lowerPrompt.startsWith("create ") || lowerPrompt.startsWith("add ") || lowerPrompt.startsWith("new ");
+        // Multilingual creation intent detection (supports prefix and Hinglish suffix verbs like "task banao")
+        const isCreationIntent = 
+            /(?:create|add|open|new|make|register|crear|añadir)\s+(?:task|issue|bug|ticket|kaam|karya|tarea)/i.test(lowerPrompt) ||
+            /(?:task|issue|bug|ticket|kaam|karya|tarea)\s+(?:banao|karo|banayein|create|add)/i.test(lowerPrompt) ||
+            lowerPrompt.startsWith("create ") || lowerPrompt.startsWith("add ") || lowerPrompt.startsWith("new ") ||
+            lowerPrompt.endsWith(" banao") || lowerPrompt.endsWith(" karo") || lowerPrompt.endsWith(" banayein");
 
         // Local Fallback Parser function
         const runFallbackParser = async () => {
@@ -521,7 +526,7 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
             if (isHelpRequest) {
                 let helpText = "🤖 **NexTask AI Assistant:** I am your dedicated nextask assistant. I can help you create, list, and summarize tasks and issues.\n\n";
                 helpText += "**Available nextask actions:**\n";
-                helpText += "*   **Create items:** 'Create a critical task for Rahul due tomorrow' or 'Open a high severity issue for Siddh'\n";
+                helpText += "*   **Create items:** 'Create a critical task for Rahul due tomorrow' or 'Siddh ke liye high priority task banao'\n";
                 helpText += "*   **List items:** 'Show my tasks', 'What is Siddh working on?', or 'List all open issues'\n";
                 helpText += "*   **Summarize nextask status:** 'NexTask summary' or 'How many tasks do we have?'\n";
                 helpText += "*   **Track breached SLAs:** 'Show breached issues'\n\n";
@@ -540,57 +545,87 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 let status = "open";
 
                 // Detect Issue vs Task
-                if (lowerPrompt.includes("issue") || lowerPrompt.includes("bug") || lowerPrompt.includes("problem") || lowerPrompt.includes("ticket") || lowerPrompt.includes("error")) {
+                if (lowerPrompt.includes("issue") || lowerPrompt.includes("bug") || lowerPrompt.includes("problem") || lowerPrompt.includes("ticket") || lowerPrompt.includes("error") ||
+                    lowerPrompt.includes("samasya") || lowerPrompt.includes("takleef") || lowerPrompt.includes("galti") || lowerPrompt.includes("dikkat") ||
+                    lowerPrompt.includes("problema") || lowerPrompt.includes("fallo")) {
                     type = "issue";
                 }
 
+                // Fetch active usernames for dynamic assignee matching
+                const allUsers = await User.find({}, "username");
+
                 // Extract title
-                const titleRegex = /(?:create|add|open|new)\s+(?:task|issue|bug|ticket)?[:\s]+(.*?)(?:\s+(?:for|assign|priority|due|severity|reporter)\b|$)/i;
-                const matchTitle = cleanPrompt.match(titleRegex);
-                if (matchTitle && matchTitle[1]) {
-                    title = matchTitle[1].trim();
+                const matchQuotes = cleanPrompt.match(/["'“«](.*?)["'”»]/);
+                if (matchQuotes && matchQuotes[1]) {
+                    title = matchQuotes[1].trim();
                 } else {
-                    title = cleanPrompt.split(/[.!?]/)[0].substring(0, 80);
+                    // Try prefix title extraction
+                    const prefixTitleRegex = /(?:create|add|open|new|make|crear|añadir)\s+(?:task|issue|bug|ticket|kaam|karya|tarea)?[:\s]+(.*?)(?:\s+(?:for|assign|priority|due|severity|reporter|ke\s+liye|ko|para|tomorrow|kal|mañana)\b|$)/i;
+                    const matchPrefix = cleanPrompt.match(prefixTitleRegex);
+                    if (matchPrefix && matchPrefix[1]) {
+                        title = matchPrefix[1].trim();
+                    } else {
+                        // Try suffix title extraction (e.g. "Review code task banao")
+                        const suffixTitleRegex = /^(.*?)\s+(?:task|issue|bug|ticket|kaam|karya|tarea)?\s+(?:banao|karo|banayein)/i;
+                        const matchSuffix = cleanPrompt.match(suffixTitleRegex);
+                        if (matchSuffix && matchSuffix[1]) {
+                            title = matchSuffix[1].trim();
+                            // Clean up assignee mentions from the start of the title
+                            for (const u of allUsers) {
+                                const uName = u.username.toLowerCase();
+                                const assigneeCleanRegex = new RegExp(`^${uName}\\s+(?:ke\\s+liye|ko|for|to)\\s+`, "i");
+                                title = title.replace(assigneeCleanRegex, "").trim();
+                            }
+                        } else {
+                            title = cleanPrompt.split(/[.!?]/)[0].substring(0, 80).trim();
+                        }
+                    }
                 }
 
                 // Extract priority
-                if (lowerPrompt.includes("high") || lowerPrompt.includes("critical")) {
-                    priority = lowerPrompt.includes("critical") ? "critical" : "high";
-                } else if (lowerPrompt.includes("low")) {
+                if (lowerPrompt.includes("high") || lowerPrompt.includes("critical") || lowerPrompt.includes("zaroori") || lowerPrompt.includes("urgente") || lowerPrompt.includes("critico") || lowerPrompt.includes("blocker")) {
+                    priority = (lowerPrompt.includes("critical") || lowerPrompt.includes("blocker") || lowerPrompt.includes("critico") || lowerPrompt.includes("urgente")) ? "critical" : "high";
+                } else if (lowerPrompt.includes("low") || lowerPrompt.includes("kam") || lowerPrompt.includes("bajo") || lowerPrompt.includes("chhota")) {
                     priority = "low";
                 }
 
                 // Extract severity (issues)
-                if (lowerPrompt.includes("severe") || lowerPrompt.includes("critical") || lowerPrompt.includes("blocker")) {
+                if (lowerPrompt.includes("severe") || lowerPrompt.includes("critical") || lowerPrompt.includes("blocker") || lowerPrompt.includes("urgente") || lowerPrompt.includes("critico")) {
                     severity = "critical";
-                } else if (lowerPrompt.includes("major") || lowerPrompt.includes("high")) {
+                } else if (lowerPrompt.includes("major") || lowerPrompt.includes("high") || lowerPrompt.includes("alto") || lowerPrompt.includes("zaroori")) {
                     severity = "high";
-                } else if (lowerPrompt.includes("minor") || lowerPrompt.includes("low")) {
+                } else if (lowerPrompt.includes("minor") || lowerPrompt.includes("low") || lowerPrompt.includes("bajo") || lowerPrompt.includes("kam")) {
                     severity = "low";
                 }
 
-                // Extract assignee
-                const assigneeRegex = /(?:assignee|assign|for|to)\s+([a-zA-Z0-9_-]+)/i;
-                const matchAssignee = lowerPrompt.match(assigneeRegex);
-                if (matchAssignee && matchAssignee[1]) {
-                    const possibleAssignee = matchAssignee[1].trim();
-                    const exists = await User.findOne({ username: new RegExp(`^${possibleAssignee}$`, "i") });
-                    if (exists) {
-                        assignee = exists.username;
+                // Extract assignee by checking if any username exists in the prompt (fully language-agnostic)
+                for (const u of allUsers) {
+                    const uName = u.username.toLowerCase();
+                    const regex = new RegExp(`\\b${uName}\\b`, "i");
+                    if (regex.test(lowerPrompt)) {
+                        assignee = u.username;
+                        break;
                     }
                 }
 
-                // Extract due date
+                // Extract due date (supports tomorrow, next week, agle hafte, and standard/localized date formats)
                 let dueDate = null;
-                if (lowerPrompt.includes("tomorrow")) {
+                if (lowerPrompt.includes("tomorrow") || lowerPrompt.includes("kal") || lowerPrompt.includes("mañana")) {
                     dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                } else if (lowerPrompt.includes("next week") || lowerPrompt.includes("in a week")) {
+                } else if (lowerPrompt.includes("next week") || lowerPrompt.includes("in a week") || lowerPrompt.includes("agle hafte") || lowerPrompt.includes("proxima semana")) {
                     dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
                 } else {
-                    const dateRegex = /\b(\d{4}-\d{2}-\d{2})\b/;
-                    const matchDate = lowerPrompt.match(dateRegex);
-                    if (matchDate && matchDate[1]) {
-                        dueDate = new Date(matchDate[1]);
+                    const isoDateRegex = /\b(\d{4})[-/](\d{2})[-/](\d{2})\b/; // YYYY-MM-DD
+                    const localDateRegex = /\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/; // DD-MM-YYYY or DD/MM/YYYY
+                    
+                    const matchIso = lowerPrompt.match(isoDateRegex);
+                    if (matchIso) {
+                        dueDate = new Date(matchIso[1], matchIso[2] - 1, matchIso[3]);
+                    } else {
+                        const matchLocal = lowerPrompt.match(localDateRegex);
+                        if (matchLocal) {
+                            dueDate = new Date(matchLocal[3], matchLocal[2] - 1, matchLocal[1]);
+                        }
                     }
                 }
 
@@ -663,7 +698,6 @@ router.post("/bot/chat", authenticateToken, async (req, res) => {
                 reply += `*   **Priority:** ${task.priority}\n`;
                 if (dueDate) reply += `*   **Due Date:** ${dueDate.toLocaleDateString()}\n`;
                 if (type === "issue") reply += `*   **Severity:** ${task.severity}\n`;
-                reply += `\n*(Note: ANTHROPIC_API_KEY is not configured on the server, running in smart NLP parsing fallback mode.)*`;
 
                 return { reply, task };
             }
@@ -861,11 +895,8 @@ Your constraints:
                 const textRes = data.content.find(c => c.type === "text");
                 const replyText = textRes ? textRes.text : "";
                 
-                // Run a validation checklist on Claude text response
-                const lowerReply = replyText.toLowerCase();
-                const isNonNexTaskReply = !nextaskKeywords.some(kw => lowerReply.includes(kw)) && 
-                                            !lowerPrompt.split(/\s+/).some(w => nextaskKeywords.includes(w.toLowerCase()));
-                if (isNonNexTaskReply && lowerPrompt !== "hello" && lowerPrompt !== "hi") {
+                // Validate if Claude strictly hit the escape guard prompt constraint
+                if (replyText.includes("I'm not made for this. I can only do nextask-related work.")) {
                     return res.json({ reply: "I'm not made for this. I can only do nextask-related work." });
                 }
 

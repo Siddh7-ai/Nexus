@@ -1526,8 +1526,16 @@ function NexTaskDashboard({ tasks = [], board = "personal", rooms = [] }) {
             animation: 'fadeInUp 0.3s ease-out'
         }}>
             <div className="panel-header-section" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 className="panel-header-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
-                    💼 Work Summary
+                <h3 className="panel-header-title" style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    fontSize: '20px',
+                    fontWeight: 900,
+                    letterSpacing: '-0.5px',
+                    fontFamily: "'Outfit', 'Inter', system-ui, sans-serif"
+                }}>
+                    <span className="nextask-brand-logo-inline" style={{ fontSize: '20px' }}>NexTask</span> Summary
                 </h3>
                 <span style={{ 
                     fontSize: '11px', 

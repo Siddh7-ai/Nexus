@@ -36,7 +36,32 @@ const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const keyRoutes = require("./routes/keyRoutes");
 const { canAccessRoom } = require("./permissions");
+const helmet = require("helmet");
+
 const app = express();
+
+// Disable x-powered-by to prevent stack signature detection
+app.disable("x-powered-by");
+
+// Setup secure helmet headers & CSP
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "blob:", "http:", "https:"],
+            mediaSrc: ["'self'", "data:", "blob:", "http:", "https:"],
+            objectSrc: ["'none'"],
+            upgradeInsecureRequests: []
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false
+}));
+
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
 const multer = require("multer");
 const { GridFSBucket, ObjectId } = require("mongodb");

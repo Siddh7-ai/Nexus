@@ -103,6 +103,43 @@ const userSchema = new mongoose.Schema({
             ciphertext: { type: String, required: true }
         }],
         default: []
+    },
+    // Security & Auth Upgrades
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    verificationToken: {
+        type: String,
+        default: null
+    },
+    verificationTokenExpires: {
+        type: Date,
+        default: null
+    },
+    failedLoginAttempts: {
+        type: Number,
+        default: 0
+    },
+    lockUntil: {
+        type: Date,
+        default: null
+    },
+    lastFailedLogin: {
+        type: Date,
+        default: null
+    },
+    lastSuccessfulLogin: {
+        type: Date,
+        default: null
+    },
+    passwordResetToken: {
+        type: String,
+        default: null
+    },
+    passwordResetExpires: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 
