@@ -59,7 +59,8 @@ export default function NexTaskPage({
     // SLA Config (Hours)
     const [slaThreshold, setSlaThreshold] = useState(() => {
         const cached = localStorage.getItem("nexus_sla_threshold");
-        return cached ? parseInt(cached) : 48;
+        const parsed = parseInt(cached);
+        return (!isNaN(parsed) && parsed >= 0) ? parsed : 48;
     });
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -557,14 +558,20 @@ export default function NexTaskPage({
     // SLA checker helper
     const isSlaBreached = (task) => {
         if (task.type !== "issue" || task.status === "resolved") return false;
+        if (!task.createdAt) return false;
         const createdDate = new Date(task.createdAt);
+        if (isNaN(createdDate.getTime())) return false;
         const hoursElapsed = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60);
+        if (hoursElapsed <= 0) return false; // Exclude future timestamps
         return hoursElapsed > slaThreshold;
     };
 
     const getSlaHoursElapsed = (task) => {
+        if (!task.createdAt) return 0;
         const createdDate = new Date(task.createdAt);
-        return Math.round((Date.now() - createdDate.getTime()) / (1000 * 60 * 60));
+        if (isNaN(createdDate.getTime())) return 0;
+        const hoursElapsed = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60);
+        return Math.max(0, Math.round(hoursElapsed));
     };
 
     // Workload computation
@@ -913,7 +920,20 @@ export default function NexTaskPage({
                                         className="sla-input"
                                         value={slaThreshold}
                                         onChange={(e) => {
-                                            const v = parseInt(e.target.value) || 0;
+                                            const val = e.target.value;
+                                            if (val === "") {
+                                                setSlaThreshold(0);
+                                                localStorage.setItem("nexus_sla_threshold", 0);
+                                                return;
+                                            }
+                                            const parsed = parseFloat(val);
+                                            if (isNaN(parsed)) {
+                                                setSlaThreshold(0);
+                                                localStorage.setItem("nexus_sla_threshold", 0);
+                                                return;
+                                            }
+                                            const rounded = Math.round(parsed);
+                                            const v = rounded >= 0 ? rounded : 0;
                                             setSlaThreshold(v);
                                             localStorage.setItem("nexus_sla_threshold", v);
                                         }}
