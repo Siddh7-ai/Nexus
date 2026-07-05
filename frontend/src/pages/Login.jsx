@@ -5,7 +5,7 @@ import { getBackendUrl } from "../utils/config";
 import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
-import { FiArrowLeft, FiEye, FiEyeOff } from "react-icons/fi";
+import { FiArrowLeft } from "react-icons/fi";
 import { 
   deriveKeysFromPassword, 
   setMasterKey, 
@@ -30,7 +30,6 @@ function GoogleLogo() {
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
   const [errorMsg, setErrorMsg] = useState("");
@@ -183,32 +182,12 @@ function Login() {
             <label>Password</label>
             <div className="auth-input-wrap" style={{ position: "relative" }}>
               <SmoothInput
-                type={showPassword ? "text" : "password"}
+                type="password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               />
-              <button
-                type="button"
-                className="password-toggle-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "none",
-                  border: "none",
-                  color: "var(--muted)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center"
-                }}
-              >
-                {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
-              </button>
             </div>
           </div>
 
@@ -244,7 +223,11 @@ function Login() {
 
           <div className="auth-divider"><span>or continue with</span></div>
 
-          <button className="auth-google-btn" type="button">
+          <button 
+            className="auth-google-btn" 
+            type="button"
+            onClick={() => alert("Google Sign-In is coming soon!")}
+          >
             <GoogleLogo />
             Continue with Google
           </button>

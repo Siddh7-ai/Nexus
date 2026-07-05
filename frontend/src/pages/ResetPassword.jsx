@@ -5,7 +5,6 @@ import { getBackendUrl } from "../utils/config";
 import { SmoothInput } from "../components/SmoothInput";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { initTheme, toggleTheme } from "../utils/theme";
-import { FiEye, FiEyeOff } from "react-icons/fi";
 import logo from "../assets/logo.png";
 
 function ResetPassword() {
@@ -13,7 +12,6 @@ function ResetPassword() {
   const token = searchParams.get("token") || "";
 
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -136,32 +134,12 @@ function ResetPassword() {
                 <label>New Password</label>
                 <div className="auth-input-wrap">
                   <SmoothInput
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     placeholder="Enter your strong password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    style={{
-                      position: "absolute",
-                      right: "12px",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      color: "var(--muted)",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center"
-                    }}
-                  >
-                    {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
-                  </button>
                 </div>
               </div>
 

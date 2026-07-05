@@ -3262,7 +3262,10 @@ function Chat() {
                             showTransitionSettings,
                             setShowTransitionSettings,
                             theme,
-                            setTheme
+                            setTheme,
+                            setFullAvatarUrl,
+                            setCropImageSrc,
+                            setCropTarget
                         }}
                         onLogoClick={clearActiveChat}
                         onLogout={isGuest ? logout : () => setShowLogoutConfirm(true)}
@@ -3783,7 +3786,7 @@ function Chat() {
                                     cursor: 'move',
                                     position: 'relative',
                                     backgroundColor: '#f1f2f4',
-                                    boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
+                                    boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
                                     zIndex: 5
                                 }}
                             >

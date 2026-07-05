@@ -132,6 +132,8 @@ function RoomList({
     const [dmSearch, setDmSearch] = useState("");
     const [settingsSubpage, setSettingsSubpage] = useState("main");
     const [settingsSearch, setSettingsSearch] = useState("");
+    const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+    const fileInputRef = React.useRef(null);
 
     const { accentColor, setAccentColor, soundEnabled, setSoundEnabled } = useTheme();
 
@@ -863,12 +865,79 @@ function RoomList({
                                                 avatarSrc={settingsProps.avatarVal} 
                                                 size={120} 
                                             />
-                                            <label className="settings-change-photo-overlay">
+                                            <div 
+                                                className="settings-change-photo-overlay"
+                                                onClick={() => setShowPhotoOptions(true)}
+                                            >
                                                 <span>CHANGE PHOTO</span>
-                                                <input type="file" accept="image/*" onChange={settingsProps.handleCropFileChange} style={{ display: 'none' }} />
-                                            </label>
+                                            </div>
+                                            <input 
+                                                type="file" 
+                                                ref={fileInputRef} 
+                                                accept="image/*" 
+                                                onChange={settingsProps.handleCropFileChange} 
+                                                style={{ display: 'none' }} 
+                                            />
                                         </div>
                                     </div>
+
+                                    {showPhotoOptions && (
+                                        <div className="modal-overlay" style={{ zIndex: 1100 }} onClick={() => setShowPhotoOptions(false)}>
+                                            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: 'min(90%, 280px)', padding: '20px', borderRadius: '16px' }}>
+                                                <div className="modal-header-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '850', color: 'var(--text)' }}>Profile Photo</h3>
+                                                    <button type="button" className="close-picker-btn" onClick={() => setShowPhotoOptions(false)} style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--muted)' }}>×</button>
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    <button 
+                                                        type="button" 
+                                                        className="modal-btn outline" 
+                                                        onClick={() => {
+                                                            setShowPhotoOptions(false);
+                                                            if (settingsProps.avatarVal) {
+                                                                settingsProps.setFullAvatarUrl(settingsProps.avatarVal);
+                                                            } else {
+                                                                alert("No profile photo set.");
+                                                            }
+                                                        }}
+                                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '10px 14px', gap: '10px', fontSize: '13px' }}
+                                                    >
+                                                        <FiUser size={15} />
+                                                        <span>View photo</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        className="modal-btn outline" 
+                                                        onClick={() => {
+                                                            setShowPhotoOptions(false);
+                                                            if (settingsProps.avatarVal) {
+                                                                settingsProps.setCropTarget("ownProfile");
+                                                                settingsProps.setCropImageSrc(settingsProps.avatarVal);
+                                                            } else {
+                                                                alert("No profile photo to edit. Please upload one first.");
+                                                            }
+                                                        }}
+                                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '10px 14px', gap: '10px', fontSize: '13px' }}
+                                                    >
+                                                        <FiEdit2 size={15} />
+                                                        <span>Edit photo</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        className="modal-btn primary" 
+                                                        onClick={() => {
+                                                            setShowPhotoOptions(false);
+                                                            fileInputRef.current?.click();
+                                                        }}
+                                                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '10px 14px', gap: '10px', fontSize: '13px' }}
+                                                    >
+                                                        <FiPlus size={15} />
+                                                        <span>Change photo</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <form onSubmit={settingsProps.handleOwnProfileUpdate} className="settings-form">
                                         <div className="settings-form-group">

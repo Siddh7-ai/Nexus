@@ -2357,13 +2357,22 @@ body.dark-theme .dm-row-card.locked-room:hover {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999; /* Draw on top of everything */
   animation: modalFadeIn 0.2s ease-out;
+}
+
+.modal-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .modal-content {
@@ -2789,7 +2798,7 @@ body.dark-theme .dm-row-card.locked-room:hover {
 
 /* Cropper specific overrides */
 .cropper-viewport-wrapper {
-  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.7) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
 }
 
 
@@ -5775,13 +5784,22 @@ body.dark-theme .reaction-detail-row.interactive-mine:hover {
 .delete-confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 11500;
   animation: modalFadeIn 0.2s ease-out;
+}
+
+.delete-confirm-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .delete-confirm-modal {
