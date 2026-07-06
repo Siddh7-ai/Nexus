@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
 import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity, useSpring } from "framer-motion";
@@ -39,6 +39,8 @@ import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
 import { FiLock, FiTrash2, FiMessageSquare, FiX } from "react-icons/fi";
+import PinMessageModal from "../components/PinMessageModal";
+import { Pin, PinOff, ChevronDown, ArrowRight, Mic } from "lucide-react";
 import ThemeTransitionOptions from "../components/ThemeTransitionOptions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -746,6 +748,11 @@ function Chat() {
     const [nextaskUsers, setNexTaskUsers] = useState([]);
     const [addToWorkMsg, setAddToWorkMsg] = useState(null);
     const [highlightMessageId, setHighlightMessageId] = useState(null);
+
+    // Pinning states
+    const [pinTargetMessage, setPinTargetMessage] = useState(null);
+    const [activePinnedIndex, setActivePinnedIndex] = useState(0);
+    const [showPinnedMenu, setShowPinnedMenu] = useState(false);
 
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -2561,6 +2568,24 @@ function Chat() {
         }
     }
 
+    function handlePinMessageConfirm(msg, duration) {
+        socketRef.current?.emit("pinMessage", { messageId: msg._id, duration });
+        setPinTargetMessage(null);
+    }
+
+    function handleUnpinActiveMessage(msgId) {
+        socketRef.current?.emit("unpinMessage", { messageId: msgId });
+        setShowPinnedMenu(false);
+    }
+
+    function handleScrollToPinnedMessage(msgId) {
+        setHighlightMessageId(null);
+        setTimeout(() => {
+            setHighlightMessageId(msgId);
+        }, 50);
+        setShowPinnedMenu(false);
+    }
+
     async function handleUnlockLockedMessage(msg) {
         try {
             const pinId = `vault_pin_${username.toLowerCase()}_${activePrivate.toLowerCase()}`;
@@ -3171,7 +3196,54 @@ function Chat() {
         ? `${activePrivateName}`
         : `${activeRoom}`;
 
+    const processedMessages = useMemo(() => {
+        return messages.map(msg => {
+            if (msg.isDeleted) {
+                return msg;
+            }
+            if (msg.privateChatId && msg.ratchetHeader) {
+                const decrypted = decryptedMessages[msg._id];
+                if (decrypted) {
+                    return {
+                        ...msg,
+                        text: decrypted.text,
+                        fileUrl: decrypted.fileUrl || null,
+                        fileName: decrypted.fileName || null,
+                        fileSize: decrypted.fileSize || null,
+                        fileType: decrypted.fileType || null,
+                        fileQuality: decrypted.fileQuality || null,
+                        sticker: decrypted.sticker || null
+                    };
+                } else {
+                    return {
+                        ...msg,
+                        text: "[Decrypting E2EE message...]",
+                        isDecrypting: true,
+                        fileUrl: null
+                    };
+                }
+            }
+            return msg;
+        });
+    }, [messages, decryptedMessages]);
 
+    const activePinnedMessages = useMemo(() => {
+        const roomMsgs = processedMessages.filter(msg => {
+            const isMatch = activePrivate
+                ? (msg.privateChatId?.toLowerCase() === activePrivate.toLowerCase())
+                : (msg.room === activeRoom);
+            return isMatch && msg.isPinned && (!msg.pinnedUntil || new Date(msg.pinnedUntil) > new Date());
+        });
+        return roomMsgs.sort((a, b) => new Date(b.pinnedAt || b.createdAt) - new Date(a.pinnedAt || a.createdAt));
+    }, [processedMessages, activePrivate, activeRoom]);
+
+    useEffect(() => {
+        if (activePinnedIndex >= activePinnedMessages.length) {
+            setActivePinnedIndex(0);
+        }
+    }, [activePinnedMessages.length, activePinnedIndex]);
+
+    const pinnedMessage = activePinnedMessages[activePinnedIndex];
 
     const hasActiveChat = !!(activeRoom || activePrivate);
 
@@ -3447,64 +3519,95 @@ function Chat() {
                                 messages={messages}
                             />
 
-                            {(() => {
-                                const processedMessages = messages.map(msg => {
-                                    if (msg.isDeleted) {
-                                        return msg;
-                                    }
-                                    if (msg.privateChatId && msg.ratchetHeader) {
-                                        const decrypted = decryptedMessages[msg._id];
-                                        if (decrypted) {
-                                            return {
-                                                ...msg,
-                                                text: decrypted.text,
-                                                fileUrl: decrypted.fileUrl || null,
-                                                fileName: decrypted.fileName || null,
-                                                fileSize: decrypted.fileSize || null,
-                                                fileType: decrypted.fileType || null,
-                                                fileQuality: decrypted.fileQuality || null,
-                                                sticker: decrypted.sticker || null
-                                            };
-                                        } else {
-                                            return {
-                                                ...msg,
-                                                text: "[Decrypting E2EE message...]",
-                                                isDecrypting: true,
-                                                fileUrl: null
-                                            };
-                                        }
-                                    }
-                                    return msg;
-                                });
-                                return (
-                                    <MessageList
-                                        messages={processedMessages}
-                                        loadingMessages={loadingMessages}
-                                        currentUser={username}
-                                        messagesEndRef={messagesEndRef}
-                                        onReact={handleReact}
-                                        onEdit={handleEdit}
-                                        onDelete={handleDelete}
-                                        isPrivate={!!activePrivate}
-                                        onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
-                                        typingUser={typingUser}
-                                        recordingUser={recordingUser}
-                                        onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
-                                        allUsers={allUsers}
-                                        onlineUserList={onlineUserList}
-                                        onReply={(m) => setReplyToMsg(m)}
-                                        onShowMessageInfo={(m) => setInfoMsg(m)}
-                                        onCopySuccess={handleCopySuccess}
-                                        onLockMessage={handleLockMessage}
-                                        onUnlockLockedMessage={handleUnlockLockedMessage}
-                                        isSelectionMode={isSelectionMode}
-                                        selectedMessageIds={selectedMessageIds}
-                                        onToggleMessageSelection={toggleMessageSelection}
-                                        onAddToWork={handleOpenAddToWorkModal}
-                                        highlightMessageId={highlightMessageId}
-                                    />
-                                );
-                            })()}
+                            {pinnedMessage && (
+                                <div className="pinned-message-bar">
+                                    <div className="pinned-message-bar-left" onClick={() => handleScrollToPinnedMessage(pinnedMessage._id)}>
+                                        {activePinnedMessages.length > 1 && (
+                                            <div className="pinned-indicators">
+                                                {activePinnedMessages.map((m, idx) => (
+                                                    <div 
+                                                        key={m._id} 
+                                                        className={`pinned-indicator-segment ${idx === activePinnedIndex ? 'active' : ''}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setActivePinnedIndex(idx);
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                        <Pin size={16} className="pinned-bar-icon" />
+                                        <div className="pinned-message-preview">
+                                            {pinnedMessage.voiceMessage ? (
+                                                <>
+                                                    <Mic size={16} className="pinned-mic-icon" />
+                                                    <span>{(() => {
+                                                        const sec = pinnedMessage.voiceMessage.duration || 0;
+                                                        const m = Math.floor(sec / 60);
+                                                        const s = Math.floor(sec % 60);
+                                                        return `${m}:${s < 10 ? '0' : ''}${s}`;
+                                                    })()}</span>
+                                                </>
+                                            ) : pinnedMessage.fileUrl ? (
+                                                <span>{pinnedMessage.fileName ? `📁 ${pinnedMessage.fileName}` : "Attachment"}</span>
+                                            ) : pinnedMessage.sticker ? (
+                                                <span>Sticker</span>
+                                            ) : (
+                                                <span>{pinnedMessage.text}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="pinned-message-bar-right">
+                                        <button className="pinned-dropdown-trigger" onClick={() => setShowPinnedMenu(v => !v)}>
+                                            <ChevronDown size={18} />
+                                        </button>
+                                        {showPinnedMenu && (
+                                            <>
+                                                <div className="pinned-menu-overlay" onClick={() => setShowPinnedMenu(false)} />
+                                                <div className="pinned-menu-dropdown">
+                                                    <button className="pinned-menu-item" onClick={() => handleUnpinActiveMessage(pinnedMessage._id)}>
+                                                        <PinOff size={16} />
+                                                        <span>Unpin</span>
+                                                    </button>
+                                                    <button className="pinned-menu-item" onClick={() => handleScrollToPinnedMessage(pinnedMessage._id)}>
+                                                        <ArrowRight size={16} />
+                                                        <span>Go to message</span>
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <MessageList
+                                messages={processedMessages}
+                                loadingMessages={loadingMessages}
+                                currentUser={username}
+                                messagesEndRef={messagesEndRef}
+                                onReact={handleReact}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                isPrivate={!!activePrivate}
+                                onAddReactionClick={(msgId) => setActiveReactionMsgId(msgId)}
+                                typingUser={typingUser}
+                                recordingUser={recordingUser}
+                                onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                                allUsers={allUsers}
+                                onlineUserList={onlineUserList}
+                                onReply={(m) => setReplyToMsg(m)}
+                                onShowMessageInfo={(m) => setInfoMsg(m)}
+                                onCopySuccess={handleCopySuccess}
+                                onLockMessage={handleLockMessage}
+                                onUnlockLockedMessage={handleUnlockLockedMessage}
+                                isSelectionMode={isSelectionMode}
+                                selectedMessageIds={selectedMessageIds}
+                                onToggleMessageSelection={toggleMessageSelection}
+                                onAddToWork={handleOpenAddToWorkModal}
+                                highlightMessageId={highlightMessageId}
+                                onPin={setPinTargetMessage}
+                                currentUserDisplayName={displayNameVal || username}
+                            />
 
                             {!isSelectionMode && replyToMsg && (
                                 <div className="reply-preview-container">
@@ -3698,6 +3801,14 @@ function Chat() {
                 onClose={() => setAddToWorkMsg(null)}
                 onSubmit={handleCreateTaskFromModal}
             />
+
+            {pinTargetMessage && (
+                <PinMessageModal
+                    msg={pinTargetMessage}
+                    onClose={() => setPinTargetMessage(null)}
+                    onPin={handlePinMessageConfirm}
+                />
+            )}
 
             {/* Block Target Confirmation Modal */}
             {blockTargetConfirm && (

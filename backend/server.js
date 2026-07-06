@@ -1217,6 +1217,26 @@ io.on("connection", async (socket) => {
                     }
                 }
 
+                // Passive unpin of expired messages in room
+                try {
+                    const now = new Date();
+                    const expiredQuery = {
+                        room: uniqueRoomId,
+                        privateChatId: null,
+                        isPinned: true,
+                        pinnedUntil: { $lte: now }
+                    };
+                    const expired = await Message.find(expiredQuery);
+                    for (const m of expired) {
+                        m.isPinned = false;
+                        m.pinnedUntil = null;
+                        await m.save();
+                        io.to(uniqueRoomId).emit("messageUpdated", m);
+                    }
+                } catch (expErr) {
+                    console.error("Error clearing expired pins on room join:", expErr);
+                }
+
                 const clearedAt = await getChatClearedAt(socket.username, uniqueRoomId);
                 const messagesQuery = {
                     room: uniqueRoomId,
@@ -1261,6 +1281,26 @@ io.on("connection", async (socket) => {
                     }
                 }
 
+                // Passive unpin of expired messages in room
+                try {
+                    const now = new Date();
+                    const expiredQuery = {
+                        room,
+                        privateChatId: null,
+                        isPinned: true,
+                        pinnedUntil: { $lte: now }
+                    };
+                    const expired = await Message.find(expiredQuery);
+                    for (const m of expired) {
+                        m.isPinned = false;
+                        m.pinnedUntil = null;
+                        await m.save();
+                        io.to(room).emit("messageUpdated", m);
+                    }
+                } catch (expErr) {
+                    console.error("Error clearing expired pins on room join:", expErr);
+                }
+
                 const clearedAt = await getChatClearedAt(socket.username, room);
                 const messagesQuery = {
                     room,
@@ -1298,6 +1338,25 @@ io.on("connection", async (socket) => {
         }
 
         socket.join(`private_${privateChatId}`);
+
+        // Passive unpin of expired messages in private chat
+        try {
+            const now = new Date();
+            const expiredQuery = {
+                privateChatId,
+                isPinned: true,
+                pinnedUntil: { $lte: now }
+            };
+            const expired = await Message.find(expiredQuery);
+            for (const m of expired) {
+                m.isPinned = false;
+                m.pinnedUntil = null;
+                await m.save();
+                io.to(`private_${privateChatId}`).emit("messageUpdated", m);
+            }
+        } catch (expErr) {
+            console.error("Error clearing expired pins on private chat join:", expErr);
+        }
 
         const clearedAt = await getChatClearedAt(socket.username, privateChatId);
         const messagesQuery = {
@@ -1896,6 +1955,114 @@ io.on("connection", async (socket) => {
             io.to(room).emit("messageUpdated", msg);
         } catch (err) {
             console.log(err);
+        }
+    });
+
+    // Pin message
+    socket.on("pinMessage", async ({ messageId, duration }) => {
+        try {
+            const msg = await Message.findById(messageId);
+            if (!msg) return;
+
+            // Block guests from pinning messages outside Nexus Official
+            if (socket.role === "guest" && msg.room !== "Nexus Official") {
+                return;
+            }
+
+            const room = msg.privateChatId
+                ? `private_${msg.privateChatId}`
+                : msg.room;
+
+            // Find how many messages are currently pinned in this room/chat
+            const pinnedQuery = msg.privateChatId
+                ? { privateChatId: msg.privateChatId, isPinned: true }
+                : { room: msg.room, privateChatId: null, isPinned: true };
+
+            const currentlyPinned = await Message.find(pinnedQuery).sort({ pinnedAt: 1 });
+
+            // If we already have 5 pinned messages, unpin the oldest one
+            if (currentlyPinned.length >= 5) {
+                const oldest = currentlyPinned[0];
+                oldest.isPinned = false;
+                oldest.pinnedUntil = null;
+                await oldest.save();
+                io.to(room).emit("messageUpdated", oldest);
+            }
+
+            // Calculate pinnedUntil
+            let durationMs = 7 * 24 * 60 * 60 * 1000; // default 7 days
+            if (duration === "24h") durationMs = 24 * 60 * 60 * 1000;
+            else if (duration === "7d") durationMs = 7 * 24 * 60 * 60 * 1000;
+            else if (duration === "30d") durationMs = 30 * 24 * 60 * 60 * 1000;
+
+            msg.isPinned = true;
+            msg.pinnedAt = new Date();
+            msg.pinnedUntil = new Date(Date.now() + durationMs);
+            await msg.save();
+
+            // Emit update to all clients
+            io.to(room).emit("messageUpdated", msg);
+
+            // Create a system message notifying the pin
+            const systemMsgData = {
+                username: "System",
+                displayName: "System",
+                text: `${socket.displayName || socket.username} pinned a message`,
+                createdAt: new Date()
+            };
+
+            if (msg.privateChatId) {
+                systemMsgData.privateChatId = msg.privateChatId;
+                systemMsgData.room = null;
+            } else {
+                systemMsgData.room = msg.room;
+                systemMsgData.privateChatId = null;
+            }
+
+            const savedSystemMsg = await Message.create(systemMsgData);
+
+            if (msg.privateChatId) {
+                io.to(`private_${msg.privateChatId}`).emit("reply", savedSystemMsg);
+
+                // Also notify recipient if online
+                const parts = msg.privateChatId.split("_");
+                const recipient = parts.find(u => u !== socket.username.toLowerCase());
+                if (recipient) {
+                    io.to(`user_${recipient.toLowerCase()}`).emit("reply", savedSystemMsg);
+                }
+            } else {
+                const clientMsg = savedSystemMsg.toObject();
+                clientMsg.room = msg.room;
+                io.to(room).emit("reply", clientMsg);
+            }
+
+        } catch (err) {
+            console.error("Error pinning message:", err);
+        }
+    });
+
+    // Unpin message
+    socket.on("unpinMessage", async ({ messageId }) => {
+        try {
+            const msg = await Message.findById(messageId);
+            if (!msg) return;
+
+            // Block guests from unpinning messages outside Nexus Official
+            if (socket.role === "guest" && msg.room !== "Nexus Official") {
+                return;
+            }
+
+            msg.isPinned = false;
+            msg.pinnedUntil = null;
+            await msg.save();
+
+            const room = msg.privateChatId
+                ? `private_${msg.privateChatId}`
+                : msg.room;
+            io.to(room).emit("messageUpdated", msg);
+
+        } catch (err) {
+            console.error("Error unpinning message:", err);
         }
     });
 

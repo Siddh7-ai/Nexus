@@ -674,9 +674,9 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Forward</span>
                         </button>
                     )}
-                    {!msg.sticker && (
-                        <button className="menu-item" onClick={() => { alert("Pinning will be available soon!"); setShowMenu(false); }}>
-                            <Pin size={16} className="menu-icon" />
+                    {!msg.sticker && !msg.isDeleted && onPin && (
+                        <button className="menu-item" onClick={() => { onPin(msg); setShowMenu(false); }}>
+                            <Pin size={16} className="menu-icon" style={{ transform: 'rotate(45deg)' }} />
                             <span>Pin</span>
                         </button>
                     )}
@@ -744,7 +744,9 @@ function MessageList({
     selectedMessageIds = new Set(),
     onToggleMessageSelection,
     onAddToWork,
-    highlightMessageId
+    highlightMessageId,
+    onPin,
+    currentUserDisplayName
 }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
@@ -902,9 +904,19 @@ function MessageList({
                         const isLegacyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(msg.text);
                         if (isLegacyDate) return null;
 
+                        let displayText = msg.text;
+                        if (msg.text && msg.text.endsWith("pinned a message")) {
+                            const pName = msg.text.replace(" pinned a message", "");
+                            const isMe = pName.toLowerCase() === currentUser?.toLowerCase() || 
+                                         (currentUserDisplayName && pName === currentUserDisplayName);
+                            if (isMe) {
+                                displayText = "You pinned a message";
+                            }
+                        }
+
                         return (
                             <div className="system-message" key={msg._id || index}>
-                                {msg.text}
+                                {displayText}
                             </div>
                         );
                     }

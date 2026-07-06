@@ -10413,6 +10413,341 @@ body.dark-theme .sticker-grid-container::-webkit-scrollbar-thumb:hover {
   }
 }
 
+/* ─── Pinned Message Bar styles ──────────────────────── */
+.pinned-message-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 8px 24px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 9;
+  font-family: Inter, system-ui, sans-serif;
+  animation: slideDown 0.2s ease-out;
+}
+
+body.dark-theme .pinned-message-bar {
+  background: #111b21;
+}
+
+.pinned-message-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.pinned-bar-icon {
+  color: var(--muted);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+.pinned-message-preview {
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 85%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pinned-mic-icon {
+  color: #00a884;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pinned-message-bar-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pinned-dropdown-trigger {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.pinned-dropdown-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pinned-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 98;
+  background: transparent;
+}
+
+.pinned-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 6px 0;
+  min-width: 150px;
+  z-index: 100;
+  animation: popIn 0.15s ease-out;
+}
+
+body.dark-theme .pinned-menu-dropdown {
+  background: #233138;
+}
+
+.pinned-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pinned-menu-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+body.dark-theme .pinned-menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Pinned Indicators ────────────────────────────── */
+.pinned-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 3px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.pinned-indicator-segment {
+  flex: 1;
+  background: rgba(120, 120, 120, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.pinned-indicator-segment.active {
+  background: #00a884;
+}
+
+body.dark-theme .pinned-indicator-segment {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+body.dark-theme .pinned-indicator-segment.active {
+  background: #00a884;
+}
+
+.pinned-indicator-segment:hover {
+  background: rgba(120, 120, 120, 0.5);
+}
+
+body.dark-theme .pinned-indicator-segment:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Pin Message Modal Styles ────────────────────────── */
+.pin-message-modal {
+  max-width: 380px !important;
+  width: 90% !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  padding: 28px !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid var(--border) !important;
+}
+
+body.dark-theme .pin-message-modal {
+  background: #0b141a !important;
+}
+
+.pin-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 8px 0;
+}
+
+.pin-modal-subtitle {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0 0 24px 0;
+}
+
+.pin-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pin-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pin-option-label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pin-radio-input {
+  display: none;
+}
+
+.pin-radio-custom {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  position: relative;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.pin-radio-input:checked + .pin-radio-custom {
+  border-color: #00a884;
+}
+
+.pin-radio-custom::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #00a884;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
+}
+
+.pin-radio-input:checked + .pin-radio-custom::after {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.pin-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.pin-cancel-btn {
+  background: none;
+  border: none;
+  color: #00a884;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.pin-cancel-btn:hover {
+  background: rgba(0, 168, 132, 0.08);
+}
+
+.pin-confirm-btn {
+  background: #00a884;
+  border: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 168, 132, 0.2);
+  transition: all 0.2s;
+}
+
+.pin-confirm-btn:hover {
+  background: #008f72;
+  box-shadow: 0 4px 12px rgba(0, 168, 132, 0.3);
+}
+
+/* ─── Go to Message Highlight Strip (3 Blinks) ────────── */
+.message-row.highlighted-message-flash::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -2000px;
+  right: -2000px;
+  background-color: rgba(2, 81, 63, 0.28);
+  z-index: -1;
+  pointer-events: none;
+  animation: flashHighlightBlink 3.0s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+body.dark-theme .message-row.highlighted-message-flash::before {
+  background-color: rgba(2, 81, 63, 0.42);
+}
+
+@keyframes flashHighlightBlink {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1; /* Blink 1 start */
+  }
+  24% {
+    opacity: 0; /* Blink 1 end */
+  }
+  36% {
+    opacity: 1; /* Blink 2 start */
+  }
+  48% {
+    opacity: 0; /* Blink 2 end */
+  }
+  60% {
+    opacity: 1; /* Blink 3 start */
+  }
+  85% {
+    opacity: 1; /* Keep highlighted for a brief moment */
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+
 
 
 

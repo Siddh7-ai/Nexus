@@ -159,6 +159,18 @@ const messageSchema = new mongoose.Schema({
         },
         default: null
     },
+    isPinned: {
+        type: Boolean,
+        default: false
+    },
+    pinnedAt: {
+        type: Date,
+        default: null
+    },
+    pinnedUntil: {
+        type: Date,
+        default: null
+    },
     seenAt: {
         type: Date,
         default: null
