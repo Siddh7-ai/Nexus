@@ -3606,6 +3606,7 @@ function Chat() {
                                 onAddToWork={handleOpenAddToWorkModal}
                                 highlightMessageId={highlightMessageId}
                                 onPin={setPinTargetMessage}
+                                onUnpin={handleUnpinActiveMessage}
                                 currentUserDisplayName={displayNameVal || username}
                             />
 

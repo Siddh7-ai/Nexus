@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import VoiceMessageBubble from "./VoiceMessageBubble";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, Star, Pencil, Trash2, Lock, Mic, Briefcase } from "lucide-react";
+import { ArrowDown, FileText, Download, Film, X, Info, CornerUpLeft, Copy, CornerUpRight, Pin, PinOff, Star, Pencil, Trash2, Lock, Mic, Briefcase } from "lucide-react";
 import { getBackendUrl } from "../utils/config";
 import sodium from "libsodium-wrappers-sumo";
 
@@ -523,7 +523,7 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount, onAddToWork, onPin }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount, onAddToWork, onPin, onUnpin }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [openUp, setOpenUp] = useState(false);
@@ -674,11 +674,22 @@ function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReac
                             <span>Forward</span>
                         </button>
                     )}
-                    {!msg.sticker && !msg.isDeleted && onPin && (
-                        <button className="menu-item" onClick={() => { onPin(msg); setShowMenu(false); }}>
-                            <Pin size={16} className="menu-icon" style={{ transform: 'rotate(45deg)' }} />
-                            <span>Pin</span>
-                        </button>
+                    {!msg.sticker && !msg.isDeleted && (
+                        msg.isPinned ? (
+                            onUnpin && (
+                                <button className="menu-item" onClick={() => { onUnpin(msg._id); setShowMenu(false); }}>
+                                    <PinOff size={16} className="menu-icon" />
+                                    <span>Unpin</span>
+                                </button>
+                            )
+                        ) : (
+                            onPin && (
+                                <button className="menu-item" onClick={() => { onPin(msg); setShowMenu(false); }}>
+                                    <Pin size={16} className="menu-icon" style={{ transform: 'rotate(45deg)' }} />
+                                    <span>Pin</span>
+                                </button>
+                            )
+                        )
                     )}
                     {!msg.sticker && (
                         <button className="menu-item" onClick={() => { alert("Starring will be available soon!"); setShowMenu(false); }}>
@@ -746,6 +757,7 @@ function MessageList({
     onAddToWork,
     highlightMessageId,
     onPin,
+    onUnpin,
     currentUserDisplayName
 }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -1055,6 +1067,7 @@ function MessageList({
                                     totalCount={messages.length}
                                     onAddToWork={onAddToWork}
                                     onPin={onPin}
+                                    onUnpin={onUnpin}
                                 />
 
                                 {msg.isLocked ? (
