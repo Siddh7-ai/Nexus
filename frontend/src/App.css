@@ -10461,7 +10461,7 @@ body.dark-theme .pinned-message-bar {
 }
 
 .pinned-mic-icon {
-  color: #00a884;
+  color: var(--accent);
   display: inline-flex;
   align-items: center;
 }
@@ -10557,7 +10557,7 @@ body.dark-theme .pinned-menu-item:hover {
 }
 
 .pinned-indicator-segment.active {
-  background: #00a884;
+  background: var(--accent);
 }
 
 body.dark-theme .pinned-indicator-segment {
@@ -10565,7 +10565,7 @@ body.dark-theme .pinned-indicator-segment {
 }
 
 body.dark-theme .pinned-indicator-segment.active {
-  background: #00a884;
+  background: var(--accent);
 }
 
 .pinned-indicator-segment:hover {
@@ -10641,7 +10641,7 @@ body.dark-theme .pin-message-modal {
 }
 
 .pin-radio-input:checked + .pin-radio-custom {
-  border-color: #00a884;
+  border-color: var(--accent);
 }
 
 .pin-radio-custom::after {
@@ -10653,7 +10653,7 @@ body.dark-theme .pin-message-modal {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #00a884;
+  background: var(--accent);
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.2);
 }
 
@@ -10671,7 +10671,7 @@ body.dark-theme .pin-message-modal {
 .pin-cancel-btn {
   background: none;
   border: none;
-  color: #00a884;
+  color: var(--accent);
   font-size: 14px;
   font-weight: 700;
   padding: 8px 16px;
@@ -10681,11 +10681,11 @@ body.dark-theme .pin-message-modal {
 }
 
 .pin-cancel-btn:hover {
-  background: rgba(0, 168, 132, 0.08);
+  background: var(--accent-soft);
 }
 
 .pin-confirm-btn {
-  background: #00a884;
+  background: var(--accent);
   border: none;
   color: #ffffff;
   font-size: 14px;
@@ -10693,13 +10693,13 @@ body.dark-theme .pin-message-modal {
   padding: 10px 24px;
   border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 168, 132, 0.2);
+  box-shadow: 0 2px 6px rgba(var(--accent-rgb, 18, 199, 189), 0.2);
   transition: all 0.2s;
 }
 
 .pin-confirm-btn:hover {
-  background: #008f72;
-  box-shadow: 0 4px 12px rgba(0, 168, 132, 0.3);
+  background: var(--accent-deep);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb, 18, 199, 189), 0.3);
 }
 
 /* ─── Go to Message Highlight Strip (3 Blinks) ────────── */
@@ -10710,14 +10710,14 @@ body.dark-theme .pin-message-modal {
   bottom: -8px;
   left: -2000px;
   right: -2000px;
-  background-color: rgba(2, 81, 63, 0.28);
+  background-color: rgba(var(--accent-rgb, 18, 199, 189), 0.2);
   z-index: -1;
   pointer-events: none;
   animation: flashHighlightBlink 3.0s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 body.dark-theme .message-row.highlighted-message-flash::before {
-  background-color: rgba(2, 81, 63, 0.42);
+  background-color: rgba(var(--accent-rgb, 18, 199, 189), 0.32);
 }
 
 @keyframes flashHighlightBlink {

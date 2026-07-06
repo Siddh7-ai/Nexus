@@ -523,7 +523,7 @@ function ReactionBar({ reactions, onShowDetail, currentUser }) {
     );
 }
 
-function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount, onAddToWork }) {
+function MessageActions({ msg, currentUser, onReact, onEdit, onDelete, onAddReactionClick, onReply, onShowMessageInfo, onCopySuccess, isPrivate, onLockMessage, isSelectionMode = false, index, totalCount, onAddToWork, onPin }) {
     const [showReactions, setShowReactions] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [openUp, setOpenUp] = useState(false);
@@ -1054,6 +1054,7 @@ function MessageList({
                                     index={index}
                                     totalCount={messages.length}
                                     onAddToWork={onAddToWork}
+                                    onPin={onPin}
                                 />
 
                                 {msg.isLocked ? (
