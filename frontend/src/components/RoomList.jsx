@@ -67,6 +67,9 @@ function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = 
                 src={avatarSrc} 
                 alt={`${username}'s avatar`} 
                 className={`avatar ${className}`} 
+                width={size}
+                height={size}
+                loading="lazy"
                 style={{ width: size, height: size, objectFit: 'cover', borderRadius: '50%' }} 
             />
         );

@@ -181,4 +181,9 @@ const messageSchema = new mongoose.Schema({
     }
 });
 
+// Production-Grade Indexes to prevent full collection scans on chat load
+messageSchema.index({ room: 1, createdAt: -1 });
+messageSchema.index({ privateChatId: 1, createdAt: -1 });
+messageSchema.index({ tempId: 1 });
+
 module.exports = mongoose.model("Message", messageSchema);

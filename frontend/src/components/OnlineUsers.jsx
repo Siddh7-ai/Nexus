@@ -38,6 +38,9 @@ function OnlineUsers({ onlineUsers, onlineUserList = [], currentUser, onUserProf
                                 <img 
                                     src={user.avatar} 
                                     alt={user.username} 
+                                    width={32}
+                                    height={32}
+                                    loading="lazy"
                                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} 
                                 />
                             ) : (

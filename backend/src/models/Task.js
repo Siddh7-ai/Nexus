@@ -91,4 +91,9 @@ const TaskSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+// Production-Grade Indexes to optimize Kanban boards and dashboard retrievals
+TaskSchema.index({ room_id: 1, status: 1 });
+TaskSchema.index({ assignee_id: 1, status: 1 });
+TaskSchema.index({ created_by: 1 });
+
 module.exports = mongoose.model("Task", TaskSchema);

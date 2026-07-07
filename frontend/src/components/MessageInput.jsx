@@ -27,12 +27,13 @@ import {
     Plus,
     Lock
 } from "lucide-react";
-import { SmoothInput } from "./SmoothInput";
-import VoiceRecorder from "./VoiceRecorder";
-import StickerPicker from "./StickerPicker";
-import StickerCreator from "./StickerCreator";
 import sodium from "libsodium-wrappers-sumo";
 import { motion, useMotionValue, animate } from "framer-motion";
+
+import { SmoothInput } from "./SmoothInput";
+const VoiceRecorder = React.lazy(() => import("./VoiceRecorder"));
+const StickerPicker = React.lazy(() => import("./StickerPicker"));
+const StickerCreator = React.lazy(() => import("./StickerCreator"));
 
 // Lazy load the full emoji picker for performance
 const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
@@ -2048,11 +2049,13 @@ function MessageInput({
                     />
                 </div>
                 <div className="voice-recorder-wrapper" style={{ marginRight: '8px' }}>
-                    <VoiceRecorder 
-                        onVoiceMessageReady={onVoiceMessageSend} 
-                        onRecordingStart={onRecordingStart}
-                        onRecordingStop={onRecordingStop}
-                    />
+                    <Suspense fallback={null}>
+                        <VoiceRecorder 
+                            onVoiceMessageReady={onVoiceMessageSend} 
+                            onRecordingStart={onRecordingStart}
+                            onRecordingStop={onRecordingStop}
+                        />
+                    </Suspense>
                 </div>
                 <button className="send-btn" onClick={sendMessage} disabled={!message.trim()} aria-label="Send Message">
                     {isEditing ? "Save" : <SendHorizontal size={17} />}
@@ -2588,24 +2591,28 @@ function MessageInput({
 
             {/* STICKER PICKER OVERLAY */}
             {stickerPickerOpen && (
-                <StickerPicker
-                    initialPackId={stickerPickerDefaultPack}
-                    onSelectSticker={handleSendSticker}
-                    onCreateNewClick={() => {
-                        setStickerCreatorOpen(true);
-                        setStickerPickerOpen(false);
-                    }}
-                    onClose={() => setStickerPickerOpen(false)}
-                />
+                <Suspense fallback={<div className="sticker-picker-loading-shim" style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)' }}>Loading Stickers...</div>}>
+                    <StickerPicker
+                        initialPackId={stickerPickerDefaultPack}
+                        onSelectSticker={handleSendSticker}
+                        onCreateNewClick={() => {
+                            setStickerCreatorOpen(true);
+                            setStickerPickerOpen(false);
+                        }}
+                        onClose={() => setStickerPickerOpen(false)}
+                    />
+                </Suspense>
             )}
 
             {/* STICKER CREATOR MODAL */}
             {stickerCreatorOpen && (
-                <StickerCreator
-                    onSendSticker={handleSendCustomSticker}
-                    onSaveSticker={handleSaveCustomSticker}
-                    onClose={() => setStickerCreatorOpen(false)}
-                />
+                <Suspense fallback={null}>
+                    <StickerCreator
+                        onSendSticker={handleSendCustomSticker}
+                        onSaveSticker={handleSaveCustomSticker}
+                        onClose={() => setStickerCreatorOpen(false)}
+                    />
+                </Suspense>
             )}
         </div>
     );

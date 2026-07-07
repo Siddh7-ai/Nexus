@@ -6,13 +6,10 @@ import { motion, AnimatePresence, useMotionValue, useTransform, useVelocity, use
 import ChatHeader from "../components/ChatHeader";
 import OnlineUsers from "../components/OnlineUsers";
 import MessageList from "../components/MessageList";
-import VerifyModal from "../components/VerifyModal";
-import DataFlowVisualizer from "../components/DataFlowVisualizer";
 import { getBackendUrl } from "../utils/config";
 import TypingIndicator from "../components/TypingIndicator";
 import MessageInput from "../components/MessageInput";
 import RoomList from "../components/RoomList";
-import CrowdCanvas from "../components/CrowdCanvas";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { 
   encryptOutgoingMessage, 
@@ -25,13 +22,6 @@ import {
 import { fromBase64, toBase64 } from "../utils/crypto/encoding";
 import { encryptVoiceMessage } from "../utils/voiceMessage";
 import { getFullSessionRecord, deleteSessionState, cacheSessionIdentityKeys, getVaultPinData } from "../utils/crypto/keydb";
-import Vault from "../components/Vault";
-import MessageInfoModal from "../components/MessageInfoModal";
-import LockMessageModal from "../components/LockMessageModal";
-import NexTaskPage from "../components/NexTaskPage";
-import AddToWorkModal from "../components/AddToWorkModal";
-import CommandPalette from "../components/CommandPalette";
-import VaultPinEntryModal from "../components/VaultPinEntryModal";
 import sodium from "libsodium-wrappers-sumo";
 import { playPop } from "../utils/audio";
 
@@ -39,9 +29,23 @@ import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
 import { FiLock, FiTrash2, FiMessageSquare, FiX } from "react-icons/fi";
-import PinMessageModal from "../components/PinMessageModal";
 import { Pin, PinOff, ChevronDown, ArrowRight, Mic } from "lucide-react";
-import ThemeTransitionOptions from "../components/ThemeTransitionOptions";
+
+// Lazy load non-essential panel components and dialog modals to optimize build chunk sizes
+const VerifyModal = React.lazy(() => import("../components/VerifyModal"));
+const DataFlowVisualizer = React.lazy(() => import("../components/DataFlowVisualizer"));
+const CrowdCanvas = React.lazy(() => import("../components/CrowdCanvas"));
+const Vault = React.lazy(() => import("../components/Vault"));
+const MessageInfoModal = React.lazy(() => import("../components/MessageInfoModal"));
+const LockMessageModal = React.lazy(() => import("../components/LockMessageModal"));
+const NexTaskPage = React.lazy(() => import("../components/NexTaskPage"));
+const AddToWorkModal = React.lazy(() => import("../components/AddToWorkModal"));
+const CommandPalette = React.lazy(() => import("../components/CommandPalette"));
+const VaultPinEntryModal = React.lazy(() => import("../components/VaultPinEntryModal"));
+const PinMessageModal = React.lazy(() => import("../components/PinMessageModal"));
+const ThemeTransitionOptions = React.lazy(() => import("../components/ThemeTransitionOptions"));
+import ErrorBoundary from "../components/ErrorBoundary";
+import { ApiClient } from "../utils/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -1046,34 +1050,24 @@ function Chat() {
         async function fetchUserData() {
             const token = getAuthToken();
             if (!token) return;
-            try {
-                const [usersRes, convsRes, profileRes] = await Promise.all([
-                    fetch(`${getBackendUrl()}/api/users`, {
-                        headers: { "Authorization": `Bearer ${token}` }
-                    }),
-                    fetch(`${getBackendUrl()}/api/users/conversations`, {
-                        headers: { "Authorization": `Bearer ${token}` }
-                    }),
-                    fetch(`${getBackendUrl()}/api/user/profile/${username}`, {
-                        headers: { "Authorization": `Bearer ${token}` }
-                    })
-                ]);
-                
-                if (usersRes.ok) {
-                    const usersData = await usersRes.json();
-                    setAllUsers(usersData);
-                }
-                if (convsRes.ok) {
-                    const convsData = await convsRes.json();
-                    setConversationUsers(convsData);
-                }
-                if (profileRes.ok) {
-                    const profileData = await profileRes.json();
-                    setOwnProfileData(profileData);
-                }
-            } catch (err) {
-                console.error("Error fetching user list or conversations:", err);
-            }
+            
+            ApiClient.request(`${getBackendUrl()}/api/users`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            })
+            .then(data => setAllUsers(data))
+            .catch(err => console.error("Error fetching user list:", err));
+
+            ApiClient.request(`${getBackendUrl()}/api/users/conversations`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            })
+            .then(data => setConversationUsers(data))
+            .catch(err => console.error("Error fetching conversations:", err));
+
+            ApiClient.request(`${getBackendUrl()}/api/user/profile/${username}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            })
+            .then(data => setOwnProfileData(data))
+            .catch(err => console.error("Error fetching own profile:", err));
         }
         
         fetchUserData();
@@ -3351,18 +3345,22 @@ function Chat() {
                 {/* Main chat */}
                 <div className="chat-container">
                     {activeSidebarTab === "nextask" ? (
-                        <NexTaskPage 
-                            myUsername={username}
-                            token={getAuthToken()}
-                            theme={theme}
-                            onNavigateToMessage={handleNavigateToMessage}
-                            socket={socketRef.current}
-                            activeTab={nextaskActiveTab}
-                            setActiveTab={setNextaskActiveTab}
-                            selectedNexTask={nextaskBoard}
-                            setSelectedNexTask={setNextaskBoard}
-                            onTasksUpdate={handleTasksUpdate}
-                        />
+                        <ErrorBoundary title="NexTask Board Error">
+                            <Suspense fallback={<div className="empty-chat-placeholder" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--muted)' }}>Loading NexTask Board...</div>}>
+                                <NexTaskPage 
+                                    myUsername={username}
+                                    token={getAuthToken()}
+                                    theme={theme}
+                                    onNavigateToMessage={handleNavigateToMessage}
+                                    socket={socketRef.current}
+                                    activeTab={nextaskActiveTab}
+                                    setActiveTab={setNextaskActiveTab}
+                                    selectedNexTask={nextaskBoard}
+                                    setSelectedNexTask={setNextaskBoard}
+                                    onTasksUpdate={handleTasksUpdate}
+                                />
+                            </Suspense>
+                        </ErrorBoundary>
                     ) : !activeRoom && !activePrivate ? (
                         <div className="empty-chat-placeholder" style={{ 
                             position: 'relative',
@@ -3437,7 +3435,11 @@ function Chat() {
                                 height: '55%',
                                 zIndex: 1
                             }}>
-                                <CrowdCanvas src="/images/peeps/all-peeps.png" rows={15} cols={7} theme={theme} />
+                                <ErrorBoundary title="Activity Canvas Error">
+                                    <Suspense fallback={<div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>Loading Activity View...</div>}>
+                                        <CrowdCanvas src="/images/peeps/all-peeps.png" rows={15} cols={7} theme={theme} />
+                                    </Suspense>
+                                </ErrorBoundary>
                             </div>
                         </div>
                     ) : (
@@ -3653,25 +3655,33 @@ function Chat() {
                             )}
 
                             {activePrivate && (
-                                <Vault 
-                                    isOpen={showVault}
-                                    onClose={() => setShowVault(false)}
-                                    privateChatId={activePrivate}
-                                    myUsername={username}
-                                    token={getAuthToken()}
-                                    vaultKey={vaultKey}
-                                    setVaultKey={setVaultKey}
-                                />
+                                <ErrorBoundary title="E2EE Vault Error">
+                                    <Suspense fallback={null}>
+                                        <Vault 
+                                            isOpen={showVault}
+                                            onClose={() => setShowVault(false)}
+                                            privateChatId={activePrivate}
+                                            myUsername={username}
+                                            token={getAuthToken()}
+                                            vaultKey={vaultKey}
+                                            setVaultKey={setVaultKey}
+                                        />
+                                    </Suspense>
+                                </ErrorBoundary>
                             )}
-                            <CommandPalette 
-                                isOpen={isCommandPaletteOpen}
-                                onClose={() => setIsCommandPaletteOpen(false)}
-                                setActiveSidebarTab={setActiveSidebarTab}
-                                setSelectedNexTask={setNextaskBoard}
-                                rooms={customRooms}
-                                activeTab={nextaskActiveTab}
-                                setActiveTab={setNextaskActiveTab}
-                            />
+                            <ErrorBoundary title="Command Palette Error">
+                                <Suspense fallback={null}>
+                                    <CommandPalette 
+                                        isOpen={isCommandPaletteOpen}
+                                        onClose={() => setIsCommandPaletteOpen(false)}
+                                        setActiveSidebarTab={setActiveSidebarTab}
+                                        setSelectedNexTask={setNextaskBoard}
+                                        rooms={customRooms}
+                                        activeTab={nextaskActiveTab}
+                                        setActiveTab={setNextaskActiveTab}
+                                    />
+                                </Suspense>
+                            </ErrorBoundary>
                         </>
                     )}
                 </div>
