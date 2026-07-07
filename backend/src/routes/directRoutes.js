@@ -80,12 +80,13 @@ router.get("/api/vault/:privateChatId", authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
     }
     const { privateChatId } = req.params;
-    const members = privateChatId.split("_");
+    const cleanChatId = (privateChatId || "").toLowerCase();
+    const members = cleanChatId.split("_");
     if (!members.includes(req.user.username.toLowerCase())) {
       return res.status(403).json({ error: "Not a member of this chat" });
     }
 
-    const items = await VaultItem.find({ privateChatId }).sort({ createdAt: -1 });
+    const items = await VaultItem.find({ privateChatId: cleanChatId }).sort({ createdAt: -1 });
     res.json(items);
   } catch (err) {
     logger.error("Fetch vault items error:", err);
@@ -99,7 +100,8 @@ router.post("/api/vault/:privateChatId", authenticateToken, async (req, res) => 
       return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
     }
     const { privateChatId } = req.params;
-    const members = privateChatId.split("_");
+    const cleanChatId = (privateChatId || "").toLowerCase();
+    const members = cleanChatId.split("_");
     if (!members.includes(req.user.username.toLowerCase())) {
       return res.status(403).json({ error: "Not a member of this chat" });
     }
@@ -110,7 +112,7 @@ router.post("/api/vault/:privateChatId", authenticateToken, async (req, res) => 
     }
 
     const newItem = new VaultItem({
-      privateChatId,
+      privateChatId: cleanChatId,
       uploadedBy: req.user.username,
       itemType,
       encryptedData
@@ -129,7 +131,8 @@ router.post("/api/vault/:privateChatId/file", authenticateToken, async (req, res
       return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
     }
     const { privateChatId } = req.params;
-    const members = privateChatId.split("_");
+    const cleanChatId = (privateChatId || "").toLowerCase();
+    const members = cleanChatId.split("_");
     if (!members.includes(req.user.username.toLowerCase())) {
       return res.status(403).json({ error: "Not a member of this chat" });
     }
@@ -140,7 +143,7 @@ router.post("/api/vault/:privateChatId/file", authenticateToken, async (req, res
     }
 
     const newItem = new VaultItem({
-      privateChatId,
+      privateChatId: cleanChatId,
       uploadedBy: req.user.username,
       itemType: "file",
       encryptedData,
@@ -163,7 +166,8 @@ router.delete("/api/vault/:privateChatId/:itemId", authenticateToken, async (req
       return res.status(403).json({ error: "Access denied. Guests cannot access the vault." });
     }
     const { privateChatId, itemId } = req.params;
-    const members = privateChatId.split("_");
+    const cleanChatId = (privateChatId || "").toLowerCase();
+    const members = cleanChatId.split("_");
     if (!members.includes(req.user.username.toLowerCase())) {
       return res.status(403).json({ error: "Not a member of this chat" });
     }
@@ -173,7 +177,7 @@ router.delete("/api/vault/:privateChatId/:itemId", authenticateToken, async (req
       return res.status(404).json({ error: "Vault item not found" });
     }
 
-    if (item.privateChatId !== privateChatId) {
+    if (item.privateChatId !== cleanChatId) {
       return res.status(400).json({ error: "Vault item does not belong to this chat" });
     }
 
