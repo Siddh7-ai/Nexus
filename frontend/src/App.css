@@ -2957,13 +2957,14 @@ body.dark-theme .dm-row-card.locked-room:hover {
   max-height: 85vh;
   background: #ffffff;
   border-radius: 24px;
-  border: 1px solid rgba(18, 199, 189, 0.15);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08), inset 0 0 20px rgba(18, 199, 189, 0.01);
+  border: 1.5px solid rgba(18, 199, 189, 0.2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08), inset 0 0 25px rgba(18, 199, 189, 0.02);
   padding: 16px 20px;
   padding-top: 24px;
   color: #0f172a;
   font-family: Inter, system-ui, -apple-system, sans-serif;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   margin-top: -5px; /* Pull closer to clasp */
   display: flex;
@@ -2972,7 +2973,130 @@ body.dark-theme .dm-row-card.locked-room:hover {
   transform-style: preserve-3d;
   cursor: grab;
   user-select: none;
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cyber-badge-card:hover {
+  border-color: rgba(18, 199, 189, 0.5);
+  box-shadow: 
+    0 30px 70px rgba(0, 0, 0, 0.12), 
+    0 0 30px rgba(18, 199, 189, 0.25),
+    inset 0 0 25px rgba(18, 199, 189, 0.03);
+}
+
+/* Corner Bracket Accent Indicators */
+.card-corner-bracket {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+  opacity: 0.6;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 4;
+}
+
+.cyber-badge-card:hover .card-corner-bracket {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.card-corner-bracket.top-left {
+  top: 14px;
+  left: 14px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+}
+
+.card-corner-bracket.top-right {
+  top: 14px;
+  right: 14px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 6px;
+}
+
+.card-corner-bracket.bottom-left {
+  bottom: 14px;
+  left: 14px;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 6px;
+}
+
+.card-corner-bracket.bottom-right {
+  bottom: 14px;
+  right: 14px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 6px;
+}
+
+/* Holographic Laser Sweep */
+.cyber-badge-card::after {
+  content: "";
+  position: absolute;
+  top: -150%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(18, 199, 189, 0.01) 40%,
+    rgba(18, 199, 189, 0.08) 50%,
+    rgba(18, 199, 189, 0.01) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  pointer-events: none;
+  z-index: 2;
+}
+
+body.dark-theme .cyber-badge-card::after {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(18, 199, 189, 0.03) 40%,
+    rgba(18, 199, 189, 0.15) 50%,
+    rgba(18, 199, 189, 0.03) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.cyber-badge-card:hover::after {
+  animation: holoSweep 2s ease-in-out infinite;
+}
+
+@keyframes holoSweep {
+  0% {
+    top: -150%;
+  }
+  100% {
+    top: 150%;
+  }
+}
+
+/* Cyber grid background */
+.cyber-card-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(18, 199, 189, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 199, 189, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center;
+  pointer-events: none;
+  border-radius: 24px;
+  opacity: 0.8;
+  z-index: 1;
+}
+
+body.dark-theme .cyber-card-grid {
+  background-image: 
+    linear-gradient(rgba(18, 199, 189, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 199, 189, 0.04) 1px, transparent 1px);
 }
 
 .cyber-badge-card::-webkit-scrollbar {
@@ -3022,10 +3146,23 @@ body.dark-theme .dm-row-card.locked-room:hover {
 }
 
 body.dark-theme .cyber-badge-card {
-  background: #000000;
-  border-color: rgba(18, 199, 189, 0.18);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(18, 199, 189, 0.02);
+  background: rgba(10, 15, 26, 0.78);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border-color: rgba(18, 199, 189, 0.25);
+  box-shadow: 
+    0 30px 70px rgba(0, 0, 0, 0.6), 
+    0 0 25px rgba(18, 199, 189, 0.08),
+    inset 0 0 30px rgba(18, 199, 189, 0.04);
   color: #f3f4f6;
+}
+
+body.dark-theme .cyber-badge-card:hover {
+  border-color: rgba(18, 199, 189, 0.55);
+  box-shadow: 
+    0 35px 80px rgba(0, 0, 0, 0.7), 
+    0 0 35px rgba(18, 199, 189, 0.3),
+    inset 0 0 30px rgba(18, 199, 189, 0.06);
 }
 
 .cyber-badge-card:active {
@@ -3039,6 +3176,7 @@ body.dark-theme .cyber-badge-card {
   border: 1px solid rgba(18, 199, 189, 0.06);
   border-radius: 18px;
   pointer-events: none;
+  z-index: 4;
 }
 
 body.dark-theme .cyber-badge-card::before {
@@ -3051,10 +3189,21 @@ body.dark-theme .cyber-badge-card::before {
   left: 0;
   right: 0;
   height: 12px;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent) 0%, #10b981 50%, var(--accent) 100%);
+  background-size: 200% auto;
   border-top-left-radius: 23px;
   border-top-right-radius: 23px;
   z-index: 10;
+  animation: activeBarFlow 3s linear infinite;
+}
+
+@keyframes activeBarFlow {
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 
 .cyber-card-header {
@@ -3151,13 +3300,14 @@ body.dark-theme .empty-chat-corner-brand {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
 }
 
 .cyber-close-btn:hover {
-  background: rgba(18, 199, 189, 0.15);
-  transform: scale(1.05);
+  background: var(--accent);
+  color: #121212;
+  transform: scale(1.12) rotate(90deg);
 }
 
 .cyber-avatar-zone {
@@ -3180,6 +3330,31 @@ body.dark-theme .empty-chat-corner-brand {
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.cyber-avatar-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(18, 199, 189, 0.35);
+  animation: spinnerRotate 20s linear infinite;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+.cyber-avatar-wrapper:hover::before {
+  border-color: var(--accent);
+  animation-duration: 10s;
+}
+
+@keyframes spinnerRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .cyber-avatar-wrapper:hover {
   transform: scale(1.05);
   border-color: var(--accent);
@@ -3197,13 +3372,16 @@ body.dark-theme .empty-chat-corner-brand {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: rgba(18, 199, 189, 0.08);
+  background: rgba(18, 199, 189, 0.05);
   color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 42px;
-  font-weight: bold;
+  font-size: 44px;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(18, 199, 189, 0.4);
+  font-family: 'Outfit', 'Inter', sans-serif;
+  border: 1px solid rgba(18, 199, 189, 0.15);
 }
 
 .cyber-bio-section {
@@ -3285,11 +3463,25 @@ body.dark-theme .cyber-bio-text {
   align-items: flex-start;
   gap: 4px;
   box-sizing: border-box;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cyber-stat-box:hover {
+  transform: translateY(-2px);
+  background: rgba(18, 199, 189, 0.06);
+  border-color: rgba(18, 199, 189, 0.35);
+  box-shadow: 0 4px 12px rgba(18, 199, 189, 0.08);
 }
 
 body.dark-theme .cyber-stat-box {
   background: rgba(18, 199, 189, 0.015);
   border-color: rgba(18, 199, 189, 0.12);
+}
+
+body.dark-theme .cyber-stat-box:hover {
+  background: rgba(18, 199, 189, 0.03);
+  border-color: rgba(18, 199, 189, 0.25);
+  box-shadow: 0 4px 12px rgba(18, 199, 189, 0.12);
 }
 
 .cyber-stat-label {
@@ -3322,11 +3514,24 @@ body.dark-theme .cyber-stat-value {
   margin-bottom: 12px;
   box-sizing: border-box;
   z-index: 4;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.trust-score-bar:hover {
+  background: rgba(18, 199, 189, 0.08);
+  border-color: rgba(18, 199, 189, 0.35);
+  box-shadow: 0 4px 15px rgba(18, 199, 189, 0.12);
 }
 
 body.dark-theme .trust-score-bar {
   background: rgba(18, 199, 189, 0.02);
   border-color: rgba(18, 199, 189, 0.12);
+}
+
+body.dark-theme .trust-score-bar:hover {
+  background: rgba(18, 199, 189, 0.04);
+  border-color: rgba(18, 199, 189, 0.22);
+  box-shadow: 0 4px 15px rgba(18, 199, 189, 0.18);
 }
 
 .trust-score-left {
@@ -10746,6 +10951,83 @@ body.dark-theme .message-row.highlighted-message-flash::before {
     opacity: 0;
   }
 }
+
+/* ─── NexTask Summary KPI Card ─── */
+.nextask-kpi-card {
+  background: linear-gradient(135deg, var(--accent-deep, #0e8f89) 0%, var(--accent, #12c7bd) 100%);
+  border-radius: 16px;
+  padding: 16px;
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(18, 199, 189, 0.15);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1;
+}
+
+.nextask-kpi-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(18, 199, 189, 0.3), 0 0 15px rgba(18, 199, 189, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.nextask-kpi-card::after {
+  content: "";
+  position: absolute;
+  top: -150%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  pointer-events: none;
+  z-index: 2;
+  transition: none;
+}
+
+.nextask-kpi-card:hover::after {
+  animation: holoSweep 1.8s ease-in-out infinite;
+}
+
+/* KPI Metric Progress Ring */
+.kpi-progress-ring {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  transition: transform 0.3s ease;
+}
+
+.nextask-kpi-card:hover .kpi-progress-ring {
+  transform: translateY(-50%) scale(1.08);
+}
+
+.kpi-card-glow-shape {
+  position: absolute;
+  right: -20px;
+  bottom: -20px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 1;
+  transition: transform 0.5s ease, background-color 0.3s ease;
+}
+
+.nextask-kpi-card:hover .kpi-card-glow-shape {
+  transform: scale(1.3);
+  background: rgba(255, 255, 255, 0.15);
+}
+
 
 
 

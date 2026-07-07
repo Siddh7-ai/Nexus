@@ -184,15 +184,52 @@
   gap: 10px;
 }
 
-.sla-input {
-  width: 80px;
+.custom-number-spinner {
+  display: flex;
+  align-items: center;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 8px 12px;
+  overflow: hidden;
+  width: 108px;
+  height: 36px;
+  box-sizing: border-box;
+}
+
+.custom-number-spinner .sla-input {
+  width: 40px;
+  background: transparent;
+  border: none;
+  padding: 8px 0;
+  text-align: center;
+  flex: 1;
   color: #fff;
   font-weight: 700;
-  text-align: center;
+  font-size: 13.5px;
+  outline: none;
+}
+
+.custom-number-spinner .spinner-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  color: var(--muted, #94a3b8);
+  width: 34px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.custom-number-spinner .spinner-btn:hover {
+  background: rgba(18, 199, 189, 0.15);
+  color: var(--accent, #12c7bd);
+}
+
+.custom-number-spinner .spinner-btn:active {
+  background: rgba(18, 199, 189, 0.25);
 }
 
 .sla-desc {

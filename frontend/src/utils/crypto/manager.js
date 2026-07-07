@@ -174,6 +174,7 @@ export async function generateAndStoreKeys(password, username) {
  * @returns {Promise<object|null>} Decrypted private keys
  */
 export async function loadDecryptedKeys(username) {
+    await cryptoReady;
     const masterKey = getMasterKey();
     if (!masterKey) return null;
 

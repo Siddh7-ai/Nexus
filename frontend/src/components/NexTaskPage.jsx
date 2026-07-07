@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FiBriefcase, FiMessageSquare, FiPlus, FiFilter, FiSearch, FiClock, FiCornerUpRight, FiUnlock, FiLock, FiAlertTriangle, FiSend, FiX, FiCheck, FiPlay, FiTrash2, FiUser, FiUsers, FiChevronDown, FiGrid, FiHelpCircle } from "react-icons/fi";
+import { FiBriefcase, FiMessageSquare, FiPlus, FiMinus, FiFilter, FiSearch, FiClock, FiCornerUpRight, FiUnlock, FiLock, FiAlertTriangle, FiSend, FiX, FiCheck, FiPlay, FiTrash2, FiUser, FiUsers, FiChevronDown, FiGrid, FiHelpCircle } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import "./NexTask.css";
 import logo from "../assets/logo.png";
@@ -915,29 +915,49 @@ export default function NexTaskPage({
                             <div className="sla-control">
                                 <span className="sla-label">Issue Breach Threshold:</span>
                                 <div className="sla-input-row">
-                                    <input
-                                        type="number"
-                                        className="sla-input"
-                                        value={slaThreshold}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === "") {
-                                                setSlaThreshold(0);
-                                                localStorage.setItem("nexus_sla_threshold", 0);
-                                                return;
-                                            }
-                                            const parsed = parseFloat(val);
-                                            if (isNaN(parsed)) {
-                                                setSlaThreshold(0);
-                                                localStorage.setItem("nexus_sla_threshold", 0);
-                                                return;
-                                            }
-                                            const rounded = Math.round(parsed);
-                                            const v = rounded >= 0 ? rounded : 0;
-                                            setSlaThreshold(v);
-                                            localStorage.setItem("nexus_sla_threshold", v);
-                                        }}
-                                    />
+                                    <div className="custom-number-spinner">
+                                        <button 
+                                            type="button" 
+                                            className="spinner-btn down"
+                                            onClick={() => {
+                                                const current = slaThreshold || 0;
+                                                const next = current > 0 ? current - 1 : 0;
+                                                setSlaThreshold(next);
+                                                localStorage.setItem("nexus_sla_threshold", next);
+                                            }}
+                                        >
+                                            <FiMinus size={12} />
+                                        </button>
+                                        <input
+                                            type="text"
+                                            className="sla-input"
+                                            value={slaThreshold}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val === "") {
+                                                    setSlaThreshold(0);
+                                                    localStorage.setItem("nexus_sla_threshold", 0);
+                                                    return;
+                                                }
+                                                const parsed = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                                                const v = isNaN(parsed) ? 0 : parsed;
+                                                setSlaThreshold(v);
+                                                localStorage.setItem("nexus_sla_threshold", v);
+                                            }}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            className="spinner-btn up"
+                                            onClick={() => {
+                                                const current = slaThreshold || 0;
+                                                const next = current + 1;
+                                                setSlaThreshold(next);
+                                                localStorage.setItem("nexus_sla_threshold", next);
+                                            }}
+                                        >
+                                            <FiPlus size={12} />
+                                        </button>
+                                    </div>
                                     <span style={{ fontSize: '13px', fontWeight: 'bold' }}>hours</span>
                                 </div>
                                 <p className="sla-desc">

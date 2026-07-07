@@ -1166,14 +1166,18 @@ function Chat() {
             }
         });
 
-        newSocket.on("connect_error", () => {
-            sessionStorage.removeItem("token");
-            localStorage.removeItem("token");
-            sessionStorage.removeItem("username");
-            localStorage.removeItem("username");
-            sessionStorage.removeItem("nexus_master_key");
-            localStorage.removeItem("nexus_master_key");
-            navigate("/login");
+        newSocket.on("connect_error", (err) => {
+            console.warn("Socket connection error:", err);
+            // Only log out if it is an explicit authentication error
+            if (err && (err.message === "Authentication required" || err.message === "Invalid token")) {
+                sessionStorage.removeItem("token");
+                localStorage.removeItem("token");
+                sessionStorage.removeItem("username");
+                localStorage.removeItem("username");
+                sessionStorage.removeItem("nexus_master_key");
+                localStorage.removeItem("nexus_master_key");
+                navigate("/login");
+            }
         });
 
         newSocket.on("currentUser", (user) => {

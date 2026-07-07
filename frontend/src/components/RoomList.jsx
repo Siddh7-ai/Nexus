@@ -1627,30 +1627,41 @@ function NexTaskDashboard({ tasks = [], board = "personal", rooms = [] }) {
                 gap: '16px'
             }}>
                 {/* KPI Metrics */}
-                <div style={{
-                    background: 'linear-gradient(135deg, var(--accent-deep) 0%, var(--accent) 100%)',
-                    borderRadius: '16px',
-                    padding: '16px',
-                    color: '#ffffff',
-                    boxShadow: '0 4px 12px rgba(var(--accent-rgb), 0.15)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                }}>
-                    <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.8 }}>Total Items</span>
-                    <h2 style={{ margin: '4px 0 0 0', fontSize: '28px', fontWeight: '800' }}>{totalTasks}</h2>
-                    <span style={{ fontSize: '10px', opacity: 0.9, display: 'block', marginTop: '6px' }}>
-                        {completedTotal} of {totalTasks} items resolved
-                    </span>
-                    <div style={{
-                        position: 'absolute',
-                        right: '-20px',
-                        bottom: '-20px',
-                        width: '80px',
-                        height: '80px',
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.1)',
-                        pointerEvents: 'none'
-                    }} />
+                <div className="nextask-kpi-card">
+                    <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '60px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.85, letterSpacing: '0.5px' }}>Total Items</span>
+                        <h2 style={{ margin: '4px 0 0 0', fontSize: '32px', fontWeight: '900', fontFamily: "'Outfit', sans-serif" }}>{totalTasks}</h2>
+                        <span style={{ fontSize: '11px', opacity: 0.9, display: 'block', marginTop: '6px', fontWeight: '500' }}>
+                            {completedTotal} of {totalTasks} items resolved
+                        </span>
+                    </div>
+                    {/* SVG Circular Progress Ring */}
+                    <div className="kpi-progress-ring">
+                         <svg width="48" height="48" viewBox="0 0 36 36">
+                              <path
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none"
+                                stroke="rgba(255, 255, 255, 0.2)"
+                                strokeWidth="3"
+                              />
+                              <path
+                                strokeDasharray={`${completionRate}, 100`}
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                style={{
+                                    transition: 'stroke-dasharray 0.8s ease-in-out',
+                                }}
+                              />
+                              <text x="18" y="20.35" fill="#ffffff" fontSize="9px" fontWeight="900" textAnchor="middle">
+                                  {completionRate}%
+                              </text>
+                         </svg>
+                    </div>
+                    {/* Decorative bottom right glowing shape */}
+                    <div className="kpi-card-glow-shape" />
                 </div>
 
                 {/* Progress bar card */}
