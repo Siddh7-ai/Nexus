@@ -3,6 +3,8 @@ import { FiArrowLeft, FiCheck } from "react-icons/fi";
 import { Lock } from "lucide-react";
 import VoiceMessageBubble from "./VoiceMessageBubble";
 import { getBackendUrl } from "../utils/config";
+import { StickerBubble } from "./MessageList";
+
 
 export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate }) {
     if (!msg) return null;
@@ -91,6 +93,15 @@ export default function MessageInfoModal({ msg, currentUser, onClose, isPrivate 
                                     waveform={voiceData.waveform}
                                     transcript={voiceData.transcript}
                                 />
+                            </div>
+                        ) : msg.sticker ? (
+                            <div className={`message-sticker-container-bubble ${isOwn ? "own" : "other"}`} style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>
+                                <StickerBubble msg={msg} />
+                                <div className="message-meta">
+                                    <span className="message-time">
+                                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                </div>
                             </div>
                         ) : (
                             <div className={`message-bubble ${isOwn ? "own" : "other"}`} style={{ margin: '0 auto', maxWidth: '85%', pointerEvents: 'none' }}>

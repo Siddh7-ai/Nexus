@@ -33,7 +33,7 @@ const StickerImage = ({ stickerUrl, alt, ...props }) => {
     return <img src={src} alt={alt} onError={handleError} {...props} />;
 };
 
-function StickerBubble({ msg }) {
+export function StickerBubble({ msg }) {
     const [url, setUrl] = useState(null);
     const [loading, setLoading] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
