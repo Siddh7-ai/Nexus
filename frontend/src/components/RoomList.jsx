@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
-import savedMessagesLogo from "../assets/saved_msg.png";
+import savedMessagesLogo from "../assets/saved.png";
 import { SmoothInput } from "./SmoothInput";
 import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
