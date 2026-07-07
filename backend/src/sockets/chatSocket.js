@@ -528,11 +528,25 @@ io.on("connection", async (socket) => {
     socket.on("requestSessionReset", ({ privateChatId }) => {
         if (!privateChatId) return;
         socket.to(`private_${privateChatId}`).emit("sessionResetRequested", { privateChatId });
+        
+        const parts = privateChatId.split("_");
+        parts.forEach(p => {
+            if (p.toLowerCase() !== socket.username.toLowerCase()) {
+                io.to(`user_${p.toLowerCase()}`).emit("sessionResetRequested", { privateChatId });
+            }
+        });
     });
 
     socket.on("requestSessionResetAndResend", ({ messageId, privateChatId }) => {
         if (!privateChatId || !messageId) return;
         socket.to(`private_${privateChatId}`).emit("sessionResetAndResendRequested", { messageId, privateChatId });
+
+        const parts = privateChatId.split("_");
+        parts.forEach(p => {
+            if (p.toLowerCase() !== socket.username.toLowerCase()) {
+                io.to(`user_${p.toLowerCase()}`).emit("sessionResetAndResendRequested", { messageId, privateChatId });
+            }
+        });
     });
 
     socket.on("resendEncryptedMessage", async ({ messageId, privateChatId, text, ratchetHeader, handshakePayload, senderCiphertext }) => {

@@ -26,7 +26,7 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
             : `Locked Message (${new Date().toLocaleDateString()})`
     );
 
-    const pinId = `vault_pin_${myUsername.toLowerCase()}_${privateChatId.toLowerCase()}`;
+    const pinId = `vault_pin_${myUsername.toLowerCase()}_${(privateChatId || "").toLowerCase()}`;
 
     useEffect(() => {
         const loadPinData = async () => {

@@ -41,3 +41,15 @@
 {"level":"error","message":"Get DM conversations error: ClearedChat is not defined","service":"nexus-backend","stack":"ReferenceError: ClearedChat is not defined\n    at C:\\Users\\Raulji Siddharthsinh\\Desktop\\Internship\\Chat App\\backend\\src\\routes\\directRoutes.js:715:26\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2026-07-07 22:31:57"}
 {"level":"error","message":"Get DM conversations error: ClearedChat is not defined","service":"nexus-backend","stack":"ReferenceError: ClearedChat is not defined\n    at C:\\Users\\Raulji Siddharthsinh\\Desktop\\Internship\\Chat App\\backend\\src\\routes\\directRoutes.js:715:26\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2026-07-07 22:31:58"}
 {"level":"error","message":"Get DM conversations error: ClearedChat is not defined","service":"nexus-backend","stack":"ReferenceError: ClearedChat is not defined\n    at C:\\Users\\Raulji Siddharthsinh\\Desktop\\Internship\\Chat App\\backend\\src\\routes\\directRoutes.js:715:26\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)","timestamp":"2026-07-07 22:32:00"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-07 22:33:13"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-07 22:33:14"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-07 22:33:14"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-07 22:33:14"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-07 22:33:14"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-07 22:33:14"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:35:14"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:37:14"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:39:14"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:41:16"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:43:16"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 22:45:16"}

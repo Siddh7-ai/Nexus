@@ -3747,83 +3747,85 @@ function Chat() {
                 </div>
             )}
 
-            {infoMsg && (
-                <MessageInfoModal
-                    msg={infoMsg}
-                    currentUser={username}
-                    onClose={() => setInfoMsg(null)}
-                    isPrivate={!!activePrivate}
-                />
-            )}
+            <Suspense fallback={null}>
+                {infoMsg && (
+                    <MessageInfoModal
+                        msg={infoMsg}
+                        currentUser={username}
+                        onClose={() => setInfoMsg(null)}
+                        isPrivate={!!activePrivate}
+                    />
+                )}
 
-            {lockingMessage && (
-                <LockMessageModal
-                    msg={lockingMessage}
-                    onClose={() => setLockingMessage(null)}
-                    privateChatId={activePrivate}
+                {lockingMessage && (
+                    <LockMessageModal
+                        msg={lockingMessage}
+                        onClose={() => setLockingMessage(null)}
+                        privateChatId={activePrivate}
+                        myUsername={username}
+                        token={getAuthToken()}
+                        onLockSuccess={handleLockMessageSuccess}
+                    />
+                )}
+
+                {unlockingMessage && unlockingPinData && (
+                    <VaultPinEntryModal
+                        onClose={() => {
+                            setUnlockingMessage(null);
+                            setUnlockingPinData(null);
+                        }}
+                        pinData={unlockingPinData}
+                        onUnlock={(key) => {
+                            setVaultKey(key);
+                            setShowVault(true); // Open the vault panel!
+                            setUnlockingMessage(null);
+                            setUnlockingPinData(null);
+                        }}
+                        onResetPin={(key) => {
+                            setVaultKey(key);
+                            setShowVault(true);
+                            setUnlockingMessage(null);
+                            setUnlockingPinData(null);
+                        }}
+                        privateChatId={activePrivate}
+                        myUsername={username}
+                    />
+                )}
+
+                <VerifyModal
+                    isOpen={showVerifyModal}
+                    onClose={() => setShowVerifyModal(false)}
                     myUsername={username}
-                    token={getAuthToken()}
-                    onLockSuccess={handleLockMessageSuccess}
+                    partnerUsername={activePrivateName}
+                    myIdentityKey={myIdentityKey}
+                    partnerIdentityKey={partnerIdentityKey}
                 />
-            )}
 
-            {unlockingMessage && unlockingPinData && (
-                <VaultPinEntryModal
-                    onClose={() => {
-                        setUnlockingMessage(null);
-                        setUnlockingPinData(null);
-                    }}
-                    pinData={unlockingPinData}
-                    onUnlock={(key) => {
-                        setVaultKey(key);
-                        setShowVault(true); // Open the vault panel!
-                        setUnlockingMessage(null);
-                        setUnlockingPinData(null);
-                    }}
-                    onResetPin={(key) => {
-                        setVaultKey(key);
-                        setShowVault(true);
-                        setUnlockingMessage(null);
-                        setUnlockingPinData(null);
-                    }}
-                    privateChatId={activePrivate}
+                <DataFlowVisualizer
+                    isOpen={showVisualizer}
+                    onClose={() => setShowVisualizer(false)}
+                    visualizerData={visualizerData}
+                />
+
+                <AddToWorkModal
+                    isOpen={!!addToWorkMsg}
+                    message={addToWorkMsg}
+                    users={nextaskUsers}
                     myUsername={username}
+                    isPrivateChat={!!activePrivate}
+                    activeChatId={activePrivate ? activePrivate : activeRoom}
+                    onClose={() => setAddToWorkMsg(null)}
+                    onSubmit={handleCreateTaskFromModal}
                 />
-            )}
 
-            <VerifyModal
-                isOpen={showVerifyModal}
-                onClose={() => setShowVerifyModal(false)}
-                myUsername={username}
-                partnerUsername={activePrivateName}
-                myIdentityKey={myIdentityKey}
-                partnerIdentityKey={partnerIdentityKey}
-            />
-
-            <DataFlowVisualizer
-                isOpen={showVisualizer}
-                onClose={() => setShowVisualizer(false)}
-                visualizerData={visualizerData}
-            />
-
-            <AddToWorkModal
-                isOpen={!!addToWorkMsg}
-                message={addToWorkMsg}
-                users={nextaskUsers}
-                myUsername={username}
-                isPrivateChat={!!activePrivate}
-                activeChatId={activePrivate ? activePrivate : activeRoom}
-                onClose={() => setAddToWorkMsg(null)}
-                onSubmit={handleCreateTaskFromModal}
-            />
-
-            {pinTargetMessage && (
-                <PinMessageModal
-                    msg={pinTargetMessage}
-                    onClose={() => setPinTargetMessage(null)}
-                    onPin={handlePinMessageConfirm}
-                />
-            )}
+                {pinTargetMessage && (
+                    <PinMessageModal
+                        msg={pinTargetMessage}
+                        onClose={() => setPinTargetMessage(null)}
+                        onPin={handlePinMessageConfirm}
+                    />
+                )}
+            </Suspense>
 
             {/* Block Target Confirmation Modal */}
             {blockTargetConfirm && (
