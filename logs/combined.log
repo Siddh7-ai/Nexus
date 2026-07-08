@@ -73,3 +73,39 @@
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:11:20"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:13:20"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:15:20"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-07 23:16:01"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-07 23:16:02"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-07 23:16:02"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-07 23:16:02"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-07 23:16:02"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-07 23:16:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:18:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:20:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-07 23:22:02"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-07 23:23:16"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-07 23:23:17"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-07 23:23:17"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-07 23:23:17"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-07 23:23:17"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-07 23:23:17"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-08 15:05:36"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-08 15:05:37"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-08 15:05:37"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-08 15:05:37"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-08 15:05:37"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-08 15:05:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:07:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:09:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:11:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:13:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:15:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:17:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:19:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:21:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:23:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:25:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:27:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:29:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:31:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:33:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:35:37"}

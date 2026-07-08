@@ -601,7 +601,6 @@ function Chat() {
     const [joinError, setJoinError] = useState("");
 
     // Hanging ID Card Physics & Spring Values
-    const [idDragging, setIdDragging] = useState(false);
     const idDraggingRef = useRef(false);
     const pullX = useMotionValue(0);
     const pullY = useMotionValue(0);
@@ -609,8 +608,6 @@ function Chat() {
     const springY = useSpring(pullY, { stiffness: 160, damping: 26, mass: 1.1 });
     const idRotate  = useMotionValue(0);
     const smoothRotate = useSpring(idRotate, { stiffness: 140, damping: 24, mass: 1.0 });
-    const [cardX, setCardX] = useState(0);
-    const [cardY, setCardY] = useState(0);
 
     const lanyardPath = useTransform(
         [springX, springY],
@@ -632,15 +629,6 @@ function Chat() {
     );
 
     useEffect(() => {
-        const unsubX = springX.on("change", v => setCardX(v));
-        const unsubY = springY.on("change", v => setCardY(v));
-        return () => {
-            unsubX();
-            unsubY();
-        };
-    }, [springX, springY]);
-
-    useEffect(() => {
         const handleGlobalKeyDown = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
                 e.preventDefault();
@@ -654,7 +642,6 @@ function Chat() {
     useEffect(() => {
         if (!selectedProfileUsername) {
             idDraggingRef.current = false;
-            setIdDragging(false);
             pullX.jump(0); pullY.jump(0);
             springX.jump(0); springY.jump(0);
             idRotate.jump(0); smoothRotate.jump(0);
@@ -667,7 +654,6 @@ function Chat() {
         const tag = e.target.tagName.toLowerCase();
         if (tag === 'button' || tag === 'input' || tag === 'textarea' || tag === 'a' || tag === 'select' || tag === 'label' || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('.card-actions-grid') || e.target.closest('.cyber-actions-tray') || e.target.closest('.cyber-avatar-wrapper')) return;
         idDraggingRef.current = true;
-        setIdDragging(true);
         dragStartX.current = e.clientX;
         dragStartY.current = e.clientY;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -683,7 +669,6 @@ function Chat() {
         
         const onUp = () => {
             idDraggingRef.current = false;
-            setIdDragging(false);
             pullX.set(0);
             pullY.set(0);
             idRotate.set(0);
