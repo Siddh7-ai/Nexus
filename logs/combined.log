@@ -109,3 +109,78 @@
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:31:37"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:33:37"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:35:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:37:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:39:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:41:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:43:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:45:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:47:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:49:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:51:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:53:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:55:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:57:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 15:59:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:01:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:03:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:05:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:07:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:09:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:11:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-08 16:13:37"}
+{"level":"info","message":"Received SIGINT. Starting production-grade connection draining shutdown...","service":"nexus-backend","timestamp":"2026-07-08 16:14:45"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:25:38"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:25:42"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:25:42"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:25:42"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:25:42"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:25:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-09 23:27:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-09 23:29:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-09 23:31:42"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:31:42"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:32:34"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-09 23:33:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-09 23:35:42"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:36:15"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:36:16"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:36:16"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:36:16"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:36:16"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:36:16"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:36:25"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:36:26"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:36:26"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:36:26"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:36:26"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:36:26"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:36:33"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:36:34"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:36:34"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:36:34"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:36:34"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:36:34"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:36:52"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:37:01"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:37:05"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:37:06"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:37:06"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:37:06"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:37:06"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:37:06"}
+{"level":"warn","message":"[Nexus Config] Missing environment variables: MONGO_URI, JWT_SECRET. Falling back to default values for development.","service":"nexus-backend","timestamp":"2026-07-09 23:37:13"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-09 23:37:14"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-09 23:37:14"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-09 23:37:14"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-09 23:37:14"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-09 23:37:14"}

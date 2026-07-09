@@ -28,6 +28,8 @@ function authenticateToken(req, res, next) {
         };
         next();
     } catch (err) {
+        const logger = require("../utils/logger");
+        logger.error(`[JWT Verify Error] keyRoutes: ${err.message}. Token: ${token}`);
         return res.status(403).json({ message: "Invalid or expired token" });
     }
 }

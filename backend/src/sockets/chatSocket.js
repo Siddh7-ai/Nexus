@@ -160,6 +160,8 @@ io.use((socket, next) => {
         socket.request.user = { id: socket.userId, username: socket.username, role: socket.role };
         next();
     } catch (err) {
+        const logger = require("../utils/logger");
+        logger.error(`[JWT Verify Error] chatSocket: ${err.message}. Token: ${token}`);
         next(new Error("Invalid token"));
     }
 });

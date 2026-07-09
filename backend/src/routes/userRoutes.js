@@ -24,7 +24,6 @@ function authenticateToken(req, res, next) {
         };
         return next();
     }
-
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.user = {
@@ -34,6 +33,8 @@ function authenticateToken(req, res, next) {
         };
         next();
     } catch (err) {
+        const logger = require("../utils/logger");
+        logger.error(`[JWT Verify Error] userRoutes: ${err.message}. Token: ${token}`);
         return res.status(401).json({ message: "Invalid or expired token" });
     }
 }
