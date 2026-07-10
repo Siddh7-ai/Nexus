@@ -191,6 +191,7 @@ export async function loadDecryptedKeys(username) {
         return {
             identityPublicKey: dbKeys.identityPublicKey,
             identitySecretKey: toBase64(identitySecretKeyBytes),
+            signedPrekeyPublicKey: dbKeys.signedPrekeyPublicKey,
             signedPrekeySecretKey: toBase64(signedPrekeySecretKeyBytes),
             oneTimePrekeys: opksList // Array of { keyId, publicKey, secretKey }
         };
@@ -538,10 +539,41 @@ export async function replenishOneTimePrekeysIfNeeded(username, token) {
         if (!response.ok) return;
 
         const status = await response.json();
+
+        // Self-heal: Verify key synchronization
+        const myKeys = await loadDecryptedKeys(username);
+        if (myKeys) {
+            const serverIK = status.identityPublicKey;
+            const serverSPK = status.signedPrekeyPublicKey;
+            
+            if ((serverIK && serverIK !== myKeys.identityPublicKey) || 
+                (serverSPK && serverSPK !== myKeys.signedPrekeyPublicKey)) {
+                console.warn("[E2EE] Mismatch detected between local cryptographic keys and server registration. Restoring from server backup...");
+                
+                const restored = await restoreBackupFromServer(username, token);
+                if (restored) {
+                    const restoredKeys = await loadDecryptedKeys(username);
+                    if (restoredKeys && 
+                        restoredKeys.identityPublicKey === serverIK && 
+                        restoredKeys.signedPrekeyPublicKey === serverSPK) {
+                        console.log("[E2EE] Keys successfully restored from server backup and synced.");
+                        window.location.reload();
+                        return;
+                    }
+                }
+                
+                console.error("[E2EE] Key sync restoration failed. Clearing local database to force clean regeneration upon next login.");
+                indexedDB.deleteDatabase("nexus_crypto_db");
+                sessionStorage.clear();
+                localStorage.clear();
+                window.location.reload();
+                return;
+            }
+        }
+
         if (status.identityPublicKeyExists && status.oneTimePrekeysCount < 5) {
             console.log(`Remaining one-time prekeys (${status.oneTimePrekeysCount}) is low. Replenishing...`);
             
-            const myKeys = await loadDecryptedKeys(username);
             if (!myKeys) return;
 
             // Generate 20 new X25519 one-time prekeys

@@ -5,6 +5,30 @@ const User = require("../models/User");
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "mysecretkey";
 
+// Helper to save a user document with optimistic concurrency retries
+async function saveUserWithRetry(userId, updateFn, maxRetries = 5) {
+    let attempts = 0;
+    while (attempts < maxRetries) {
+        try {
+            const user = await User.findById(userId);
+            if (!user) {
+                return null;
+            }
+            await updateFn(user);
+            await user.save();
+            return user;
+        } catch (err) {
+            if (err.name === "VersionError" && attempts < maxRetries - 1) {
+                attempts++;
+                // Add a small random delay to avoid stampeding herd effect
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 50 + 10));
+            } else {
+                throw err;
+            }
+        }
+    }
+}
+
 // Auth Middleware
 function authenticateToken(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -53,33 +77,33 @@ router.post("/upload", authenticateToken, async (req, res) => {
             return res.status(400).json({ message: "Missing required key fields" });
         }
 
-        const user = await User.findById(req.user.userId);
+        const user = await saveUserWithRetry(req.user.userId, (u) => {
+            u.identityPublicKey = identityPublicKey;
+            u.signedPrekey = {
+                publicKey: signedPrekey.publicKey,
+                signature: signedPrekey.signature,
+                createdAt: new Date()
+            };
+            u.oneTimePrekeys = oneTimePrekeys.map(k => ({
+                keyId: k.keyId,
+                publicKey: k.publicKey
+            }));
+
+            if (encryptedIdentityPrivateKey) {
+                u.encryptedIdentityPrivateKey = encryptedIdentityPrivateKey;
+            }
+            if (encryptedSignedPrekeyPrivateKey) {
+                u.encryptedSignedPrekeyPrivateKey = encryptedSignedPrekeyPrivateKey;
+            }
+            if (encryptedOneTimePrekeys) {
+                u.encryptedOneTimePrekeys = encryptedOneTimePrekeys;
+            }
+        });
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        user.identityPublicKey = identityPublicKey;
-        user.signedPrekey = {
-            publicKey: signedPrekey.publicKey,
-            signature: signedPrekey.signature,
-            createdAt: new Date()
-        };
-        user.oneTimePrekeys = oneTimePrekeys.map(k => ({
-            keyId: k.keyId,
-            publicKey: k.publicKey
-        }));
-
-        if (encryptedIdentityPrivateKey) {
-            user.encryptedIdentityPrivateKey = encryptedIdentityPrivateKey;
-        }
-        if (encryptedSignedPrekeyPrivateKey) {
-            user.encryptedSignedPrekeyPrivateKey = encryptedSignedPrekeyPrivateKey;
-        }
-        if (encryptedOneTimePrekeys) {
-            user.encryptedOneTimePrekeys = encryptedOneTimePrekeys;
-        }
-
-        await user.save();
         res.status(200).json({ message: "Prekey bundle uploaded successfully" });
     } catch (error) {
         console.error("Error uploading prekey bundle:", error);
@@ -106,8 +130,13 @@ router.get("/bundle/:username", authenticateToken, async (req, res) => {
         // Consume one one-time prekey
         let oneTimePrekey = null;
         if (targetUser.oneTimePrekeys && targetUser.oneTimePrekeys.length > 0) {
-            oneTimePrekey = targetUser.oneTimePrekeys.shift(); // Remove the first one
-            await targetUser.save();
+            await saveUserWithRetry(targetUser._id, (u) => {
+                if (u.oneTimePrekeys && u.oneTimePrekeys.length > 0) {
+                    oneTimePrekey = u.oneTimePrekeys.shift();
+                } else {
+                    oneTimePrekey = null;
+                }
+            });
         }
 
         res.status(200).json({
@@ -141,6 +170,8 @@ router.get("/status", authenticateToken, async (req, res) => {
 
         res.status(200).json({
             identityPublicKeyExists: !!user.identityPublicKey,
+            identityPublicKey: user.identityPublicKey || null,
+            signedPrekeyPublicKey: user.signedPrekey?.publicKey || null,
             oneTimePrekeysCount: user.oneTimePrekeys ? user.oneTimePrekeys.length : 0
         });
     } catch (error) {
@@ -161,22 +192,22 @@ router.post("/replenish", authenticateToken, async (req, res) => {
             return res.status(400).json({ message: "Invalid oneTimePrekeys format" });
         }
 
-        const user = await User.findById(req.user.userId);
+        const user = await saveUserWithRetry(req.user.userId, (u) => {
+            // Add the new keys, capping the total at 100 to prevent database bloat
+            const currentKeys = u.oneTimePrekeys || [];
+            const addedKeys = oneTimePrekeys.map(k => ({
+                keyId: k.keyId,
+                publicKey: k.publicKey
+            }));
+
+            const combined = [...currentKeys, ...addedKeys];
+            u.oneTimePrekeys = combined.slice(0, 100);
+        });
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        // Add the new keys, capping the total at 100 to prevent database bloat
-        const currentKeys = user.oneTimePrekeys || [];
-        const addedKeys = oneTimePrekeys.map(k => ({
-            keyId: k.keyId,
-            publicKey: k.publicKey
-        }));
-
-        const combined = [...currentKeys, ...addedKeys];
-        user.oneTimePrekeys = combined.slice(0, 100);
-
-        await user.save();
         res.status(200).json({
             message: "One-time prekeys replenished successfully",
             oneTimePrekeysCount: user.oneTimePrekeys.length
@@ -226,24 +257,24 @@ router.post("/backup/session", authenticateToken, async (req, res) => {
             return res.status(400).json({ message: "Missing required backup fields" });
         }
 
-        const user = await User.findById(req.user.userId);
+        const user = await saveUserWithRetry(req.user.userId, (u) => {
+            if (!u.encryptedSessions) {
+                u.encryptedSessions = [];
+            }
+
+            // Find existing session or push new one
+            const existingIdx = u.encryptedSessions.findIndex(s => s.chatId === chatId);
+            if (existingIdx !== -1) {
+                u.encryptedSessions[existingIdx] = { chatId, nonce, ciphertext };
+            } else {
+                u.encryptedSessions.push({ chatId, nonce, ciphertext });
+            }
+        });
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        if (!user.encryptedSessions) {
-            user.encryptedSessions = [];
-        }
-
-        // Find existing session or push new one
-        const existingIdx = user.encryptedSessions.findIndex(s => s.chatId === chatId);
-        if (existingIdx !== -1) {
-            user.encryptedSessions[existingIdx] = { chatId, nonce, ciphertext };
-        } else {
-            user.encryptedSessions.push({ chatId, nonce, ciphertext });
-        }
-
-        await user.save();
         res.status(200).json({ message: "Session backed up successfully" });
     } catch (error) {
         console.error("Error backing up session:", error);
@@ -263,14 +294,14 @@ router.delete("/backup/session/:chatId", authenticateToken, async (req, res) => 
             return res.status(400).json({ message: "Missing chatId parameter" });
         }
 
-        const user = await User.findById(req.user.userId);
+        const user = await saveUserWithRetry(req.user.userId, (u) => {
+            if (u.encryptedSessions) {
+                u.encryptedSessions = u.encryptedSessions.filter(s => s.chatId !== chatId);
+            }
+        });
+
         if (!user) {
             return res.status(404).json({ message: "User not found" });
-        }
-
-        if (user.encryptedSessions) {
-            user.encryptedSessions = user.encryptedSessions.filter(s => s.chatId !== chatId);
-            await user.save();
         }
 
         res.status(200).json({ message: "Session backup deleted successfully" });
