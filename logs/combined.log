@@ -461,3 +461,31 @@
 {"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\OneDrive\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-14 22:13:08"}
 {"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-14 22:13:08"}
 {"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-14 22:13:08"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-15 22:48:50"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-15 22:48:52"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-15 22:48:52"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-15 22:48:52"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\OneDrive\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-15 22:48:52"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-15 22:48:52"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-15 22:48:58"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-15 22:48:59"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-15 22:48:59"}
+{"level":"error","message":"[Python ASR stderr]: C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe: can't open file 'C:\\\\Users\\\\Raulji Siddharthsinh\\\\OneDrive\\\\Desktop\\\\Internship\\\\Chat App\\\\transcription_server.py': [Errno 2] No such file or directory","service":"nexus-backend","timestamp":"2026-07-15 22:48:59"}
+{"level":"info","message":"[Python ASR Process] exited with code 2","service":"nexus-backend","timestamp":"2026-07-15 22:48:59"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-15 22:48:59"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-15 22:49:05"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-15 22:49:06"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-15 22:49:07"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-15 22:49:07"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 5.40s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-15 22:49:24"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-15 22:49:24"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-15 22:49:24"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-15 22:50:47"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-15 22:50:49"}
+{"level":"info","message":"Server successfully started on port 5001","service":"nexus-backend","timestamp":"2026-07-15 22:50:49"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-15 22:50:49"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 3.39s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-15 22:50:54"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-15 22:50:54"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-15 22:50:54"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-15 22:51:06"}
+{"level":"info","message":"Received SIGINT. Starting production-grade connection draining shutdown...","service":"nexus-backend","timestamp":"2026-07-15 22:51:13"}

@@ -9,7 +9,7 @@ function startPythonASR() {
 
   logger.info("[Python ASR] Spawning Python ASR microservice process...");
   const pythonExec = "C:\\Users\\Raulji Siddharthsinh\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
-  const scriptPath = path.join(__dirname, "../../../transcription_server.py");
+  const scriptPath = path.join(__dirname, "../../transcription_server.py");
 
   const pathDelimiter = process.platform === "win32" ? ";" : ":";
   const customEnv = {
