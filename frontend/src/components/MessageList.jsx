@@ -758,7 +758,8 @@ function MessageList({
     highlightMessageId,
     onPin,
     onUnpin,
-    currentUserDisplayName
+    currentUserDisplayName,
+    onVerifyClick
 }) {
     const [showScrollBottom, setShowScrollBottom] = useState(false);
     const [activeLightbox, setActiveLightbox] = useState(null); // { url, name }
@@ -915,6 +916,55 @@ function MessageList({
                     if (msg.username === "System") {
                         const isLegacyDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(msg.text);
                         if (isLegacyDate) return null;
+
+                        if (msg.text === "security_code_changed") {
+                            const partner = msg.privateChatId?.split("_").find(u => u.toLowerCase() !== currentUser?.toLowerCase());
+                            const partnerUser = allUsers?.find(u => u.username?.toLowerCase() === partner?.toLowerCase());
+                            const partnerDisp = partnerUser?.displayName || partner || "partner";
+
+                            return (
+                                <div 
+                                    className="system-message security-code-change-message" 
+                                    key={msg._id || index}
+                                    onClick={onVerifyClick}
+                                    style={{
+                                        alignSelf: 'center',
+                                        margin: '12px auto',
+                                        background: 'rgba(254, 184, 19, 0.11)',
+                                        border: '1px solid rgba(254, 184, 19, 0.22)',
+                                        color: '#feb813',
+                                        padding: '10px 16px',
+                                        borderRadius: '10px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px',
+                                        maxWidth: '85%',
+                                        textAlign: 'center',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                                        userSelect: 'none',
+                                        transition: 'all 0.2s ease',
+                                        lineHeight: '1.4'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(254, 184, 19, 0.16)';
+                                        e.currentTarget.style.transform = 'translateY(-1px)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(254, 184, 19, 0.11)';
+                                        e.currentTarget.style.transform = 'translateY(0)';
+                                    }}
+                                >
+                                    <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="15" width="15" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                    </svg>
+                                    <span>Your security code with <strong>{partnerDisp}</strong> changed. Click to learn more</span>
+                                </div>
+                            );
+                        }
 
                         let displayText = msg.text;
                         if (msg.text && msg.text.endsWith("pinned a message")) {

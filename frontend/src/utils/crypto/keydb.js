@@ -214,10 +214,20 @@ export async function deleteSessionState(chatId) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction("sessions", "readwrite");
         const store = transaction.objectStore(transaction.objectStoreNames[0] || "sessions");
-        const request = store.delete(key);
+        const getRequest = store.get(key);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
+        getRequest.onsuccess = (e) => {
+            const existing = e.target.result;
+            if (existing) {
+                existing.sessionBlob = null;
+                const putRequest = store.put(existing);
+                putRequest.onsuccess = () => resolve();
+                putRequest.onerror = () => reject(putRequest.error);
+            } else {
+                resolve();
+            }
+        };
+        getRequest.onerror = () => reject(getRequest.error);
     });
 }
 

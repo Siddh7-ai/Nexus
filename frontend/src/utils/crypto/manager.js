@@ -226,6 +226,7 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
         let partnerIdentityPublicKey = null;
         let myIdentityPublicKey = null;
         let vaultKey = null;
+        let partnerKeyChanged = false;
 
         if (sessionBlob) {
             session = DoubleRatchet.initSessionStateBlob(sessionBlob);
@@ -241,6 +242,14 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
                 throw new Error(`Failed to fetch prekey bundle for ${partnerUsername}`);
             }
             const partnerBundle = await response.json();
+
+            // Check if partner identity key changed
+            const sessionRecord = await getFullSessionRecord(privateChatId);
+            if (sessionRecord && sessionRecord.partnerIdentityPublicKey &&
+                sessionRecord.partnerIdentityPublicKey !== partnerBundle.identityPublicKey) {
+                partnerKeyChanged = true;
+                console.log(`[E2EE Key Change] Initiating outgoing handshake. Partner identity key changed!`);
+            }
 
             // 2. Load my keys
             const myKeys = await loadDecryptedKeys(myUsername);
@@ -258,7 +267,7 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
 
             // 5. Initialize Double Ratchet session
             const remotePublicKey = fromBase64(partnerBundle.signedPrekey.publicKey);
-            session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, remotePublicKey, undefined);
+            session = await DoubleRatchet.init("NexusMessenger", 1000, 1000, sharedSecret, remotePublicKey, undefined);
         }
 
         // Prepare plaintext payload object containing message and optional file metadata
@@ -304,7 +313,8 @@ export async function encryptOutgoingMessage(partnerUsername, privateChatId, tex
                 numberOfMessagesInPreviousSendingChain: encrypted.header.numberOfMessagesInPreviousSendingChain
             },
             handshakePayload,
-            senderCiphertext
+            senderCiphertext,
+            partnerKeyChanged
         };
     } finally {
         release();
@@ -464,17 +474,29 @@ export async function decryptIncomingMessage(msg, myUsername, token) {
         const { sharedSecret, vaultKey } = await receiveSession(myKeys, msg.handshakePayload, opkPrivateKeyBase64);
         console.log("[E2EE Debug] Receiver shared secret first 5 bytes:", toBase64(sharedSecret.slice(0, 5)));
 
+        // Check if partner identity key changed
+        let partnerKeyChanged = false;
+        const sessionRecord = await getFullSessionRecord(privateChatId);
+        if (sessionRecord && sessionRecord.partnerIdentityPublicKey &&
+            sessionRecord.partnerIdentityPublicKey !== msg.handshakePayload.aliceIdentityPublicKey) {
+            partnerKeyChanged = true;
+            console.log(`[E2EE Key Change] Decrypting incoming handshake. Partner identity key changed!`);
+        }
+
         // Initialize my Double Ratchet receiver session
         const spkPrivateKey = fromBase64(myKeys.signedPrekeySecretKey);
         const mySPKKeyPair = {
             publicKey: sodium.crypto_scalarmult_base(spkPrivateKey),
             privateKey: spkPrivateKey
         };
-        session = await DoubleRatchet.init("NexusMessenger", 20, 20, sharedSecret, undefined, mySPKKeyPair);
+        session = await DoubleRatchet.init("NexusMessenger", 1000, 1000, sharedSecret, undefined, mySPKKeyPair);
 
         // Decrypt the message
         const decryptedBytes = await session.decrypt(reconstructedMsg);
         const decryptedPayload = JSON.parse(sodium.to_string(decryptedBytes));
+        if (partnerKeyChanged) {
+            decryptedPayload.partnerKeyChanged = true;
+        }
         console.log("[E2EE Debug] Decryption successful!");
 
         // Remove consumed OPK from my local list ONLY after successful decryption

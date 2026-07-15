@@ -9,6 +9,16 @@ import { FiLock } from 'react-icons/fi';
 import ThemeToggleButton from '../components/ThemeToggleButton';
 import { getBackendUrl } from '../utils/config';
 import { initTheme, toggleTheme } from '../utils/theme';
+import { refreshAccessToken } from '../utils/api';
+
+function parseJWT(token) {
+  try {
+    const base64 = token.split(".")[1];
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -26,11 +36,28 @@ export default function Landing() {
   useEffect(() => {
     setTheme(initTheme());
     
-    // Auto-redirect if user/guest is already logged in
-    const existingToken = sessionStorage.getItem("token") || localStorage.getItem("token");
-    if (existingToken) {
-      navigate('/chat');
+    async function checkAuth() {
+      const existingToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+      if (existingToken) {
+        if (existingToken.startsWith("guest:")) {
+          navigate('/chat');
+          return;
+        }
+        
+        const decoded = parseJWT(existingToken);
+        if (decoded && decoded.exp * 1000 > Date.now()) {
+          navigate('/chat');
+          return;
+        }
+        
+        // Try to refresh token
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          navigate('/chat');
+        }
+      }
     }
+    checkAuth();
   }, [navigate]);
 
   function handleThemeToggle(e) {

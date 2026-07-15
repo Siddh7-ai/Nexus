@@ -1,7 +1,4 @@
-/**
- * Production-Grade API Client for Nexus Messenger
- * Implements request deduplication, in-memory query caching, dynamic retry backoff, and request abort grouping.
- */
+import { getBackendUrl } from "./config";
 
 const activeRequests = new Map();
 const getCache = new Map();
@@ -121,4 +118,40 @@ export class ApiClient {
     activeRequests.set(dedupeKey, requestPromise);
     return requestPromise;
   }
+}
+
+export async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem("refreshToken") || sessionStorage.getItem("refreshToken");
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(`${getBackendUrl()}/api/auth/refresh-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken })
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.token && data.refreshToken) {
+        sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem("refreshToken", data.refreshToken);
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("refreshToken", data.refreshToken);
+        return data.token;
+      }
+    }
+  } catch (err) {
+    console.error("[Token Refresh Error] Details:", err);
+  }
+
+  // Clear storage on failure
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("refreshToken");
+  sessionStorage.removeItem("username");
+  sessionStorage.removeItem("nexus_master_key");
+  localStorage.removeItem("token");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("username");
+  localStorage.removeItem("nexus_master_key");
+  return null;
 }

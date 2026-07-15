@@ -90,7 +90,8 @@ function ChatHeader({
     onBulkDownload,
     onBulkStar,
     onBulkForward,
-    messages = []
+    messages = [],
+    onResetSessionClick
 }) {
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef(null);
@@ -406,6 +407,18 @@ function ChatHeader({
                                     </button>
 
 
+
+                                    {/* 3. Reset Session (red) */}
+                                    <button 
+                                        className="header-dropdown-item logout" 
+                                        onClick={() => {
+                                            setShowDropdown(false);
+                                            if (onResetSessionClick) onResetSessionClick();
+                                        }}
+                                        title="Reset End-to-End Encryption session keys if chat gets out of sync"
+                                    >
+                                        <FiLock /> Reset Secure Session
+                                    </button>
 
                                     {/* 4. Clear Chat (red) */}
                                     <button 

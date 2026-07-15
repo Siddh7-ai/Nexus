@@ -45,7 +45,7 @@ const VaultPinEntryModal = React.lazy(() => import("../components/VaultPinEntryM
 const PinMessageModal = React.lazy(() => import("../components/PinMessageModal"));
 const ThemeTransitionOptions = React.lazy(() => import("../components/ThemeTransitionOptions"));
 import ErrorBoundary from "../components/ErrorBoundary";
-import { ApiClient } from "../utils/api";
+import { ApiClient, refreshAccessToken } from "../utils/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -187,8 +187,124 @@ export function SRLogo({ color = '#111110', size = 34 }) {
   )
 }
 
+const PageSkeleton = () => (
+  <div className="chat-wrapper" style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--page)" }}>
+    <div className="chat-layout" style={{ display: "flex", flex: 1, width: "100%", height: "100%", background: "var(--panel)" }}>
+      
+      {/* Sidebar Panel Skeleton */}
+      <div className="sidebar-panel" style={{ width: "280px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", padding: "18px 14px", background: "var(--sidebar)" }}>
+        {/* Sidebar Brand Skeleton */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+          <div className="skeleton-element" style={{ width: "42px", height: "42px", borderRadius: "12px" }}></div>
+          <div style={{ flex: 1 }}>
+            <div className="skeleton-element" style={{ width: "100px", height: "16px", borderRadius: "4px", marginBottom: "6px" }}></div>
+            <div className="skeleton-element" style={{ width: "60px", height: "12px", borderRadius: "4px" }}></div>
+          </div>
+        </div>
+        
+        {/* Search Bar Skeleton */}
+        <div className="skeleton-element" style={{ width: "100%", height: "36px", borderRadius: "8px", marginBottom: "20px" }}></div>
+        
+        {/* List Items Skeletons */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="skeleton-element" style={{ width: "40px", height: "40px", borderRadius: "50%" }}></div>
+              <div style={{ flex: 1 }}>
+                <div className="skeleton-element" style={{ width: "80%", height: "14px", borderRadius: "4px", marginBottom: "6px" }}></div>
+                <div className="skeleton-element" style={{ width: "50%", height: "10px", borderRadius: "4px" }}></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Main Chat Container Skeleton */}
+      <div className="chat-container" style={{ flex: 1, display: "flex", flexDirection: "column", background: "var(--page)" }}>
+        {/* Chat Header Skeleton */}
+        <div style={{ height: "74px", borderBottom: "1px solid var(--border)", padding: "18px 28px", display: "flex", alignItems: "center", background: "var(--panel)" }}>
+          <div className="skeleton-element" style={{ width: "40px", height: "40px", borderRadius: "50%", marginRight: "12px" }}></div>
+          <div style={{ flex: 1 }}>
+            <div className="skeleton-element" style={{ width: "120px", height: "16px", borderRadius: "4px", marginBottom: "6px" }}></div>
+            <div className="skeleton-element" style={{ width: "80px", height: "12px", borderRadius: "4px" }}></div>
+          </div>
+        </div>
+        
+        {/* Messages Area Skeleton */}
+        <div style={{ flex: 1, padding: "30px", display: "flex", flexDirection: "column", gap: "24px", overflow: "hidden" }}>
+          {/* Message Left */}
+          <div style={{ display: "flex", gap: "12px", maxWidth: "60%" }}>
+            <div className="skeleton-element" style={{ width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0 }}></div>
+            <div className="skeleton-element" style={{ flex: 1, height: "60px", borderRadius: "4px 16px 16px 16px" }}></div>
+          </div>
+          
+          {/* Message Right */}
+          <div style={{ display: "flex", gap: "12px", maxWidth: "60%", alignSelf: "flex-end", justifyContent: "flex-end", width: "100%" }}>
+            <div className="skeleton-element" style={{ width: "80%", height: "45px", borderRadius: "16px 16px 4px 16px" }}></div>
+          </div>
+
+          {/* Message Left */}
+          <div style={{ display: "flex", gap: "12px", maxWidth: "50%" }}>
+            <div className="skeleton-element" style={{ width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0 }}></div>
+            <div className="skeleton-element" style={{ flex: 1, height: "48px", borderRadius: "4px 16px 16px 16px" }}></div>
+          </div>
+
+          {/* Message Right */}
+          <div style={{ display: "flex", gap: "12px", maxWidth: "45%", alignSelf: "flex-end", justifyContent: "flex-end", width: "100%" }}>
+            <div className="skeleton-element" style={{ width: "90%", height: "70px", borderRadius: "16px 16px 4px 16px" }}></div>
+          </div>
+        </div>
+        
+        {/* Message Input Area Skeleton */}
+        <div style={{ padding: "20px 30px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "12px", background: "var(--panel)" }}>
+          <div className="skeleton-element" style={{ width: "36px", height: "36px", borderRadius: "50%" }}></div>
+          <div className="skeleton-element" style={{ flex: 1, height: "44px", borderRadius: "24px" }}></div>
+          <div className="skeleton-element" style={{ width: "36px", height: "36px", borderRadius: "50%" }}></div>
+        </div>
+      </div>
+      
+    </div>
+
+    {/* Styling for shimmer animations */}
+    <style>{`
+      .skeleton-element {
+        background-color: var(--soft, #f0f1f4);
+        background-image: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0) 0,
+          rgba(255, 255, 255, 0.4) 20%,
+          rgba(255, 255, 255, 0.6) 60%,
+          rgba(255, 255, 255, 0)
+        );
+        background-size: 200% 100%;
+        background-repeat: no-repeat;
+        animation: skeleton-shimmer 1.5s infinite;
+      }
+      .dark-theme .skeleton-element {
+        background-color: var(--soft, #1e293b);
+        background-image: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0) 0,
+          rgba(255, 255, 255, 0.05) 20%,
+          rgba(255, 255, 255, 0.1) 60%,
+          rgba(255, 255, 255, 0)
+        );
+      }
+      @keyframes skeleton-shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+    `}</style>
+  </div>
+);
+
 function Chat() {
     const navigate = useNavigate();
+    const [isAuthChecking, setIsAuthChecking] = useState(true);
     const [searchParams, setSearchParams] = useSearchParams();
 
     const isGuest = (() => {
@@ -222,6 +338,70 @@ function Chat() {
     const [theme, setTheme] = useState(() => initTheme());
     const [unreadCounts, setUnreadCounts] = useState({});
 
+    // Verify / refresh token on mount
+    useEffect(() => {
+        async function checkAuth() {
+            const token = getAuthToken();
+            if (!token) {
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get("joinRoomCode");
+                if (code) {
+                    sessionStorage.setItem("pendingJoinCode", code);
+                }
+                navigate("/login");
+                return;
+            }
+
+            if (token.startsWith("guest:")) {
+                setIsAuthChecking(false);
+                return;
+            }
+
+            const decoded = parseJWT(token);
+            if (decoded && decoded.exp * 1000 - Date.now() > 10000) {
+                setIsAuthChecking(false);
+                return;
+            }
+
+            // Try to refresh token
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+                const freshDecoded = parseJWT(refreshed);
+                if (freshDecoded?.username) {
+                    setUsername(freshDecoded.username);
+                }
+                setIsAuthChecking(false);
+            } else {
+                navigate("/login");
+            }
+        }
+        checkAuth();
+    }, [navigate]);
+
+    // Silent background refresh interval
+    useEffect(() => {
+        if (isAuthChecking) return;
+        
+        const interval = setInterval(async () => {
+            const token = getAuthToken();
+            if (!token || token.startsWith("guest:")) return;
+            
+            const decoded = parseJWT(token);
+            if (decoded) {
+                const timeToExpire = decoded.exp * 1000 - Date.now();
+                if (timeToExpire < 3 * 60 * 1000) { // Less than 3 minutes remaining
+                    console.log("Token expiring soon. Performing silent background refresh...");
+                    const refreshed = await refreshAccessToken();
+                    if (refreshed && socketRef.current) {
+                        socketRef.current.auth.token = refreshed;
+                    }
+                }
+            }
+        }, 60 * 1000); // Check every minute
+        
+        return () => clearInterval(interval);
+    }, [isAuthChecking]);
+
     useEffect(() => {
         setTheme(initTheme());
         
@@ -229,20 +409,7 @@ function Chat() {
         document.body.classList.add("chat-page-body");
         document.documentElement.classList.add("chat-page-html");
 
-        // Clear decrypted_messages IndexedDB store once on mount to force recalculating E2EE sticker fields
-        try {
-            const request = indexedDB.open("NexusMessenger");
-            request.onsuccess = (e) => {
-                const db = e.target.result;
-                if (db.objectStoreNames.contains("decrypted_messages")) {
-                    const transaction = db.transaction("decrypted_messages", "readwrite");
-                    transaction.objectStore("decrypted_messages").clear();
-                    console.log("Decrypted messages IndexedDB cache cleared successfully.");
-                }
-            };
-        } catch (err) {
-            console.error("Failed to clear decrypted messages cache:", err);
-        }
+        // Note: Decrypted messages are loaded from IndexedDB cache to optimize load speed and E2EE performance
 
         // Auto-lock vault on tab switch, app switch, or page close/refresh
         const handleAutoLock = () => {
@@ -274,6 +441,7 @@ function Chat() {
     }, [messages]);
     const requestedResendsRef = useRef(new Set());
     const decryptionMetaDataRef = useRef({});
+    const lastSessionResetRef = useRef({});
     const [loadingMessages, setLoadingMessages] = useState(true);
     const [decryptedMessages, setDecryptedMessages] = useState({});
     const [sidebarTick, setSidebarTick] = useState(0);
@@ -348,6 +516,9 @@ function Chat() {
 
                 try {
                     const decryptedPayload = await decryptAndCacheMessage(msg, myUsername, token);
+                    if (decryptedPayload.partnerKeyChanged && socketRef.current) {
+                        socketRef.current.emit("notifyKeyChange", { privateChatId: msg.privateChatId });
+                    }
                     
                     let decryptedTranscript = "[Not a voice message]";
                     try {
@@ -388,7 +559,12 @@ function Chat() {
                     };
                     setDecryptedMessages(prev => ({
                         ...prev,
-                        [msg._id]: { text: `[Decryption Failed: ${error.message || error}]`, isError: true }
+                        [msg._id]: { 
+                            text: error.message?.includes("out of sync") 
+                                ? "🔒 Waiting for this message. This may take a moment while keys sync..." 
+                                : `[Decryption Failed: ${error.message || error}]`, 
+                            isError: true 
+                        }
                     }));
                     if (newlyReceivedMessageIdsRef.current.has(msg._id)) {
                         newlyReceivedMessageIdsRef.current.delete(msg._id);
@@ -437,6 +613,16 @@ function Chat() {
                         const myKeys = await loadDecryptedKeys(usernameRef.current);
                         if (myKeys) {
                             setMyIdentityKey(myKeys.identityPublicKey);
+                            
+                            // Check if partner identity key changed
+                            const sessionRecord = await getFullSessionRecord(activePrivate);
+                            if (sessionRecord && sessionRecord.partnerIdentityPublicKey && 
+                                sessionRecord.partnerIdentityPublicKey !== partnerBundle.identityPublicKey) {
+                                console.log(`[E2EE Key Change] Detected identity key change for ${activePrivateName}!`);
+                                if (socketRef.current) {
+                                    socketRef.current.emit("notifyKeyChange", { privateChatId: activePrivate });
+                                }
+                            }
                             
                             // Cache them in IndexedDB
                             await cacheSessionIdentityKeys(activePrivate, partnerBundle.identityPublicKey, myKeys.identityPublicKey);
@@ -512,6 +698,9 @@ function Chat() {
                     try {
                         const decrypted = await decryptAndCacheMessage(msg, username, token);
                         if (decrypted) {
+                            if (decrypted.partnerKeyChanged && socketRef.current) {
+                                socketRef.current.emit("notifyKeyChange", { privateChatId: msg.privateChatId });
+                            }
                             decryptionMetaDataRef.current[msg._id] = {
                                 text: msg.text,
                                 handshakePayload: msg.handshakePayload
@@ -827,6 +1016,7 @@ function Chat() {
     }, []);
 
     useEffect(() => {
+        if (isAuthChecking) return;
         const tokenVal = getAuthToken();
         if (!tokenVal) return;
         const fetchNexTaskUsers = async () => {
@@ -843,7 +1033,7 @@ function Chat() {
             }
         };
         fetchNexTaskUsers();
-    }, []);
+    }, [isAuthChecking]);
 
     // Notification permission hook
     useEffect(() => {
@@ -1030,7 +1220,7 @@ function Chat() {
     };
 
     useEffect(() => {
-        if (isGuest || !username) return;
+        if (isAuthChecking || isGuest || !username) return;
         
         async function fetchUserData() {
             const token = getAuthToken();
@@ -1057,7 +1247,7 @@ function Chat() {
         
         fetchUserData();
         fetchPendingRequests();
-    }, [username, isGuest]);
+    }, [username, isGuest, isAuthChecking]);
 
     useEffect(() => {
         if (isGuest) {
@@ -1082,6 +1272,8 @@ function Chat() {
     }, [activeRoom, activePrivate, activePrivateName]);
 
     useEffect(() => {
+        if (isAuthChecking) return;
+
         const token = getAuthToken();
         if (!token) {
             const params = new URLSearchParams(window.location.search);
@@ -1145,17 +1337,26 @@ function Chat() {
             }
         });
 
-        newSocket.on("connect_error", (err) => {
+        newSocket.on("connect_error", async (err) => {
             console.warn("Socket connection error:", err);
             // Only log out if it is an explicit authentication error
             if (err && (err.message === "Authentication required" || err.message === "Invalid token")) {
-                sessionStorage.removeItem("token");
-                localStorage.removeItem("token");
-                sessionStorage.removeItem("username");
-                localStorage.removeItem("username");
-                sessionStorage.removeItem("nexus_master_key");
-                localStorage.removeItem("nexus_master_key");
-                navigate("/login");
+                console.log("Socket authentication failed. Attempting to refresh token...");
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    console.log("Token successfully refreshed. Reconnecting socket...");
+                    newSocket.auth.token = refreshed;
+                    newSocket.connect();
+                } else {
+                    console.error("Token refresh failed. Logging out.");
+                    sessionStorage.removeItem("token");
+                    localStorage.removeItem("token");
+                    sessionStorage.removeItem("username");
+                    localStorage.removeItem("username");
+                    sessionStorage.removeItem("nexus_master_key");
+                    localStorage.removeItem("nexus_master_key");
+                    navigate("/login");
+                }
             }
         });
 
@@ -1314,6 +1515,9 @@ function Chat() {
                         try {
                             const token = getAuthToken();
                             const decryptedPayload = await decryptAndCacheMessage(data, usernameRef.current, token);
+                            if (decryptedPayload.partnerKeyChanged && socketRef.current) {
+                                socketRef.current.emit("notifyKeyChange", { privateChatId: data.privateChatId });
+                            }
                             displayData = {
                                 ...displayData,
                                 text: decryptedPayload.text,
@@ -1361,7 +1565,7 @@ function Chat() {
                         }, 5000);
                     }
 
-                    if (document.hidden) {
+                    if (!isMatch && (document.hidden || !document.hasFocus())) {
                         triggerDesktopNotification(displayData);
                     }
                 })();
@@ -1554,16 +1758,24 @@ function Chat() {
             await deleteSessionState(privateChatId);
         });
 
-        newSocket.on("sessionResetAndResendRequested", async ({ messageId, privateChatId }) => {
+        newSocket.on("sessionResetAndResendRequested", async ({ messageId, privateChatId, message }) => {
             console.log(`[E2EE Self-Heal] Partner requested session reset and message resend for message ID: ${messageId}`);
             
-            // 1. Delete local session state to force a new handshake
-            await deleteSessionState(privateChatId);
+            // 1. Delete local session state to force a new handshake (throttle to once per 3s to handle batch resends correctly)
+            const now = Date.now();
+            const lastReset = lastSessionResetRef.current[privateChatId] || 0;
+            if (now - lastReset > 3000) {
+                await deleteSessionState(privateChatId);
+                lastSessionResetRef.current[privateChatId] = now;
+            }
 
-            // 2. Find message in current messages array
-            const msg = messagesRef.current.find(m => m._id === messageId);
+            // 2. Find message in current messages array or fall back to the message object from server
+            let msg = messagesRef.current.find(m => m._id === messageId);
+            if (!msg && message) {
+                msg = message;
+            }
             if (!msg) {
-                console.warn(`[E2EE Self-Heal] Message ${messageId} not found in messagesRef.`);
+                console.warn(`[E2EE Self-Heal] Message ${messageId} not found.`);
                 return;
             }
 
@@ -1719,7 +1931,7 @@ function Chat() {
                 clearTimeout(toastTimeoutRef.current);
             }
         };
-    }, [navigate, isGuest]); // Remove searchParams dependency to prevent reconnect loop
+    }, [navigate, isGuest, isAuthChecking]); // Remove searchParams dependency to prevent reconnect loop
 
     useEffect(() => {
         if (isGuest && username) {
@@ -1955,6 +2167,22 @@ function Chat() {
         }
     };
 
+    const handleResetSession = async () => {
+        if (!activePrivate) return;
+        if (!window.confirm("Are you sure you want to reset the secure encryption session? This will force a new handshake and resend request to your contact.")) return;
+        
+        try {
+            await deleteSessionState(activePrivate);
+            if (socketRef.current) {
+                socketRef.current.emit("requestSessionReset", { privateChatId: activePrivate });
+            }
+            alert("Encryption session reset. Reloading page...");
+            window.location.reload();
+        } catch (err) {
+            console.error("Failed to reset session:", err);
+        }
+    };
+
     const clearActiveChat = () => {
         clearVaultState();
         setSearchParams({});
@@ -2155,6 +2383,9 @@ function Chat() {
                         realAttachment,
                         token
                     );
+                    if (encryptedPayload.partnerKeyChanged && socketRef.current) {
+                        socketRef.current.emit("notifyKeyChange", { privateChatId: activePrivateRef.current });
+                    }
                     msgData = {
                         ...encryptedPayload,
                         privateChatId: activePrivateRef.current,
@@ -3230,6 +3461,10 @@ function Chat() {
 
     const hasActiveChat = !!(activeRoom || activePrivate);
 
+    if (isAuthChecking) {
+        return <PageSkeleton />;
+    }
+
     return (
         <div className={`chat-wrapper ${hasActiveChat ? "has-active-chat" : "no-active-chat"}`}>
 
@@ -3460,6 +3695,7 @@ function Chat() {
                                     }
                                 }}
                                 onVerifyClick={() => setShowVerifyModal(true)}
+                                onResetSessionClick={handleResetSession}
                                 onVaultClick={() => {
                                     if (showVault) {
                                         clearVaultState();
@@ -3599,6 +3835,7 @@ function Chat() {
                                 onPin={setPinTargetMessage}
                                 onUnpin={handleUnpinActiveMessage}
                                 currentUserDisplayName={displayNameVal || username}
+                                onVerifyClick={() => setShowVerifyModal(true)}
                             />
 
                             {!isSelectionMode && replyToMsg && (

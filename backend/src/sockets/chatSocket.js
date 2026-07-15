@@ -539,16 +539,56 @@ io.on("connection", async (socket) => {
         });
     });
 
-    socket.on("requestSessionResetAndResend", ({ messageId, privateChatId }) => {
+    socket.on("requestSessionResetAndResend", async ({ messageId, privateChatId }) => {
         if (!privateChatId || !messageId) return;
-        socket.to(`private_${privateChatId}`).emit("sessionResetAndResendRequested", { messageId, privateChatId });
-
-        const parts = privateChatId.split("_");
-        parts.forEach(p => {
-            if (p.toLowerCase() !== socket.username.toLowerCase()) {
-                io.to(`user_${p.toLowerCase()}`).emit("sessionResetAndResendRequested", { messageId, privateChatId });
+        try {
+            const msg = await Message.findById(messageId);
+            if (!msg) {
+                console.warn(`[requestSessionResetAndResend] Message ${messageId} not found.`);
+                return;
             }
-        });
+            socket.to(`private_${privateChatId}`).emit("sessionResetAndResendRequested", { messageId, privateChatId, message: msg });
+
+            const parts = privateChatId.split("_");
+            parts.forEach(p => {
+                if (p.toLowerCase() !== socket.username.toLowerCase()) {
+                    io.to(`user_${p.toLowerCase()}`).emit("sessionResetAndResendRequested", { messageId, privateChatId, message: msg });
+                }
+            });
+        } catch (err) {
+            console.error("Error in requestSessionResetAndResend handler:", err);
+        }
+    });
+
+    socket.on("notifyKeyChange", async ({ privateChatId }) => {
+        if (!privateChatId) return;
+        try {
+            const tenSecondsAgo = new Date(Date.now() - 10000);
+            const existing = await Message.findOne({
+                username: "System",
+                text: "security_code_changed",
+                privateChatId,
+                createdAt: { $gte: tenSecondsAgo }
+            });
+            if (existing) return;
+
+            const systemMsg = await Message.create({
+                username: "System",
+                displayName: "System",
+                text: "security_code_changed",
+                privateChatId,
+                room: null,
+                createdAt: new Date()
+            });
+
+            io.to(`private_${privateChatId}`).emit("reply", systemMsg);
+            const parts = privateChatId.split("_");
+            parts.forEach(p => {
+                io.to(`user_${p.toLowerCase()}`).emit("reply", systemMsg);
+            });
+        } catch (err) {
+            console.error("Error creating key change system message:", err);
+        }
     });
 
     socket.on("resendEncryptedMessage", async ({ messageId, privateChatId, text, ratchetHeader, handshakePayload, senderCiphertext }) => {

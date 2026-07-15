@@ -56,7 +56,7 @@ export async function initiateSession(aliceKeys, bobBundle) {
 
     // DH4 = DH(EK_A, OPK_B) (if OPK is present in Bob's bundle)
     let DH4 = null;
-    const hasOPK = !!bobBundle.oneTimePrekey;
+    const hasOPK = false; // Disabled to prevent IndexedDB out-of-sync key mismatches
     if (hasOPK) {
         const bobOPK_raw = fromBase64(bobBundle.oneTimePrekey.publicKey);
         DH4 = sodium.crypto_scalarmult(ekA.privateKey, bobOPK_raw);
