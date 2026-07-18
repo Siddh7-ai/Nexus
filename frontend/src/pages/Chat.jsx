@@ -561,9 +561,10 @@ function Chat() {
                         ...prev,
                         [msg._id]: { 
                             text: error.message?.includes("out of sync") 
-                                ? "🔒 Waiting for this message. This may take a moment while keys sync..." 
+                                ? "Waiting for this message. This may take a moment while keys sync..." 
                                 : `[Decryption Failed: ${error.message || error}]`, 
-                            isError: true 
+                            isError: true,
+                            isWaitingForKeys: error.message?.includes("out of sync")
                         }
                     }));
                     if (newlyReceivedMessageIdsRef.current.has(msg._id)) {
@@ -3421,6 +3422,7 @@ function Chat() {
                     return {
                         ...msg,
                         text: decrypted.text,
+                        isWaitingForKeys: decrypted.isWaitingForKeys,
                         fileUrl: decrypted.fileUrl || null,
                         fileName: decrypted.fileName || null,
                         fileSize: decrypted.fileSize || null,

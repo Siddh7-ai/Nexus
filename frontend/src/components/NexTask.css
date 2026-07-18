@@ -442,9 +442,8 @@ body.dark-theme .kanban-cards-list::-webkit-scrollbar-thumb {
 /* ─── Kanban Card ─────────────────────────────────────────── */
 /* ─── Kanban Card ─────────────────────────────────────────── */
 .kanban-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.95);
+  /* Removed backdrop-filter to prevent massive GPU rendering lag when scrolling lists of cards */
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 14px;
   padding: 14px 14px 14px 20px;
@@ -916,9 +915,8 @@ body.dark-theme .card-assignee-avatar {
 .nextask-detail-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.4);
+  /* Removed backdrop-filter: blur(12px) to prevent GPU repaint lag */
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -927,22 +925,25 @@ body.dark-theme .card-assignee-avatar {
   animation: overlayFadeIn 0.3s ease-out forwards;
 }
 
+body.dark-theme .nextask-detail-overlay {
+  background: rgba(0, 0, 0, 0.7);
+}
+
 @keyframes overlayFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 .nextask-detail-modal {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 1);
+  background: var(--panel, #ffffff);
+  /* Removed backdrop-filter: blur(24px) to prevent scroll and interaction lag */
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   border-radius: 24px;
   width: 100%;
   max-width: 520px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
   transform: scale(0.95);
   opacity: 0;
   animation: modalPopIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;

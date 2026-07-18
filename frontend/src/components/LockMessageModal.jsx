@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FiX, FiCheck } from "react-icons/fi";
+import { FiX, FiCheck, FiLock } from "react-icons/fi";
 import { SmoothInput } from "./SmoothInput";
 import { getVaultPinData } from "../utils/crypto/keydb";
 import { verifyVaultPin, decryptVaultKeyWithPin, encryptVaultItem, setupVaultPin } from "../utils/crypto/vault";
@@ -164,7 +164,9 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                         <FiX size={20} />
                     </button>
                     <div className="modal-header-section" style={{ textAlign: 'center' }}>
-                        <h3 className="vault-modal-title">🔒 Shared Vault Required</h3>
+                        <h3 className="vault-modal-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <FiLock className="lock-symbol" size={18} /> Shared Vault Required
+                        </h3>
                         <p className="vault-modal-subtitle" style={{ marginTop: '10px', color: 'var(--muted)', fontSize: '13px' }}>
                             You must configure a Shared Vault PIN for this private chat room before locking messages.
                         </p>
@@ -190,7 +192,9 @@ export default function LockMessageModal({ msg, onClose, privateChatId, myUserna
                 {step === "pin" ? (
                     <>
                         <div className="modal-header-section">
-                            <h3 className="vault-modal-title">🔒 Lock Message</h3>
+                            <h3 className="vault-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <FiLock className="lock-symbol" size={18} /> Lock Message
+                            </h3>
                             <p className="vault-modal-subtitle">Enter your Shared Vault PIN to verify ownership</p>
                         </div>
 

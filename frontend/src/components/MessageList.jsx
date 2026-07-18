@@ -1289,18 +1289,42 @@ function MessageList({
                                                         }
                                                     })()
                                                 ) && (
-                                                    <div className="message-text markdown-content">
-                                                        <ReactMarkdown 
-                                                            remarkPlugins={[remarkGfm]} 
-                                                            rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-                                                            components={{
-                                                                a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
-                                                                p: ({ node, ...props }) => <span {...props} />
+                                                    msg.isWaitingForKeys ? (
+                                                        <div 
+                                                            className="waiting-for-keys-bubble" 
+                                                            style={{ 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '8px', 
+                                                                padding: '6px 2px', 
+                                                                color: 'var(--muted)', 
+                                                                fontSize: '13.5px',
+                                                                lineHeight: '1.4'
                                                             }}
                                                         >
-                                                            {msg.text}
-                                                        </ReactMarkdown>
-                                                    </div>
+                                                            <Lock 
+                                                                size={16} 
+                                                                className="lock-symbol" 
+                                                                style={{ flexShrink: 0 }} 
+                                                            />
+                                                            <span style={{ fontStyle: 'italic' }}>
+                                                                {msg.text}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="message-text markdown-content">
+                                                            <ReactMarkdown 
+                                                                remarkPlugins={[remarkGfm]} 
+                                                                rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+                                                                components={{
+                                                                    a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
+                                                                    p: ({ node, ...props }) => <span {...props} />
+                                                                }}
+                                                            >
+                                                                {msg.text}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    )
                                                 )}
                                             </>
                                         )}

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { FiX, FiEye, FiEyeOff } from "react-icons/fi";
+import { FiX, FiEye, FiEyeOff, FiLock } from "react-icons/fi";
 import { SmoothInput } from "./SmoothInput";
 import { getBackendUrl } from "../utils/config";
 import { verifyVaultPin, decryptVaultKeyWithPin, getVaultKeyFromSession, setupVaultPin } from "../utils/crypto/vault";
@@ -197,7 +197,9 @@ export default function VaultPinEntryModal({ onClose, pinData, onUnlock, onReset
                 {!showRecover ? (
                     <>
                         <div className="modal-header-section">
-                            <h3 className="vault-modal-title">🔒 Vault Locked</h3>
+                            <h3 className="vault-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <FiLock className="lock-symbol" size={18} /> Vault Locked
+                            </h3>
                             <p className="vault-modal-subtitle">Enter your vault PIN to continue</p>
                         </div>
                         <form onSubmit={handleUnlockSubmit} className="vault-form">

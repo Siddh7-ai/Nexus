@@ -424,8 +424,15 @@ function RoomList({
                 {user.displayName || user.username}
             </span>
             {user.lastMessage && (
-                <span className="dm-message-preview" style={{ fontSize: '11px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.lastMessage}
+                <span className="dm-message-preview" style={{ fontSize: '11px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {user.lastMessage.includes("🔒") ? (
+                        <>
+                            <FiLock className="lock-symbol" size={11} style={{ flexShrink: 0 }} />
+                            <span>{user.lastMessage.replace(/🔒\s?/g, "")}</span>
+                        </>
+                    ) : (
+                        user.lastMessage
+                    )}
                 </span>
             )}
         </div>
@@ -485,16 +492,23 @@ function RoomList({
                                                                 </span>
                                                                 {user.lastMessage && (
                                                                     <span className="dm-message-preview">
-                                                                        <ReactMarkdown
-                                                                            remarkPlugins={[remarkGfm]}
-                                                                            rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
-                                                                            components={{
-                                                                                p: ({ node, ...props }) => <span {...props} style={{ margin: 0, padding: 0 }} />,
-                                                                                a: ({ node, ...props }) => <span {...props} style={{ color: 'inherit', textDecoration: 'underline' }} />
-                                                                            }}
-                                                                        >
-                                                                            {user.lastMessage}
-                                                                        </ReactMarkdown>
+                                                                        {user.lastMessage.includes("🔒") ? (
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                                <FiLock className="lock-symbol" size={11} style={{ flexShrink: 0 }} />
+                                                                                <span>{user.lastMessage.replace(/🔒\s?/g, "")}</span>
+                                                                            </span>
+                                                                        ) : (
+                                                                            <ReactMarkdown
+                                                                                remarkPlugins={[remarkGfm]}
+                                                                                rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
+                                                                                components={{
+                                                                                    p: ({ node, ...props }) => <span {...props} style={{ margin: 0, padding: 0 }} />,
+                                                                                    a: ({ node, ...props }) => <span {...props} style={{ color: 'inherit', textDecoration: 'underline' }} />
+                                                                                }}
+                                                                            >
+                                                                                {user.lastMessage}
+                                                                            </ReactMarkdown>
+                                                                        )}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -635,7 +649,7 @@ function RoomList({
                                                             />
                                                         ) : (
                                                             <div className="dm-row-avatar" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
-                                                                🔒
+                                                                <FiLock className="lock-symbol" size={14} />
                                                             </div>
                                                         )}
                                                     </div>

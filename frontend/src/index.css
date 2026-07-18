@@ -25,6 +25,16 @@
   box-sizing: border-box;
 }
 
+/* Hide scrollbars visually but keep elements scrollable */
+*::-webkit-scrollbar {
+  display: none !important;
+}
+* {
+  -ms-overflow-style: none !important;  /* IE/Edge */
+  scrollbar-width: none !important;  /* Firefox */
+}
+
+
 
 html,
 body {

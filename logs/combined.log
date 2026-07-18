@@ -489,3 +489,123 @@
 {"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-15 22:50:54"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-15 22:51:06"}
 {"level":"info","message":"Received SIGINT. Starting production-grade connection draining shutdown...","service":"nexus-backend","timestamp":"2026-07-15 22:51:13"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-15 22:51:29"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-15 22:51:30"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-15 22:51:30"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-15 22:51:30"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 5.16s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'","service":"nexus-backend","timestamp":"2026-07-15 22:51:37"}
+{"level":"info","message":"[Python ASR stdout]: * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-15 22:51:37"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-15 22:51:37"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-15 22:51:37"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-15 22:53:30"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-15 22:55:30"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-15 22:57:30"}
+{"level":"error","message":"[Python ASR stderr]: forrtl: error (200): program aborting due to window-CLOSE event\nImage              PC                Routine            Line        Source             \nKERNELBASE.dll     00007FF94D1C3E3D  Unknown               Unknown  Unknown\nKERNEL32.DLL       00007FF94E81E957  Unknown               Unknown  Unknown\nntdll.dll          00007FF94F9CAD6C  Unknown               Unknown  Unknown","service":"nexus-backend","timestamp":"2026-07-15 22:59:22"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-17 22:12:58"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-17 22:12:59"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-17 22:12:59"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:13:00"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:13:20"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 8.65s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-17 22:13:21"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-17 22:13:21"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-17 22:13:21"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-17 22:13:42"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:13:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:14:59"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-17 22:15:13"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:15:13"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-17 22:16:13"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:16:13"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-17 22:16:14"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-17 22:16:14"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-17 22:17:07"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-17 22:17:07"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-17 22:17:09"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-17 22:17:09"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 8.83s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-17 22:17:20"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-17 22:17:20"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-17 22:17:20"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:19:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:21:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:23:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:25:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:27:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:29:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:31:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:33:09"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:35:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:37:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:39:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:41:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:43:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:45:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:47:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:49:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:51:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:53:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:55:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:57:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 22:59:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:01:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:03:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:05:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:07:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:09:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:11:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:13:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:15:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:17:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:19:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:21:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:23:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:25:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:27:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:29:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:31:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:33:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:35:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:37:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:39:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:41:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:43:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:45:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:47:11"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:49:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:51:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:53:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:55:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:57:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-17 23:59:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:01:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:03:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:05:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:07:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:09:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:11:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:13:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:15:12"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 00:17:12"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-18 11:14:43"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-18 11:14:43"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-18 11:14:47"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-18 11:14:47"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 5.94s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-18 11:15:04"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001\r\nPress CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-18 11:15:04"}
+{"level":"error","message":"[Python ASR stderr]: 127.0.0.1 - - [18/Jul/2026 11:15:38] \"","service":"nexus-backend","timestamp":"2026-07-18 11:15:38"}
+{"level":"error","message":"[Python ASR stderr]: GET / HTTP/1.1\" 404 -","service":"nexus-backend","timestamp":"2026-07-18 11:15:38"}
+{"level":"error","message":"[Python ASR stderr]: 127.0.0.1 - - [18/Jul/2026 11:15:38] \"GET /favicon.ico HTTP/1.1\" 404 -","service":"nexus-backend","timestamp":"2026-07-18 11:15:38"}
+{"level":"info","message":"Received SIGINT. Starting production-grade connection draining shutdown...","service":"nexus-backend","timestamp":"2026-07-18 11:15:55"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-18 11:16:01"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-18 11:16:01"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-18 11:16:02"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-18 11:16:02"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 5.53s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-18 11:16:09"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-18 11:16:09"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-18 11:16:09"}
+{"level":"error","message":"[Python ASR stderr]: 127.0.0.1 - - [18/Jul/2026 11:16:34] \"GET /favicon.ico HTTP/1.1\" 404 -","service":"nexus-backend","timestamp":"2026-07-18 11:16:34"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:18:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:20:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:22:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:24:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:26:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:28:02"}
