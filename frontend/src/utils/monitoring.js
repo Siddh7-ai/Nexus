@@ -62,13 +62,21 @@ export function initWebVitalsMonitoring() {
   // Cumulative Layout Shift (CLS)
   try {
     let clsValue = 0;
+    let logTimeout = null;
     const clsObserver = new PerformanceObserver((entryList) => {
+      let updated = false;
       for (const entry of entryList.getEntries()) {
         if (!entry.hadRecentInput) {
           clsValue += entry.value;
+          updated = true;
         }
       }
-      console.log(`[Nexus Monitor] CLS (Cumulative Layout Shift): ${clsValue.toFixed(4)}`);
+      if (updated) {
+        if (logTimeout) clearTimeout(logTimeout);
+        logTimeout = setTimeout(() => {
+          console.log(`[Nexus Monitor] CLS (Cumulative Layout Shift): ${clsValue.toFixed(4)}`);
+        }, 1000);
+      }
     });
     clsObserver.observe({ type: "layout-shift", buffered: true });
   } catch (e) {

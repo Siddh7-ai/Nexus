@@ -609,3 +609,18 @@
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:24:02"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:26:02"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:28:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:30:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:32:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:34:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:36:02"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 11:38:02"}
+{"level":"error","message":"[Python ASR stderr]: forrtl: error (200): program aborting due to window-CLOSE event\nImage              PC                Routine            Line        Source             \nKERNELBASE.dll     00007FFD1C963E3D  Unknown               Unknown  Unknown\nKERNEL32.DLL       00007FFD1E73E957  Unknown               Unknown  Unknown\nntdll.dll          00007FFD1F26AD6C  Unknown               Unknown  Unknown","service":"nexus-backend","timestamp":"2026-07-18 11:39:29"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-18 14:01:30"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-18 14:01:30"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-18 14:01:33"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-18 14:01:33"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 6.79s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-18 14:01:50"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-18 14:01:50"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-18 14:01:50"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 14:03:33"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-18 14:05:33"}
