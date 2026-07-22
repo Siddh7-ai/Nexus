@@ -136,7 +136,7 @@ function checkRateLimit(userId) {
     return true;
 }
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
     const token = socket.handshake?.auth?.token;
     if (!token) {
         return next(new Error("Authentication required"));
@@ -146,6 +146,14 @@ io.use((socket, next) => {
         // Support guest connection tokens
         if (token.startsWith("guest:")) {
             const username = token.split(":")[1];
+            // Check if this username is permanently taken by a registered user
+            const registeredUser = await User.findOne({ 
+                username: { $regex: new RegExp(`^${username}$`, "i") } 
+            });
+            if (registeredUser) {
+                return next(new Error("This username is permanently taken to registered user create new one"));
+            }
+
             socket.username = username;
             socket.userId = "guest_" + username;
             socket.role = "guest";

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import savedMessagesLogo from "../assets/saved.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase, FiUserPlus, FiUserCheck } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import { toggleTheme } from "../utils/theme";
 import ThemeToggleButton from "./ThemeToggleButton";
@@ -133,10 +133,58 @@ function RoomList({
     settingsProps = {}
 }) {
     const [dmSearch, setDmSearch] = useState("");
+    const [userSearchQuery, setUserSearchQuery] = useState("");
     const [settingsSubpage, setSettingsSubpage] = useState("main");
     const [settingsSearch, setSettingsSearch] = useState("");
     const [showPhotoOptions, setShowPhotoOptions] = useState(false);
+    const [friendStatuses, setFriendStatuses] = useState({});
     const fileInputRef = React.useRef(null);
+
+    const handleFriendAction = async (e, targetUsername) => {
+        if (e) e.stopPropagation();
+        if (isGuest) {
+            alert("Guests cannot add friends. Please register an account.");
+            return;
+        }
+        const currentStatus = friendStatuses[targetUsername] || 
+            (currentUserProfile?.friends?.includes(targetUsername) ? "friends" : "none");
+
+        let endpoint = "friend-request/send";
+        let newStatus = "requested";
+
+        if (currentStatus === "friends") {
+            endpoint = "friend-request/remove";
+            newStatus = "none";
+        } else if (currentStatus === "requested") {
+            endpoint = "friend-request/cancel";
+            newStatus = "none";
+        }
+
+        setFriendStatuses(prev => ({ ...prev, [targetUsername]: newStatus }));
+
+        try {
+            const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+            const response = await fetch(`${getBackendUrl()}/api/user/${endpoint}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ targetUsername })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.friendshipStatus) {
+                    setFriendStatuses(prev => ({ ...prev, [targetUsername]: data.friendshipStatus }));
+                }
+            } else {
+                setFriendStatuses(prev => ({ ...prev, [targetUsername]: currentStatus }));
+            }
+        } catch (err) {
+            console.error("Error toggling friend status:", err);
+            setFriendStatuses(prev => ({ ...prev, [targetUsername]: currentStatus }));
+        }
+    };
 
     const { accentColor, setAccentColor, soundEnabled, setSoundEnabled } = useTheme();
 
@@ -209,6 +257,32 @@ function RoomList({
         return [...group1, ...group2, ...group3];
     }, [dmSearch, allUsers, dmConversations, onlineUserList, currentUser]);
 
+    const displayedSearchResults = useMemo(() => {
+        const query = (userSearchQuery || "").trim().toLowerCase();
+        const userMap = new Map();
+
+        (allUsers || []).forEach(u => {
+            if (u.username && u.username.toLowerCase() !== currentUser?.toLowerCase()) {
+                userMap.set(u.username.toLowerCase(), { ...u, isOnline: false });
+            }
+        });
+
+        (onlineUserList || []).forEach(u => {
+            if (u.username && u.username.toLowerCase() !== currentUser?.toLowerCase()) {
+                const existing = userMap.get(u.username.toLowerCase()) || {};
+                userMap.set(u.username.toLowerCase(), { ...existing, ...u, isOnline: true, status: u.status || "Online" });
+            }
+        });
+
+        const userList = Array.from(userMap.values());
+        if (!query) return userList;
+
+        return userList.filter(u => 
+            (u.username && u.username.toLowerCase().includes(query)) ||
+            (u.displayName && u.displayName.toLowerCase().includes(query))
+        );
+    }, [userSearchQuery, allUsers, onlineUserList, currentUser]);
+
     return (
         <div style={{ display: 'flex', width: '100%', height: '100%' }}>
             {/* 1. Left narrow bar (Instagram-style) */}
@@ -237,6 +311,14 @@ function RoomList({
                             {totalDmUnread > 0 && (
                                 <span className="narrow-nav-btn-unread">{totalDmUnread}</span>
                             )}
+                        </button>
+
+                        <button 
+                            className={`narrow-nav-btn ${activeSidebarTab === "search" ? "active" : ""}`}
+                            onClick={() => setActiveSidebarTab("search")}
+                            title="Search Friends & Users"
+                        >
+                            <FiSearch />
                         </button>
 
                         <button 
@@ -525,7 +607,166 @@ function RoomList({
                                             })
                                         )
                                     )}
+                                 </div>
+                            </div>
+                        </div>
+                    </>
+                ) : activeSidebarTab === "search" ? (
+                    <>
+                        <div className="panel-header-section">
+                            <h3 className="panel-header-title">Find Friends</h3>
+                            <div className="panel-search-box">
+                                <div style={{ position: 'relative', width: '100%' }}>
+                                    <SmoothInput
+                                        type="text"
+                                        placeholder="Search by username or name..."
+                                        value={userSearchQuery}
+                                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                                        className="dm-search-input"
+                                        autoFocus
+                                    />
+                                    {userSearchQuery && (
+                                        <button className="dm-search-clear" onClick={() => setUserSearchQuery("")}>×</button>
+                                    )}
                                 </div>
+                            </div>
+                        </div>
+                        <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
+                            <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span>{userSearchQuery ? `Search Results (${displayedSearchResults.length})` : "All Registered & Online Users"}</span>
+                            </div>
+                            <div className="unified-dms-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {displayedSearchResults.length === 0 ? (
+                                    <div className="sidebar-empty-state" style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '12px' }}>
+                                        No matching users found.
+                                    </div>
+                                ) : (
+                                    displayedSearchResults.map(user => {
+                                        const privateChatId = [currentUser ? currentUser.toLowerCase() : "", user.username.toLowerCase()].sort().join("_");
+                                        const isSelf = user.username?.toLowerCase() === currentUser?.toLowerCase();
+                                        
+                                        return (
+                                            <div 
+                                                key={user.username} 
+                                                className="dm-row-card"
+                                                onClick={() => onUserProfileClick(user.username)}
+                                                style={{ padding: '10px 12px', borderRadius: '10px', cursor: 'pointer' }}
+                                            >
+                                                <div className="dm-row-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <div className="dm-avatar-wrapper" style={{ position: 'relative' }}>
+                                                        <Avatar 
+                                                            username={user.username} 
+                                                            avatarSrc={user.avatar} 
+                                                            size={38} 
+                                                            className="dm-row-avatar" 
+                                                        />
+                                                        <span className={`dm-status-dot ${
+                                                            user.role === "guest" ? "guest-dot" :
+                                                            user.status === "Online" || user.isOnline ? "" :
+                                                            user.status === "Away" ? "away" :
+                                                            user.status === "Busy" ? "busy" : "offline"
+                                                        }`} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                                        <span className="dm-row-name" style={{ fontSize: '13px', fontWeight: 600 }}>
+                                                            {user.displayName || user.username}
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                                            @{user.username} {user.role === "guest" && "[Guest]"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="dm-row-right" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {!isSelf && (
+                                                        <>
+                                                            {(() => {
+                                                                const status = friendStatuses[user.username] || 
+                                                                    (currentUserProfile?.friends?.includes(user.username) ? "friends" : "none");
+
+                                                                if (status === "friends") {
+                                                                    return (
+                                                                        <button 
+                                                                            className="action-btn-card outline"
+                                                                            style={{ 
+                                                                                padding: '4px 8px', 
+                                                                                fontSize: '11px', 
+                                                                                borderRadius: '6px',
+                                                                                background: 'rgba(16, 185, 129, 0.15)',
+                                                                                color: '#10b981',
+                                                                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                                                cursor: 'pointer',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '4px'
+                                                                            }}
+                                                                            onClick={(e) => handleFriendAction(e, user.username)}
+                                                                            title="Friends (click to remove)"
+                                                                        >
+                                                                            <FiUserCheck size={12} /> Friends
+                                                                        </button>
+                                                                    );
+                                                                } else if (status === "requested") {
+                                                                    return (
+                                                                        <button 
+                                                                            className="action-btn-card outline"
+                                                                            style={{ 
+                                                                                padding: '4px 8px', 
+                                                                                fontSize: '11px', 
+                                                                                borderRadius: '6px',
+                                                                                background: 'rgba(255, 176, 32, 0.15)',
+                                                                                color: '#ffb020',
+                                                                                border: '1px solid rgba(255, 176, 32, 0.3)',
+                                                                                cursor: 'pointer'
+                                                                            }}
+                                                                            onClick={(e) => handleFriendAction(e, user.username)}
+                                                                            title="Friend Request Sent (click to cancel)"
+                                                                        >
+                                                                            Requested
+                                                                        </button>
+                                                                    );
+                                                                } else {
+                                                                    return (
+                                                                        <button 
+                                                                            className="action-btn-card outline"
+                                                                            style={{ 
+                                                                                padding: '4px 8px', 
+                                                                                fontSize: '11px', 
+                                                                                borderRadius: '6px',
+                                                                                background: 'rgba(18, 199, 189, 0.12)',
+                                                                                color: 'var(--accent)',
+                                                                                border: '1px solid var(--accent)',
+                                                                                cursor: 'pointer',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '4px'
+                                                                            }}
+                                                                            onClick={(e) => handleFriendAction(e, user.username)}
+                                                                            title="Add Friend"
+                                                                        >
+                                                                            <FiUserPlus size={12} /> + Friend
+                                                                        </button>
+                                                                    );
+                                                                }
+                                                            })()}
+
+                                                            <button 
+                                                                className="action-btn-card solid" 
+                                                                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    onSelectPrivate(privateChatId, user.username);
+                                                                }}
+                                                                title="Chat"
+                                                            >
+                                                                CHAT
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
                     </>

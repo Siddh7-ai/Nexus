@@ -660,9 +660,6 @@ router.get("/api/file/:id", async (req, res) => {
 // 10. Legacy User-Lists API required by Chat.jsx
 router.get("/api/users", authenticateToken, async (req, res) => {
   try {
-    if (req.user.isGuest) {
-      return res.status(403).json({ message: "Access denied. Guests cannot list users." });
-    }
     const users = await mongoose.model("User").find({}, { username: 1, displayName: 1, avatar: 1, status: 1, _id: 1 });
     res.json(users);
   } catch (err) {

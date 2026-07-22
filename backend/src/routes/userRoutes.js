@@ -39,6 +39,74 @@ function authenticateToken(req, res, next) {
     }
 }
 
+// 0. Search Users (supports both registered users and guests searching for users to connect)
+router.get("/search", authenticateToken, async (req, res) => {
+    try {
+        const query = (req.query.q || "").trim();
+        if (!query) {
+            return res.json({ users: [] });
+        }
+
+        const regex = new RegExp(query, "i");
+        const users = await User.find(
+            {
+                $or: [
+                    { username: regex },
+                    { displayName: regex }
+                ]
+            },
+            "username displayName avatar status bio createdAt friends"
+        ).limit(20);
+
+        const results = users.map(u => ({
+            _id: u._id,
+            username: u.username,
+            displayName: u.displayName || u.username,
+            avatar: u.avatar || "",
+            status: u.status || "Online",
+            bio: u.bio || "",
+            friendsCount: u.friends ? u.friends.length : 0,
+            isGuest: false
+        }));
+
+        res.json({ users: results });
+    } catch (err) {
+        console.error("Error searching users:", err);
+        res.status(500).json({ message: "Server error searching users" });
+    }
+});
+
+// Get User's Friends List (populated with profile details)
+router.get("/friends/:username", authenticateToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const targetUser = await User.findOne({ username });
+        if (!targetUser) {
+            return res.json({ friends: [] });
+        }
+
+        const friendUsernames = targetUser.friends || [];
+        const friendsDocs = await User.find(
+            { username: { $in: friendUsernames } },
+            "username displayName avatar status bio createdAt"
+        );
+
+        const friends = friendsDocs.map(f => ({
+            _id: f._id,
+            username: f.username,
+            displayName: f.displayName || f.username,
+            avatar: f.avatar || "",
+            status: f.status || "Online",
+            bio: f.bio || ""
+        }));
+
+        res.json({ friends });
+    } catch (err) {
+        console.error("Error fetching user friends:", err);
+        res.status(500).json({ message: "Server error fetching friends" });
+    }
+});
+
 // 1. Get User Profile (supports guest viewing general details, respects privacy)
 router.get("/profile/:username", authenticateToken, async (req, res) => {
     try {

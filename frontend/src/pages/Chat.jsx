@@ -646,6 +646,7 @@ function Chat() {
     const [allUsers, setAllUsers] = useState([]);
     const [conversationUsers, setConversationUsers] = useState([]);
     const [drafts, setDrafts] = useState({});
+    const [friendsModalData, setFriendsModalData] = useState({ isOpen: false, username: "", friends: [], loading: false });
 
     const messageRef = useRef(message);
     useEffect(() => {
@@ -1221,7 +1222,7 @@ function Chat() {
     };
 
     useEffect(() => {
-        if (isAuthChecking || isGuest || !username) return;
+        if (isAuthChecking || !username) return;
         
         async function fetchUserData() {
             const token = getAuthToken();
@@ -1233,22 +1234,24 @@ function Chat() {
             .then(data => setAllUsers(data))
             .catch(err => console.error("Error fetching user list:", err));
 
-            ApiClient.request(`${getBackendUrl()}/api/users/conversations`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            })
-            .then(data => setConversationUsers(data))
-            .catch(err => console.error("Error fetching conversations:", err));
+            if (!isGuest) {
+                ApiClient.request(`${getBackendUrl()}/api/users/conversations`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                })
+                .then(data => setConversationUsers(data))
+                .catch(err => console.error("Error fetching conversations:", err));
 
-            ApiClient.request(`${getBackendUrl()}/api/user/profile/${username}`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            })
-            .then(data => setOwnProfileData(data))
-            .catch(err => console.error("Error fetching own profile:", err));
+                ApiClient.request(`${getBackendUrl()}/api/user/profile/${username}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                })
+                .then(data => setOwnProfileData(data))
+                .catch(err => console.error("Error fetching own profile:", err));
+            }
         }
         
         fetchUserData();
         fetchPendingRequests();
-    }, [username, isGuest, isAuthChecking]);
+    }, [isAuthChecking, isGuest, username]);
 
     useEffect(() => {
         if (isGuest) {
@@ -1340,6 +1343,14 @@ function Chat() {
 
         newSocket.on("connect_error", async (err) => {
             console.warn("Socket connection error:", err);
+            if (err && err.message && err.message.includes("permanently taken")) {
+                alert(err.message);
+                localStorage.removeItem("guestProfile");
+                sessionStorage.removeItem("token");
+                sessionStorage.removeItem("username");
+                window.location.reload();
+                return;
+            }
             // Only log out if it is an explicit authentication error
             if (err && (err.message === "Authentication required" || err.message === "Invalid token")) {
                 console.log("Socket authentication failed. Attempting to refresh token...");
@@ -1359,6 +1370,14 @@ function Chat() {
                     navigate("/login");
                 }
             }
+        });
+
+        newSocket.on("guestUsernameTaken", (data) => {
+            alert(data?.message || "This username is permanently taken to registered user create new one");
+            localStorage.removeItem("guestProfile");
+            sessionStorage.removeItem("token");
+            sessionStorage.removeItem("username");
+            window.location.reload();
         });
 
         newSocket.on("currentUser", (user) => {
@@ -3164,12 +3183,38 @@ function Chat() {
     function handleStartPrivateChat() {
         if (!selectedProfileData) return;
         const targetUser = selectedProfileData.username;
+        handleStartPrivateChatForUser(targetUser);
+    }
+
+    function handleStartPrivateChatForUser(targetUser) {
+        if (!targetUser) return;
         const token = getAuthToken();
-        const currentU = isGuest ? "" : (parseJWT(token)?.username || "");
+        const currentU = username || (parseJWT(token)?.username || "");
         if (!currentU) return;
         const pChatId = [currentU.toLowerCase(), targetUser.toLowerCase()].sort().join("_");
         selectPrivate(pChatId, targetUser);
         setSelectedProfileUsername(null);
+        setFriendsModalData(prev => ({ ...prev, isOpen: false }));
+    }
+
+    async function handleShowFriendsList(targetUsername) {
+        if (!targetUsername) return;
+        setFriendsModalData({ isOpen: true, username: targetUsername, friends: [], loading: true });
+        try {
+            const token = getAuthToken();
+            const res = await ApiClient.request(`${getBackendUrl()}/api/user/friends/${targetUsername}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            setFriendsModalData({
+                isOpen: true,
+                username: targetUsername,
+                friends: res.friends || [],
+                loading: false
+            });
+        } catch (err) {
+            console.error("Error fetching friends list:", err);
+            setFriendsModalData(prev => ({ ...prev, loading: false }));
+        }
     }
 
     function logout() {
@@ -4391,12 +4436,6 @@ function Chat() {
                                         {/* Punched Hole with Chrome Grommet */}
                                         <div className="card-grommet-hole" />
                                         
-                                        {/* Corner Bracket Accent Indicators */}
-                                        <div className="card-corner-bracket top-left" />
-                                        <div className="card-corner-bracket top-right" />
-                                        <div className="card-corner-bracket bottom-left" />
-                                        <div className="card-corner-bracket bottom-right" />
-
                                     {/* Top Accent Color Bar */}
                                     <div className="card-top-bar" />
 
@@ -4468,24 +4507,33 @@ function Chat() {
 
                                     {/* PROFILE STATS GRID */}
                                     <div className="cyber-stats-grid">
-                                        <div className="cyber-stat-box">
-                                            <small className="cyber-stat-label">TOTAL MSGS</small>
-                                            <strong className="cyber-stat-value">{selectedProfileData.totalMessagesSent.toLocaleString()}</strong>
+                                        <div 
+                                            className="cyber-stat-box" 
+                                            onClick={() => handleShowFriendsList(selectedProfileData.username)}
+                                            style={{ cursor: 'pointer' }}
+                                            title="Click to view friends list"
+                                        >
+                                            <small className="cyber-stat-label">FRIENDS</small>
+                                            <strong className="cyber-stat-value">{selectedProfileData.friendsCount || 0}</strong>
                                         </div>
                                         <div className="cyber-stat-box">
-                                            <small className="cyber-stat-label">CONNECTIONS</small>
-                                            <strong className="cyber-stat-value">{selectedProfileData.friendsCount || 0}</strong>
+                                            <small className="cyber-stat-label">STATUS</small>
+                                            <strong className="cyber-stat-value" style={{ textTransform: 'capitalize' }}>
+                                                {selectedProfileData.status || "Online"}
+                                            </strong>
                                         </div>
                                         <div className="cyber-stat-box">
                                             <small className="cyber-stat-label">STREAK</small>
                                             <strong className="cyber-stat-value">
-                                                {selectedProfileData.isGuest ? 0 : Math.max(3, (selectedProfileData.totalMessagesSent % 15) + 2)}
+                                                {selectedProfileData.isGuest ? 0 : Math.max(3, ((selectedProfileData.friendsCount || 1) * 3 % 15) + 2)}
                                             </strong>
                                         </div>
                                         <div className="cyber-stat-box">
                                             <small className="cyber-stat-label">JOIN NODE</small>
                                             <strong className="cyber-stat-value">
-                                                {new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })}
+                                                {selectedProfileData.joinDate && !isNaN(new Date(selectedProfileData.joinDate))
+                                                    ? new Date(selectedProfileData.joinDate).toLocaleDateString([], { month: 'short', year: 'numeric' })
+                                                    : "Recent"}
                                             </strong>
                                         </div>
                                     </div>
@@ -4499,7 +4547,7 @@ function Chat() {
                                             <span>Trust score</span>
                                         </div>
                                         <div className="trust-score-right">
-                                            <span>{(95 + (selectedProfileData.totalMessagesSent % 5) + (selectedProfileData.username.length % 2) * 0.4).toFixed(1)}% secure</span>
+                                            <span>{(95 + ((selectedProfileData.friendsCount || 0) % 5) + (selectedProfileData.username.length % 2) * 0.4).toFixed(1)}% secure</span>
                                         </div>
                                     </div>
 
@@ -5493,6 +5541,96 @@ function Chat() {
                     </motion.div>
                 )}
             </AnimatePresence>
+            {/* FRIENDS LIST MODAL */}
+            {friendsModalData.isOpen && (
+                <div 
+                    className="modal-overlay" 
+                    onClick={() => setFriendsModalData(prev => ({ ...prev, isOpen: false }))}
+                    style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <div 
+                        className="modern-modal-container"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ 
+                            width: '90%', 
+                            maxWidth: '420px', 
+                            padding: '20px', 
+                            borderRadius: '16px', 
+                            background: 'var(--panel)', 
+                            border: '1px solid var(--border)', 
+                            color: 'var(--text)',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                                @{friendsModalData.username}'s Friends ({friendsModalData.friends.length})
+                            </h3>
+                            <button 
+                                onClick={() => setFriendsModalData(prev => ({ ...prev, isOpen: false }))}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '18px' }}
+                            >
+                                <FiX />
+                            </button>
+                        </div>
+                        {friendsModalData.loading ? (
+                            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+                                Loading friends list...
+                            </div>
+                        ) : friendsModalData.friends.length === 0 ? (
+                            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+                                No friends found for this user.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
+                                {friendsModalData.friends.map(friend => {
+                                    const isSelf = friend.username.toLowerCase() === username?.toLowerCase();
+
+                                    return (
+                                        <div 
+                                            key={friend.username}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '10px 12px',
+                                                borderRadius: '10px',
+                                                background: 'var(--soft)',
+                                                border: '1px solid var(--border)'
+                                            }}
+                                        >
+                                            <div 
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                                                onClick={() => {
+                                                    setFriendsModalData(prev => ({ ...prev, isOpen: false }));
+                                                    setSelectedProfileUsername(friend.username);
+                                                }}
+                                            >
+                                                <Avatar username={friend.username} avatarSrc={friend.avatar} size={36} />
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{friend.displayName || friend.username}</span>
+                                                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>@{friend.username}</span>
+                                                </div>
+                                            </div>
+                                            {!isSelf && (
+                                                <button 
+                                                    className="action-btn-card solid"
+                                                    style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }}
+                                                    onClick={() => {
+                                                        handleStartPrivateChatForUser(friend.username);
+                                                    }}
+                                                >
+                                                    Chat
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
             <ThemeTransitionOptions isOpen={showTransitionSettings} setIsOpen={setShowTransitionSettings} />
         </div>
     );

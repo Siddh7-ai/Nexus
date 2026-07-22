@@ -147,6 +147,15 @@ router.post(
 
             console.log(`[Auth Register] User registered successfully: ${trimmedUsername}`);
 
+            // Evict any active guest socket using this username
+            const io = req.app.get("io");
+            if (io) {
+                io.to(`user_${trimmedUsername.toLowerCase()}`).emit("guestUsernameTaken", {
+                    username: trimmedUsername,
+                    message: "This username is permanently taken to registered user create new one"
+                });
+            }
+
             res.status(201).json({
                 success: true,
                 message: "Registration successful. Please check your email to verify your account.",
