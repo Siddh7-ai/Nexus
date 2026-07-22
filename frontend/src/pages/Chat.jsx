@@ -1228,22 +1228,25 @@ function Chat() {
             const token = getAuthToken();
             if (!token) return;
             
-            ApiClient.request(`${getBackendUrl()}/api/users`, {
+            fetch(`${getBackendUrl()}/api/users`, {
                 headers: { "Authorization": `Bearer ${token}` }
             })
+            .then(res => res.json())
             .then(data => setAllUsers(data))
             .catch(err => console.error("Error fetching user list:", err));
 
             if (!isGuest) {
-                ApiClient.request(`${getBackendUrl()}/api/users/conversations`, {
+                fetch(`${getBackendUrl()}/api/users/conversations`, {
                     headers: { "Authorization": `Bearer ${token}` }
                 })
+                .then(res => res.json())
                 .then(data => setConversationUsers(data))
                 .catch(err => console.error("Error fetching conversations:", err));
 
-                ApiClient.request(`${getBackendUrl()}/api/user/profile/${username}`, {
+                fetch(`${getBackendUrl()}/api/user/profile/${username}`, {
                     headers: { "Authorization": `Bearer ${token}` }
                 })
+                .then(res => res.json())
                 .then(data => setOwnProfileData(data))
                 .catch(err => console.error("Error fetching own profile:", err));
             }
@@ -3202,13 +3205,14 @@ function Chat() {
         setFriendsModalData({ isOpen: true, username: targetUsername, friends: [], loading: true });
         try {
             const token = getAuthToken();
-            const res = await ApiClient.request(`${getBackendUrl()}/api/user/friends/${targetUsername}`, {
+            const res = await fetch(`${getBackendUrl()}/api/user/friends/${targetUsername}`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
+            const data = await res.json();
             setFriendsModalData({
                 isOpen: true,
                 username: targetUsername,
-                friends: res.friends || [],
+                friends: data.friends || [],
                 loading: false
             });
         } catch (err) {

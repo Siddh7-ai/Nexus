@@ -319,6 +319,9 @@ function RoomList({
                             title="Search Friends & Users"
                         >
                             <FiSearch />
+                            {pendingRequestsCount > 0 && (
+                                <span className="narrow-nav-btn-unread" style={{ background: '#ef4444' }}>{pendingRequestsCount}</span>
+                            )}
                         </button>
 
                         <button 
@@ -632,6 +635,81 @@ function RoomList({
                             </div>
                         </div>
                         <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
+                            {/* PENDING FRIEND REQUESTS BANNER */}
+                            {settingsProps.pendingRequests && settingsProps.pendingRequests.length > 0 && (
+                                <div style={{ marginBottom: '16px', background: 'rgba(18, 199, 189, 0.08)', border: '1px solid rgba(18, 199, 189, 0.25)', borderRadius: '12px', padding: '12px' }}>
+                                    <div className="sidebar-section-label" style={{ color: 'var(--accent)', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <FiUserPlus size={14} />
+                                        <span>Pending Friend Requests ({settingsProps.pendingRequests.length})</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {settingsProps.pendingRequests.map(reqItem => (
+                                            <div 
+                                                key={reqItem._id || reqItem.sender}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '8px 10px',
+                                                    background: 'var(--panel)',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid var(--border)'
+                                                }}
+                                            >
+                                                <div 
+                                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                                                    onClick={() => onUserProfileClick(reqItem.sender)}
+                                                >
+                                                    <Avatar username={reqItem.sender} avatarSrc={reqItem.avatar} size={32} />
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span style={{ fontSize: '12px', fontWeight: 600 }}>{reqItem.displayName || reqItem.sender}</span>
+                                                        <span style={{ fontSize: '10px', color: 'var(--muted)' }}>@{reqItem.sender}</span>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            settingsProps.handleAcceptRequest(reqItem.sender);
+                                                        }}
+                                                        style={{
+                                                            padding: '4px 10px',
+                                                            fontSize: '11px',
+                                                            fontWeight: 700,
+                                                            borderRadius: '6px',
+                                                            background: '#10b981',
+                                                            color: '#fff',
+                                                            border: 'none',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        Accept
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            settingsProps.handleDeclineRequest(reqItem.sender);
+                                                        }}
+                                                        style={{
+                                                            padding: '4px 10px',
+                                                            fontSize: '11px',
+                                                            fontWeight: 600,
+                                                            borderRadius: '6px',
+                                                            background: 'transparent',
+                                                            color: 'var(--muted)',
+                                                            border: '1px solid var(--border)',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        Decline
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="sidebar-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                 <span>{userSearchQuery ? `Search Results (${displayedSearchResults.length})` : "All Registered & Online Users"}</span>
                             </div>
