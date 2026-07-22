@@ -647,6 +647,7 @@ function Chat() {
     const [conversationUsers, setConversationUsers] = useState([]);
     const [drafts, setDrafts] = useState({});
     const [friendsModalData, setFriendsModalData] = useState({ isOpen: false, username: "", friends: [], loading: false });
+    const [friendToast, setFriendToast] = useState({ show: false, targetUser: "" });
 
     const messageRef = useRef(message);
     useEffect(() => {
@@ -1181,22 +1182,39 @@ function Chat() {
 
     const handleAcceptRequest = async (targetUsername) => {
         try {
+            const token = getAuthToken();
             const response = await fetch(`${getBackendUrl()}/api/user/friend-request/accept`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${getAuthToken()}`
+                    "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify({ targetUsername })
             });
             if (response.ok) {
                 await fetchPendingRequests();
+                
+                // Re-fetch own profile data so ownProfileData.friends contains the new friend
+                const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${username}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (ownRes.ok) {
+                    const ownData = await ownRes.json();
+                    setOwnProfileData(ownData);
+                }
+
                 if (selectedProfileUsernameRef.current?.toLowerCase() === targetUsername.toLowerCase()) {
                     await reloadSelectedProfileCard(targetUsername);
                 }
+
+                // Trigger celebration toast!
+                setFriendToast({ show: true, targetUser: targetUsername });
+                setTimeout(() => {
+                    setFriendToast({ show: false, targetUser: "" });
+                }, 4500);
             }
         } catch (err) {
-            console.error(err);
+            console.error("Error accepting request:", err);
         }
     };
 
@@ -1387,6 +1405,22 @@ function Chat() {
             if (user?.username) {
                 setUsername(user.username);
                 setCurrentUserProfile(user);
+            }
+        });
+
+        newSocket.on("friendRequestUpdated", async () => {
+            fetchPendingRequests();
+            const token = getAuthToken();
+            if (token && usernameRef.current) {
+                fetch(`${getBackendUrl()}/api/user/profile/${usernameRef.current}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                })
+                .then(res => res.json())
+                .then(data => setOwnProfileData(data))
+                .catch(err => console.error("Error refreshing own profile on socket event:", err));
+            }
+            if (selectedProfileUsernameRef.current) {
+                reloadSelectedProfileCard(selectedProfileUsernameRef.current);
             }
         });
 
@@ -3127,6 +3161,22 @@ function Chat() {
                 body: JSON.stringify({ targetUsername: selectedProfileData.username })
             });
             if (response.ok) {
+                const token = getAuthToken();
+                if (status === "pending_approval" || status === "requested") {
+                    const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${username}`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (ownRes.ok) {
+                        const ownData = await ownRes.json();
+                        setOwnProfileData(ownData);
+                    }
+                }
+                if (status === "pending_approval") {
+                    setFriendToast({ show: true, targetUser: selectedProfileData.username });
+                    setTimeout(() => {
+                        setFriendToast({ show: false, targetUser: "" });
+                    }, 4500);
+                }
                 await reloadSelectedProfileCard(selectedProfileData.username);
                 await fetchPendingRequests();
             }
@@ -5635,6 +5685,70 @@ function Chat() {
                     </div>
                 </div>
             )}
+            {/* ANIMATED FRIEND CONNECTION CELEBRATION TOAST */}
+            <AnimatePresence>
+                {friendToast.show && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -30, scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                        style={{
+                            position: 'fixed',
+                            top: '24px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            zIndex: 20000,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '14px 22px',
+                            borderRadius: '16px',
+                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                            color: '#ffffff',
+                            boxShadow: '0 16px 36px rgba(16, 185, 129, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2)',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                    >
+                        <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '50%',
+                            background: 'rgba(255,255,255,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '20px'
+                        }}>
+                            🎉
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.3px' }}>
+                                New Friend Connected!
+                            </span>
+                            <span style={{ fontSize: '12px', opacity: 0.95 }}>
+                                You and <strong>@{friendToast.targetUser}</strong> are now friends!
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => setFriendToast({ show: false, targetUser: "" })}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ffffff',
+                                opacity: 0.8,
+                                cursor: 'pointer',
+                                fontSize: '18px',
+                                marginLeft: '8px',
+                                padding: '2px'
+                            }}
+                        >
+                            <FiX />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <ThemeTransitionOptions isOpen={showTransitionSettings} setIsOpen={setShowTransitionSettings} />
         </div>
     );

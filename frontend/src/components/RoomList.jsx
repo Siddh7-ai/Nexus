@@ -259,18 +259,24 @@ function RoomList({
 
     const displayedSearchResults = useMemo(() => {
         const query = (userSearchQuery || "").trim().toLowerCase();
+        const myFriendsSet = new Set(
+            (currentUserProfile?.friends || []).map(f => (typeof f === "string" ? f : f?.username || "").toLowerCase())
+        );
+
         const userMap = new Map();
 
         (allUsers || []).forEach(u => {
-            if (u.username && u.username.toLowerCase() !== currentUser?.toLowerCase()) {
-                userMap.set(u.username.toLowerCase(), { ...u, isOnline: false });
+            const uLower = u.username ? u.username.toLowerCase() : "";
+            if (uLower && uLower !== currentUser?.toLowerCase() && !myFriendsSet.has(uLower)) {
+                userMap.set(uLower, { ...u, isOnline: false });
             }
         });
 
         (onlineUserList || []).forEach(u => {
-            if (u.username && u.username.toLowerCase() !== currentUser?.toLowerCase()) {
-                const existing = userMap.get(u.username.toLowerCase()) || {};
-                userMap.set(u.username.toLowerCase(), { ...existing, ...u, isOnline: true, status: u.status || "Online" });
+            const uLower = u.username ? u.username.toLowerCase() : "";
+            if (uLower && uLower !== currentUser?.toLowerCase() && !myFriendsSet.has(uLower)) {
+                const existing = userMap.get(uLower) || {};
+                userMap.set(uLower, { ...existing, ...u, isOnline: true, status: u.status || "Online" });
             }
         });
 
@@ -281,7 +287,7 @@ function RoomList({
             (u.username && u.username.toLowerCase().includes(query)) ||
             (u.displayName && u.displayName.toLowerCase().includes(query))
         );
-    }, [userSearchQuery, allUsers, onlineUserList, currentUser]);
+    }, [userSearchQuery, allUsers, onlineUserList, currentUser, currentUserProfile?.friends]);
 
     return (
         <div style={{ display: 'flex', width: '100%', height: '100%' }}>
@@ -758,8 +764,10 @@ function RoomList({
                                                     {!isSelf && (
                                                         <>
                                                             {(() => {
-                                                                const status = friendStatuses[user.username] || 
-                                                                    (currentUserProfile?.friends?.includes(user.username) ? "friends" : "none");
+                                                                const isFriend = (currentUserProfile?.friends || []).some(f => 
+                                                                    (typeof f === "string" ? f : f?.username || "").toLowerCase() === user.username.toLowerCase()
+                                                                );
+                                                                const status = friendStatuses[user.username] || (isFriend ? "friends" : "none");
 
                                                                 if (status === "friends") {
                                                                     return (
