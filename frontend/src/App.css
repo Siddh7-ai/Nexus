@@ -9321,72 +9321,66 @@ body.dark-theme .header-icon-tooltip-popup p {
   background: var(--soft);
 }
 
-/* Speech bubble for bio */
-/* ── Bio thought-bubble (cloud from profile photo) ── */
+/* Thought bubble for bio - Iconic 💭 Cloud Design */
 .settings-profile-bubble {
   position: relative;
-  z-index: 5; /* Render above the avatar to overlap the border */
+  z-index: 5;
   background: linear-gradient(135deg, #12c7bd 0%, #0da69e 100%);
   color: #021a18;
   font-size: 13.5px;
   font-style: italic;
   font-weight: 700;
-  padding: 12px 22px;
-  border-radius: 24px;
-  margin-bottom: 24px; /* Reduced to bring it closer to the avatar */
+  padding: 10px 22px;
+  border-radius: 20px;
+  margin-bottom: 28px;
   max-width: 85%;
   text-align: center;
-  border: 1px solid rgba(18, 199, 189, 0.35);
-  box-shadow: 0 8px 24px rgba(18, 199, 189, 0.25);
   line-height: 1.5;
   letter-spacing: 0.015em;
   display: inline-block;
+  /* Unified drop-shadow wraps around main bubble body and thought dots seamlessly */
+  filter: drop-shadow(0 6px 16px rgba(18, 199, 189, 0.35));
 }
 
 body.dark-theme .settings-profile-bubble {
   background: linear-gradient(135deg, #12c7bd 0%, #0a8f88 100%);
   color: #011211;
-  border-color: rgba(18, 199, 189, 0.5);
-  box-shadow: 0 8px 24px rgba(18, 199, 189, 0.4);
+  filter: drop-shadow(0 6px 16px rgba(18, 199, 189, 0.45));
 }
 
-/* Medium bubble — bridges the gap and overlaps both */
+/* Medium Thought Circle (💭) */
 .settings-profile-bubble::before {
   content: '';
   position: absolute;
-  bottom: -20px;
-  left: calc(50% - 22px); /* Shifted left as per mockup */
-  width: 24px;
-  height: 24px;
+  bottom: -14px;
+  left: 48%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 12px;
   background: #0da69e;
   border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(18, 199, 189, 0.2);
-  z-index: 2;
-  border: none;
+  display: block;
 }
 
-body.dark-theme .settings-profile-bubble::before {
-  background: #0a8f88;
-}
-
-/* Small bubble — sits completely inside the profile image */
+/* Small Thought Circle (💭) */
 .settings-profile-bubble::after {
   content: '';
   position: absolute;
-  bottom: -40px; /* Sits inside the photo's edge */
-  left: calc(50% - 13px); /* Shifted left to form a continuous diagonal line */
-  width: 9px;
-  height: 9px;
-  background: #0a8f88;
+  bottom: -23px;
+  left: 44%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  background: #0da69e;
   border-radius: 50%;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-  z-index: 6; /* render on top of the avatar border */
-  border: none;
+  display: block;
 }
 
+body.dark-theme .settings-profile-bubble::before,
 body.dark-theme .settings-profile-bubble::after {
-  background: #097d77;
+  background: #0a8f88;
 }
+
 
 
 /* Large centered avatar */

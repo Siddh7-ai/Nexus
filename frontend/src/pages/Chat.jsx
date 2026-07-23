@@ -1265,7 +1265,10 @@ function Chat() {
                     headers: { "Authorization": `Bearer ${token}` }
                 })
                 .then(res => res.json())
-                .then(data => setOwnProfileData(data))
+                .then(data => {
+                    setOwnProfileData(data);
+                    if (data) setCurrentUserProfile(data);
+                })
                 .catch(err => console.error("Error fetching own profile:", err));
             }
         }
@@ -3588,7 +3591,7 @@ function Chat() {
                         onSelectPrivate={selectPrivate}
                         onlineUserList={onlineUserList}
                         currentUser={username}
-                        currentUserProfile={currentUserProfile}
+                        currentUserProfile={ownProfileData || currentUserProfile}
                         isGuest={isGuest}
                         onProfileClick={() => {
                             setActiveSidebarTab("settings");
@@ -3597,6 +3600,7 @@ function Chat() {
                             }
                         }}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
+                        onShowFriendsList={handleShowFriendsList}
                         unreadCounts={unreadCounts}
                         allUsers={allUsers}
                         dmConversations={dmConversations}
@@ -5668,13 +5672,29 @@ function Chat() {
                                             </div>
                                             {!isSelf && (
                                                 <button 
-                                                    className="action-btn-card solid"
-                                                    style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }}
+                                                    type="button"
+                                                    style={{
+                                                        width: '34px',
+                                                        height: '34px',
+                                                        minWidth: '34px',
+                                                        minHeight: '34px',
+                                                        borderRadius: '50%',
+                                                        background: 'var(--accent)',
+                                                        color: '#fff',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        padding: 0,
+                                                        flexShrink: 0
+                                                    }}
                                                     onClick={() => {
                                                         handleStartPrivateChatForUser(friend.username);
                                                     }}
+                                                    title={`Chat with ${friend.displayName || friend.username}`}
                                                 >
-                                                    Chat
+                                                    <FiMessageSquare size={16} style={{ color: '#fff' }} />
                                                 </button>
                                             )}
                                         </div>

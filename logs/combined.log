@@ -765,3 +765,27 @@
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:01:42"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:03:42"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:05:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:07:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:09:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:11:42"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 00:13:42"}
+{"level":"error","message":"[Python ASR stderr]: forrtl: error (200): program aborting due to window-CLOSE event\nImage              PC                Routine            Line        Source             \nKERNELBASE.dll     00007FF9AD363E3D  Unknown               Unknown  Unknown\nKERNEL32.DLL       00007FF9AEF0E957  Unknown               Unknown  Unknown\nntdll.dll          00007FF9AFC6AD6C  Unknown               Unknown  Unknown","service":"nexus-backend","timestamp":"2026-07-23 00:13:54"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-23 23:11:45"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-23 23:11:45"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-23 23:11:48"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-23 23:11:48"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 4.25s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-23 23:12:17"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-23 23:12:17"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-23 23:12:17"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:13:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:15:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:17:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:19:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:21:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:23:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:25:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:27:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:29:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:31:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:33:57"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-23 23:35:57"}

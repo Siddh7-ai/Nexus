@@ -130,8 +130,10 @@ function RoomList({
     deletedSystemRooms = [],
     onLogoClick,
     onLogout,
+    onShowFriendsList,
     settingsProps = {}
 }) {
+    const effectiveProfile = settingsProps?.ownProfileData || currentUserProfile;
     const [dmSearch, setDmSearch] = useState("");
     const [userSearchQuery, setUserSearchQuery] = useState("");
     const [settingsSubpage, setSettingsSubpage] = useState("main");
@@ -146,8 +148,10 @@ function RoomList({
             alert("Guests cannot add friends. Please register an account.");
             return;
         }
-        const currentStatus = friendStatuses[targetUsername] || 
-            (currentUserProfile?.friends?.includes(targetUsername) ? "friends" : "none");
+        const isFriend = (effectiveProfile?.friends || []).some(f => 
+            (typeof f === "string" ? f : f?.username || "").toLowerCase() === targetUsername.toLowerCase()
+        );
+        const currentStatus = friendStatuses[targetUsername] || (isFriend ? "friends" : "none");
 
         let endpoint = "friend-request/send";
         let newStatus = "requested";
@@ -176,6 +180,15 @@ function RoomList({
                 const data = await response.json();
                 if (data.friendshipStatus) {
                     setFriendStatuses(prev => ({ ...prev, [targetUsername]: data.friendshipStatus }));
+                }
+                if (settingsProps?.setOwnProfileData) {
+                    const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${currentUser}`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (ownRes.ok) {
+                        const ownData = await ownRes.json();
+                        settingsProps.setOwnProfileData(ownData);
+                    }
                 }
             } else {
                 setFriendStatuses(prev => ({ ...prev, [targetUsername]: currentStatus }));
@@ -260,7 +273,7 @@ function RoomList({
     const displayedSearchResults = useMemo(() => {
         const query = (userSearchQuery || "").trim().toLowerCase();
         const myFriendsSet = new Set(
-            (currentUserProfile?.friends || []).map(f => (typeof f === "string" ? f : f?.username || "").toLowerCase())
+            (effectiveProfile?.friends || []).map(f => (typeof f === "string" ? f : f?.username || "").toLowerCase())
         );
 
         const userMap = new Map();
@@ -287,7 +300,7 @@ function RoomList({
             (u.username && u.username.toLowerCase().includes(query)) ||
             (u.displayName && u.displayName.toLowerCase().includes(query))
         );
-    }, [userSearchQuery, allUsers, onlineUserList, currentUser, currentUserProfile?.friends]);
+    }, [userSearchQuery, allUsers, onlineUserList, currentUser, effectiveProfile?.friends]);
 
     return (
         <div style={{ display: 'flex', width: '100%', height: '100%' }}>
@@ -622,8 +635,32 @@ function RoomList({
                     </>
                 ) : activeSidebarTab === "search" ? (
                     <>
-                        <div className="panel-header-section">
-                            <h3 className="panel-header-title">Find Friends</h3>
+                        <div className="panel-header-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 className="panel-header-title" style={{ margin: 0 }}>Find Friends</h3>
+                                {onShowFriendsList && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onShowFriendsList(currentUser)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            fontSize: '11px',
+                                            fontWeight: 600,
+                                            borderRadius: '6px',
+                                            background: 'rgba(18, 199, 189, 0.15)',
+                                            color: 'var(--accent)',
+                                            border: '1px solid var(--accent)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        }}
+                                        title="View your friends list"
+                                    >
+                                        <FiUsers size={12} /> My Friends ({(effectiveProfile?.friends || []).length})
+                                    </button>
+                                )}
+                            </div>
                             <div className="panel-search-box">
                                 <div style={{ position: 'relative', width: '100%' }}>
                                     <SmoothInput
@@ -772,79 +809,113 @@ function RoomList({
                                                                 if (status === "friends") {
                                                                     return (
                                                                         <button 
-                                                                            className="action-btn-card outline"
+                                                                            type="button"
                                                                             style={{ 
-                                                                                padding: '4px 8px', 
-                                                                                fontSize: '11px', 
-                                                                                borderRadius: '6px',
+                                                                                width: '34px',
+                                                                                height: '34px',
+                                                                                minWidth: '34px',
+                                                                                minHeight: '34px',
+                                                                                borderRadius: '50%',
                                                                                 background: 'rgba(16, 185, 129, 0.15)',
                                                                                 color: '#10b981',
-                                                                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                                                border: '1px solid rgba(16, 185, 129, 0.35)',
                                                                                 cursor: 'pointer',
                                                                                 display: 'flex',
                                                                                 alignItems: 'center',
-                                                                                gap: '4px'
+                                                                                justifyContent: 'center',
+                                                                                padding: 0,
+                                                                                flexShrink: 0,
+                                                                                transition: 'all 0.2s ease'
                                                                             }}
                                                                             onClick={(e) => handleFriendAction(e, user.username)}
-                                                                            title="Friends (click to remove)"
+                                                                            title="Already Friends (click to remove)"
                                                                         >
-                                                                            <FiUserCheck size={12} /> Friends
+                                                                            <FiUserCheck size={16} style={{ color: '#10b981' }} />
                                                                         </button>
                                                                     );
                                                                 } else if (status === "requested") {
                                                                     return (
                                                                         <button 
-                                                                            className="action-btn-card outline"
+                                                                            type="button"
                                                                             style={{ 
-                                                                                padding: '4px 8px', 
-                                                                                fontSize: '11px', 
-                                                                                borderRadius: '6px',
+                                                                                width: '34px',
+                                                                                height: '34px',
+                                                                                minWidth: '34px',
+                                                                                minHeight: '34px',
+                                                                                borderRadius: '50%',
                                                                                 background: 'rgba(255, 176, 32, 0.15)',
                                                                                 color: '#ffb020',
-                                                                                border: '1px solid rgba(255, 176, 32, 0.3)',
-                                                                                cursor: 'pointer'
+                                                                                border: '1px solid rgba(255, 176, 32, 0.35)',
+                                                                                cursor: 'pointer',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                justifyContent: 'center',
+                                                                                padding: 0,
+                                                                                flexShrink: 0,
+                                                                                transition: 'all 0.2s ease'
                                                                             }}
                                                                             onClick={(e) => handleFriendAction(e, user.username)}
                                                                             title="Friend Request Sent (click to cancel)"
                                                                         >
-                                                                            Requested
+                                                                            <FiUserCheck size={16} style={{ opacity: 0.7 }} />
                                                                         </button>
                                                                     );
                                                                 } else {
                                                                     return (
                                                                         <button 
-                                                                            className="action-btn-card outline"
+                                                                            type="button"
                                                                             style={{ 
-                                                                                padding: '4px 8px', 
-                                                                                fontSize: '11px', 
-                                                                                borderRadius: '6px',
+                                                                                width: '34px',
+                                                                                height: '34px',
+                                                                                minWidth: '34px',
+                                                                                minHeight: '34px',
+                                                                                borderRadius: '50%',
                                                                                 background: 'rgba(18, 199, 189, 0.12)',
                                                                                 color: 'var(--accent)',
                                                                                 border: '1px solid var(--accent)',
                                                                                 cursor: 'pointer',
                                                                                 display: 'flex',
                                                                                 alignItems: 'center',
-                                                                                gap: '4px'
+                                                                                justifyContent: 'center',
+                                                                                padding: 0,
+                                                                                flexShrink: 0,
+                                                                                transition: 'all 0.2s ease'
                                                                             }}
                                                                             onClick={(e) => handleFriendAction(e, user.username)}
                                                                             title="Add Friend"
                                                                         >
-                                                                            <FiUserPlus size={12} /> + Friend
+                                                                            <FiUserPlus size={16} />
                                                                         </button>
                                                                     );
                                                                 }
                                                             })()}
 
                                                             <button 
-                                                                className="action-btn-card solid" 
-                                                                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '6px' }}
+                                                                type="button"
+                                                                style={{ 
+                                                                    width: '34px',
+                                                                    height: '34px',
+                                                                    minWidth: '34px',
+                                                                    minHeight: '34px',
+                                                                    borderRadius: '50%',
+                                                                    background: 'var(--accent)',
+                                                                    color: '#fff',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    padding: 0,
+                                                                    flexShrink: 0,
+                                                                    transition: 'all 0.2s ease'
+                                                                }}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     onSelectPrivate(privateChatId, user.username);
                                                                 }}
-                                                                title="Chat"
+                                                                title={`Chat with ${user.displayName || user.username}`}
                                                             >
-                                                                CHAT
+                                                                <FiMessageSquare size={16} style={{ color: '#fff' }} />
                                                             </button>
                                                         </>
                                                     )}
@@ -1127,24 +1198,28 @@ function RoomList({
                                 <div className="settings-scroll-content">
                                     {settingsSearch === "" && (
                                         <div className="settings-profile-card" onClick={() => setSettingsSubpage("profile")}>
-                                            {/* Speech bubble bio */}
-                                            {(settingsProps.bioVal || currentUserProfile?.bio) && (
-                                                <div className="settings-profile-bubble">
-                                                    &ldquo;{settingsProps.bioVal || currentUserProfile?.bio}&rdquo;
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                 const rawBio = (settingsProps.bioVal || effectiveProfile?.bio || "").trim();
+                                                 if (!rawBio) return null;
+                                                 const cleanBio = rawBio.replace(/^["“'\s]+|["”'\s]+$/g, '');
+                                                 return (
+                                                     <div className="settings-profile-bubble">
+                                                         &ldquo;{cleanBio || rawBio}&rdquo;
+                                                     </div>
+                                                 );
+                                             })()}
 
                                             {/* Large centered avatar */}
                                             <div className="settings-profile-avatar-hero">
                                                 <Avatar 
                                                     username={currentUser || "U"} 
-                                                    avatarSrc={settingsProps.avatarVal || currentUserProfile?.avatar} 
+                                                    avatarSrc={settingsProps.avatarVal || effectiveProfile?.avatar} 
                                                     size={120} 
                                                 />
                                             </div>
                                             {/* Name only below avatar */}
                                             <div className="settings-profile-hero-info">
-                                                <h4>{settingsProps.displayNameVal || currentUserProfile?.displayName || currentUser}</h4>
+                                                <h4>{settingsProps.displayNameVal || effectiveProfile?.displayName || currentUser}</h4>
                                             </div>
                                         </div>
                                     )}
