@@ -28,7 +28,7 @@ import { playPop } from "../utils/audio";
 import "../App.css";
 import { initTheme, toggleTheme } from "../utils/theme";
 import { SmoothInput } from "../components/SmoothInput";
-import { FiLock, FiTrash2, FiMessageSquare, FiX } from "react-icons/fi";
+import { FiLock, FiTrash2, FiMessageSquare, FiX, FiSend, FiClock } from "react-icons/fi";
 import { Pin, PinOff, ChevronDown, ArrowRight, Mic } from "lucide-react";
 
 // Lazy load non-essential panel components and dialog modals to optimize build chunk sizes
@@ -117,12 +117,13 @@ function getAuthToken() {
     return token;
 }
 
-function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = false }) {
+function Avatar({ username = "", avatarSrc, size = 28, className = "", darkVariant = false }) {
+    const safeName = username || "U";
     if (avatarSrc) {
         return (
             <img 
                 src={avatarSrc} 
-                alt={`${username}'s avatar`} 
+                alt={`${safeName}'s avatar`} 
                 className={`avatar ${className}`} 
                 style={{ width: size, height: size, objectFit: 'cover', borderRadius: '50%' }} 
             />
@@ -131,8 +132,8 @@ function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = 
     const colors = darkVariant ? ["#121212"] : ["#bff7f2", "#c8eeff", "#d8f7cf", "#ffe1b8", "#e7dcff"];
     let colorIndex = 0;
     if (!darkVariant) {
-        for (let i = 0; i < username.length; i++) {
-            colorIndex += username.charCodeAt(i);
+        for (let i = 0; i < safeName.length; i++) {
+            colorIndex += safeName.charCodeAt(i);
         }
     }
     const color = colors[colorIndex % colors.length];
@@ -145,15 +146,15 @@ function Avatar({ username, avatarSrc, size = 28, className = "", darkVariant = 
                 color: darkVariant ? "#ffffff" : "#23303d", 
                 width: size, 
                 height: size, 
-                fontSize: size * 0.42,
-                fontWeight: 800,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '50%'
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                fontWeight: 700, 
+                fontSize: size > 30 ? '14px' : '12px',
+                borderRadius: '50%' 
             }}
         >
-            {username.charAt(0).toUpperCase()}
+            {safeName.charAt(0).toUpperCase()}
         </div>
     );
 }
@@ -647,6 +648,8 @@ function Chat() {
     const [conversationUsers, setConversationUsers] = useState([]);
     const [drafts, setDrafts] = useState({});
     const [friendsModalData, setFriendsModalData] = useState({ isOpen: false, username: "", friends: [], loading: false });
+    const [sentRequests, setSentRequests] = useState([]);
+    const [sentRequestsModalData, setSentRequestsModalData] = useState({ isOpen: false, requests: [], loading: false });
     const [friendToast, setFriendToast] = useState({ show: false, targetUser: "" });
 
     const messageRef = useRef(message);
@@ -1159,6 +1162,7 @@ function Chat() {
             if (res.ok) {
                 const data = await res.json();
                 setPendingRequests(data.incoming || []);
+                setSentRequests(data.sent || []);
             }
         } catch (err) {
             console.error("Error fetching pending requests:", err);
@@ -3251,6 +3255,7 @@ function Chat() {
         selectPrivate(pChatId, targetUser);
         setSelectedProfileUsername(null);
         setFriendsModalData(prev => ({ ...prev, isOpen: false }));
+        setSentRequestsModalData(prev => ({ ...prev, isOpen: false }));
     }
 
     async function handleShowFriendsList(targetUsername) {
@@ -3271,6 +3276,50 @@ function Chat() {
         } catch (err) {
             console.error("Error fetching friends list:", err);
             setFriendsModalData(prev => ({ ...prev, loading: false }));
+        }
+    }
+
+    async function handleShowSentRequestsList() {
+        setSentRequestsModalData({ isOpen: true, requests: sentRequests, loading: true });
+        try {
+            const token = getAuthToken();
+            const res = await fetch(`${getBackendUrl()}/api/user/friend-requests/sent`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setSentRequests(data.sent || []);
+                setSentRequestsModalData({ isOpen: true, requests: data.sent || [], loading: false });
+            } else {
+                setSentRequestsModalData(prev => ({ ...prev, loading: false }));
+            }
+        } catch (err) {
+            console.error("Error fetching sent requests list:", err);
+            setSentRequestsModalData(prev => ({ ...prev, loading: false }));
+        }
+    }
+
+    async function handleCancelSentRequest(targetUsername) {
+        try {
+            const token = getAuthToken();
+            const response = await fetch(`${getBackendUrl()}/api/user/friend-request/cancel`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ targetUsername })
+            });
+            if (response.ok) {
+                setSentRequests(prev => prev.filter(req => req.receiver?.toLowerCase() !== targetUsername.toLowerCase()));
+                setSentRequestsModalData(prev => ({
+                    ...prev,
+                    requests: prev.requests.filter(req => req.receiver?.toLowerCase() !== targetUsername.toLowerCase())
+                }));
+                await fetchPendingRequests();
+            }
+        } catch (err) {
+            console.error("Error canceling sent request:", err);
         }
     }
 
@@ -3601,6 +3650,11 @@ function Chat() {
                         }}
                         onUserProfileClick={(uname) => setSelectedProfileUsername(uname)}
                         onShowFriendsList={handleShowFriendsList}
+                        onShowSentRequestsList={handleShowSentRequestsList}
+                        sentRequestsCount={sentRequests.length}
+                        pendingRequestsCount={pendingRequests.length}
+                        pendingRequests={pendingRequests}
+                        sentRequests={sentRequests}
                         unreadCounts={unreadCounts}
                         allUsers={allUsers}
                         dmConversations={dmConversations}
@@ -5702,6 +5756,107 @@ function Chat() {
                                 })}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* SENT REQUESTS LIST MODAL */}
+            {sentRequestsModalData.isOpen && (
+                <div 
+                    className="modal-overlay" 
+                    onClick={() => setSentRequestsModalData(prev => ({ ...prev, isOpen: false }))}
+                    style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+                >
+                    <div 
+                        className="modern-modal-container" 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ 
+                            width: '90%', 
+                            maxWidth: '420px', 
+                            padding: '20px', 
+                            borderRadius: '16px', 
+                            background: 'var(--panel)', 
+                            border: '1px solid var(--border)', 
+                            color: 'var(--text)',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <FiSend size={18} style={{ color: '#ffb020' }} />
+                                <span>Sent Requests ({sentRequestsModalData.requests.length})</span>
+                            </h3>
+                            <button 
+                                onClick={() => setSentRequestsModalData(prev => ({ ...prev, isOpen: false }))}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '18px' }}
+                            >
+                                <FiX />
+                            </button>
+                        </div>
+
+                        <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
+                            {sentRequestsModalData.loading ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted)' }}>Loading...</div>
+                            ) : sentRequestsModalData.requests.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--muted)', fontSize: '13px' }}>
+                                    No pending sent friend requests.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    {sentRequestsModalData.requests.map((reqItem, idx) => {
+                                        if (!reqItem) return null;
+                                        const targetUser = reqItem.receiver || reqItem.username || reqItem.sender || "";
+                                        return (
+                                            <div 
+                                                key={reqItem._id || targetUser || idx}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '10px 12px',
+                                                    borderRadius: '10px',
+                                                    background: 'var(--soft)',
+                                                    border: '1px solid var(--border)'
+                                                }}
+                                            >
+                                                <div 
+                                                    style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                                                    onClick={() => {
+                                                        setSentRequestsModalData(prev => ({ ...prev, isOpen: false }));
+                                                        if (targetUser) setSelectedProfileUsername(targetUser);
+                                                    }}
+                                                >
+                                                    <Avatar username={targetUser} avatarSrc={reqItem.avatar} size={36} />
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{reqItem.displayName || targetUser}</span>
+                                                        <span style={{ fontSize: '11px', color: '#ffb020', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <FiClock size={10} /> Pending Acceptance
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleCancelSentRequest(targetUser)}
+                                                    style={{
+                                                        padding: '4px 10px',
+                                                        fontSize: '11px',
+                                                        fontWeight: 600,
+                                                        borderRadius: '6px',
+                                                        background: 'rgba(255, 77, 77, 0.12)',
+                                                        color: '#ff4d4d',
+                                                        border: '1px solid rgba(255, 77, 77, 0.3)',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    title="Cancel Friend Request"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

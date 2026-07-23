@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import logo from "../assets/logo.png";
 import savedMessagesLogo from "../assets/saved.png";
 import { SmoothInput } from "./SmoothInput";
-import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase, FiUserPlus, FiUserCheck } from "react-icons/fi";
+import { FiLock, FiPlus, FiHome, FiSend, FiSettings, FiMessageSquare, FiUsers, FiActivity, FiLogOut, FiUser, FiKey, FiBell, FiCommand, FiHelpCircle, FiChevronLeft, FiSearch, FiEdit2, FiCheck, FiX, FiShield, FiSun, FiMoon, FiGlobe, FiBriefcase, FiUserPlus, FiUserCheck, FiClock } from "react-icons/fi";
 import { getBackendUrl } from "../utils/config";
 import { toggleTheme } from "../utils/theme";
 import ThemeToggleButton from "./ThemeToggleButton";
@@ -127,10 +127,14 @@ function RoomList({
     activeSidebarTab = "messages",
     setActiveSidebarTab,
     pendingRequestsCount = 0,
+    sentRequestsCount = 0,
+    pendingRequests = [],
+    sentRequests = [],
     deletedSystemRooms = [],
     onLogoClick,
     onLogout,
     onShowFriendsList,
+    onShowSentRequestsList,
     settingsProps = {}
 }) {
     const effectiveProfile = settingsProps?.ownProfileData || currentUserProfile;
@@ -151,7 +155,14 @@ function RoomList({
         const isFriend = (effectiveProfile?.friends || []).some(f => 
             (typeof f === "string" ? f : f?.username || "").toLowerCase() === targetUsername.toLowerCase()
         );
-        const currentStatus = friendStatuses[targetUsername] || (isFriend ? "friends" : "none");
+        const isSent = (sentRequests || []).some(req => 
+            (req.receiver || "").toLowerCase() === targetUsername.toLowerCase()
+        );
+        const isPendingIncoming = (pendingRequests || []).some(req => 
+            (req.sender || "").toLowerCase() === targetUsername.toLowerCase()
+        );
+        const defaultStatus = isFriend ? "friends" : (isSent ? "requested" : (isPendingIncoming ? "pending_approval" : "none"));
+        const currentStatus = friendStatuses[targetUsername] || defaultStatus;
 
         let endpoint = "friend-request/send";
         let newStatus = "requested";
@@ -162,6 +173,9 @@ function RoomList({
         } else if (currentStatus === "requested") {
             endpoint = "friend-request/cancel";
             newStatus = "none";
+        } else if (currentStatus === "pending_approval") {
+            endpoint = "friend-request/accept";
+            newStatus = "friends";
         }
 
         setFriendStatuses(prev => ({ ...prev, [targetUsername]: newStatus }));
@@ -198,6 +212,34 @@ function RoomList({
             setFriendStatuses(prev => ({ ...prev, [targetUsername]: currentStatus }));
         }
     };
+    const handleDeclineRequest = async (e, targetUsername) => {
+        if (e) e.stopPropagation();
+        try {
+            const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+            const response = await fetch(`${getBackendUrl()}/api/user/friend-request/decline`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ targetUsername })
+            });
+            if (response.ok) {
+                setFriendStatuses(prev => ({ ...prev, [targetUsername]: "none" }));
+                if (settingsProps?.setOwnProfileData) {
+                    const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${currentUser}`, {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (ownRes.ok) {
+                        const ownData = await ownRes.json();
+                        settingsProps.setOwnProfileData(ownData);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("Error declining request:", err);
+        }
+    };
 
     const { accentColor, setAccentColor, soundEnabled, setSoundEnabled } = useTheme();
 
@@ -208,7 +250,7 @@ function RoomList({
         }
     }, [activeSidebarTab]);
 
-    const savedMessagesTitle = "Your Messages";
+    const savedMessagesTitle = `${effectiveProfile?.displayName || currentUser || "User"} (You)`;
     const showSavedMessages = !isGuest && currentUser && (!dmSearch || savedMessagesTitle.toLowerCase().includes(dmSearch.toLowerCase()));
 
     const totalDmUnread = useMemo(() => {
@@ -638,28 +680,94 @@ function RoomList({
                         <div className="panel-header-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <h3 className="panel-header-title" style={{ margin: 0 }}>Find Friends</h3>
-                                {onShowFriendsList && (
-                                    <button
-                                        type="button"
-                                        onClick={() => onShowFriendsList(currentUser)}
-                                        style={{
-                                            padding: '4px 10px',
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            borderRadius: '6px',
-                                            background: 'rgba(18, 199, 189, 0.15)',
-                                            color: 'var(--accent)',
-                                            border: '1px solid var(--accent)',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px'
-                                        }}
-                                        title="View your friends list"
-                                    >
-                                        <FiUsers size={12} /> My Friends ({(effectiveProfile?.friends || []).length})
-                                    </button>
-                                )}
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    {onShowFriendsList && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onShowFriendsList(currentUser)}
+                                            style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                minWidth: '32px',
+                                                borderRadius: '50%',
+                                                background: 'rgba(18, 199, 189, 0.15)',
+                                                color: 'var(--accent)',
+                                                border: '1px solid var(--accent)',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                position: 'relative',
+                                                transition: 'all 0.2s ease',
+                                                padding: 0
+                                            }}
+                                            title={`My Friends (${(effectiveProfile?.friends || []).length})`}
+                                        >
+                                            <FiUsers size={15} />
+                                            {(effectiveProfile?.friends || []).length > 0 && (
+                                                <span style={{
+                                                    position: 'absolute',
+                                                    top: '-3px',
+                                                    right: '-3px',
+                                                    background: 'var(--accent)',
+                                                    color: '#fff',
+                                                    fontSize: '9px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '10px',
+                                                    padding: '1px 4px',
+                                                    minWidth: '13px',
+                                                    textAlign: 'center',
+                                                    lineHeight: '11px'
+                                                }}>
+                                                    {(effectiveProfile?.friends || []).length}
+                                                </span>
+                                            )}
+                                        </button>
+                                    )}
+                                    {onShowSentRequestsList && (
+                                        <button
+                                            type="button"
+                                            onClick={onShowSentRequestsList}
+                                            style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                minWidth: '32px',
+                                                borderRadius: '50%',
+                                                background: 'rgba(255, 176, 32, 0.15)',
+                                                color: '#ffb020',
+                                                border: '1px solid rgba(255, 176, 32, 0.4)',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                position: 'relative',
+                                                transition: 'all 0.2s ease',
+                                                padding: 0
+                                            }}
+                                            title={`Sent Friend Requests (${sentRequestsCount || 0})`}
+                                        >
+                                            <FiSend size={14} style={{ marginLeft: '-1px' }} />
+                                            {(sentRequestsCount || 0) > 0 && (
+                                                <span style={{
+                                                    position: 'absolute',
+                                                    top: '-3px',
+                                                    right: '-3px',
+                                                    background: '#ffb020',
+                                                    color: '#111',
+                                                    fontSize: '9px',
+                                                    fontWeight: 700,
+                                                    borderRadius: '10px',
+                                                    padding: '1px 4px',
+                                                    minWidth: '13px',
+                                                    textAlign: 'center',
+                                                    lineHeight: '11px'
+                                                }}>
+                                                    {sentRequestsCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="panel-search-box">
                                 <div style={{ position: 'relative', width: '100%' }}>
@@ -679,14 +787,14 @@ function RoomList({
                         </div>
                         <div className="panel-content-scroll" style={{ padding: '8px 16px' }}>
                             {/* PENDING FRIEND REQUESTS BANNER */}
-                            {settingsProps.pendingRequests && settingsProps.pendingRequests.length > 0 && (
+                            {pendingRequests && pendingRequests.length > 0 && (
                                 <div style={{ marginBottom: '16px', background: 'rgba(18, 199, 189, 0.08)', border: '1px solid rgba(18, 199, 189, 0.25)', borderRadius: '12px', padding: '12px' }}>
                                     <div className="sidebar-section-label" style={{ color: 'var(--accent)', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <FiUserPlus size={14} />
-                                        <span>Pending Friend Requests ({settingsProps.pendingRequests.length})</span>
+                                        <span>Pending Friend Requests ({pendingRequests.length})</span>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {settingsProps.pendingRequests.map(reqItem => (
+                                        {pendingRequests.map(reqItem => (
                                             <div 
                                                 key={reqItem._id || reqItem.sender}
                                                 style={{
@@ -711,10 +819,7 @@ function RoomList({
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '6px' }}>
                                                     <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            settingsProps.handleAcceptRequest(reqItem.sender);
-                                                        }}
+                                                        onClick={(e) => handleFriendAction(e, reqItem.sender)}
                                                         style={{
                                                             padding: '4px 10px',
                                                             fontSize: '11px',
@@ -729,10 +834,7 @@ function RoomList({
                                                         Accept
                                                     </button>
                                                     <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            settingsProps.handleDeclineRequest(reqItem.sender);
-                                                        }}
+                                                        onClick={(e) => handleDeclineRequest(e, reqItem.sender)}
                                                         style={{
                                                             padding: '4px 10px',
                                                             fontSize: '11px',
@@ -801,10 +903,17 @@ function RoomList({
                                                     {!isSelf && (
                                                         <>
                                                             {(() => {
-                                                                const isFriend = (currentUserProfile?.friends || []).some(f => 
+                                                                const isFriend = (effectiveProfile?.friends || []).some(f => 
                                                                     (typeof f === "string" ? f : f?.username || "").toLowerCase() === user.username.toLowerCase()
                                                                 );
-                                                                const status = friendStatuses[user.username] || (isFriend ? "friends" : "none");
+                                                                const isSent = (sentRequests || []).some(req => 
+                                                                    (req.receiver || "").toLowerCase() === user.username.toLowerCase()
+                                                                );
+                                                                const isPendingIncoming = (pendingRequests || []).some(req => 
+                                                                    (req.sender || "").toLowerCase() === user.username.toLowerCase()
+                                                                );
+                                                                const defaultStatus = isFriend ? "friends" : (isSent ? "requested" : (isPendingIncoming ? "pending_approval" : "none"));
+                                                                const status = friendStatuses[user.username] || defaultStatus;
 
                                                                 if (status === "friends") {
                                                                     return (
@@ -857,7 +966,34 @@ function RoomList({
                                                                             onClick={(e) => handleFriendAction(e, user.username)}
                                                                             title="Friend Request Sent (click to cancel)"
                                                                         >
-                                                                            <FiUserCheck size={16} style={{ opacity: 0.7 }} />
+                                                                            <FiClock size={16} style={{ color: '#ffb020' }} />
+                                                                        </button>
+                                                                    );
+                                                                } else if (status === "pending_approval") {
+                                                                    return (
+                                                                        <button 
+                                                                            type="button"
+                                                                            style={{ 
+                                                                                width: '34px',
+                                                                                height: '34px',
+                                                                                minWidth: '34px',
+                                                                                minHeight: '34px',
+                                                                                borderRadius: '50%',
+                                                                                background: 'rgba(59, 130, 246, 0.15)',
+                                                                                color: '#3b82f6',
+                                                                                border: '1px solid rgba(59, 130, 246, 0.35)',
+                                                                                cursor: 'pointer',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                justifyContent: 'center',
+                                                                                padding: 0,
+                                                                                flexShrink: 0,
+                                                                                transition: 'all 0.2s ease'
+                                                                            }}
+                                                                            onClick={(e) => handleFriendAction(e, user.username)}
+                                                                            title="Accept Friend Request"
+                                                                        >
+                                                                            <FiCheck size={16} style={{ color: '#3b82f6' }} />
                                                                         </button>
                                                                     );
                                                                 } else {

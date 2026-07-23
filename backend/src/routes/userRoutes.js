@@ -537,9 +537,10 @@ router.post("/friend-request/send", authenticateToken, async (req, res) => {
             status: "pending"
         });
 
-        // Notify receiver via socket
+        // Notify receiver and sender via socket
         const io = req.app.get("io");
         if (io) {
+            io.to(`user_${req.user.username.toLowerCase()}`).emit("friendRequestUpdated");
             io.to(`user_${targetUsername.toLowerCase()}`).emit("friendRequestUpdated");
         }
 
@@ -557,14 +558,18 @@ router.post("/friend-request/accept", authenticateToken, async (req, res) => {
         const { targetUsername } = req.body;
         if (!targetUsername) return res.status(400).json({ message: "Target username required" });
 
-        const pendingReq = await FriendRequest.findOne({ sender: targetUsername, receiver: req.user.username, status: "pending" });
+        const pendingReq = await FriendRequest.findOne({ 
+            sender: { $regex: new RegExp(`^${targetUsername}$`, "i") }, 
+            receiver: { $regex: new RegExp(`^${req.user.username}$`, "i") }, 
+            status: "pending" 
+        });
         if (!pendingReq) {
             return res.status(404).json({ message: "No pending friend request found from this user" });
         }
 
         const [user, senderUser] = await Promise.all([
             User.findById(req.user.userId),
-            User.findOne({ username: targetUsername })
+            User.findOne({ username: { $regex: new RegExp(`^${targetUsername}$`, "i") } })
         ]);
 
         if (!user || !senderUser) {
@@ -572,11 +577,11 @@ router.post("/friend-request/accept", authenticateToken, async (req, res) => {
         }
 
         // Add to friends lists mutually
-        if (!user.friends.includes(targetUsername)) {
-            user.friends.push(targetUsername);
+        if (!user.friends.some(f => (typeof f === 'string' ? f : f?.username || '').toLowerCase() === senderUser.username.toLowerCase())) {
+            user.friends.push(senderUser.username);
         }
-        if (!senderUser.friends.includes(req.user.username)) {
-            senderUser.friends.push(req.user.username);
+        if (!senderUser.friends.some(f => (typeof f === 'string' ? f : f?.username || '').toLowerCase() === user.username.toLowerCase())) {
+            senderUser.friends.push(user.username);
         }
 
         await Promise.all([
@@ -606,7 +611,11 @@ router.post("/friend-request/decline", authenticateToken, async (req, res) => {
         const { targetUsername } = req.body;
         if (!targetUsername) return res.status(400).json({ message: "Target username required" });
 
-        const pendingReq = await FriendRequest.findOne({ sender: targetUsername, receiver: req.user.username, status: "pending" });
+        const pendingReq = await FriendRequest.findOne({ 
+            sender: { $regex: new RegExp(`^${targetUsername}$`, "i") }, 
+            receiver: { $regex: new RegExp(`^${req.user.username}$`, "i") }, 
+            status: "pending" 
+        });
         if (!pendingReq) {
             return res.status(404).json({ message: "No pending friend request found from this user" });
         }
@@ -634,7 +643,11 @@ router.post("/friend-request/cancel", authenticateToken, async (req, res) => {
         const { targetUsername } = req.body;
         if (!targetUsername) return res.status(400).json({ message: "Target username required" });
 
-        const pendingReq = await FriendRequest.findOne({ sender: req.user.username, receiver: targetUsername, status: "pending" });
+        const pendingReq = await FriendRequest.findOne({ 
+            sender: { $regex: new RegExp(`^${req.user.username}$`, "i") }, 
+            receiver: { $regex: new RegExp(`^${targetUsername}$`, "i") }, 
+            status: "pending" 
+        });
         if (!pendingReq) {
             return res.status(404).json({ message: "No pending friend request found to this user" });
         }
@@ -664,15 +677,15 @@ router.post("/friend-request/remove", authenticateToken, async (req, res) => {
 
         const [user, targetUser] = await Promise.all([
             User.findById(req.user.userId),
-            User.findOne({ username: targetUsername })
+            User.findOne({ username: { $regex: new RegExp(`^${targetUsername}$`, "i") } })
         ]);
 
         if (user) {
-            user.friends = user.friends.filter(f => f !== targetUsername);
+            user.friends = (user.friends || []).filter(f => (typeof f === 'string' ? f : f?.username || '').toLowerCase() !== targetUsername.toLowerCase());
             await user.save();
         }
         if (targetUser) {
-            targetUser.friends = targetUser.friends.filter(f => f !== req.user.username);
+            targetUser.friends = (targetUser.friends || []).filter(f => (typeof f === 'string' ? f : f?.username || '').toLowerCase() !== req.user.username.toLowerCase());
             await targetUser.save();
         }
 
@@ -690,16 +703,18 @@ router.post("/friend-request/remove", authenticateToken, async (req, res) => {
     }
 });
 
-// Get Pending Friend Requests List (Incoming)
+// Get Pending Friend Requests List (Incoming & Sent)
 router.get("/friend-requests/pending", authenticateToken, async (req, res) => {
     try {
-        if (req.user.isGuest) return res.json({ incoming: [] });
+        if (req.user.isGuest) return res.json({ incoming: [], sent: [] });
 
-        const pendingIncoming = await FriendRequest.find({ receiver: req.user.username, status: "pending" });
+        const userRegex = new RegExp(`^${req.user.username}$`, "i");
+        const pendingIncoming = await FriendRequest.find({ receiver: { $regex: userRegex }, status: "pending" });
+        const pendingSent = await FriendRequest.find({ sender: { $regex: userRegex }, status: "pending" });
         
-        // Fetch sender profiles (avatar, displayName) for each request
+        // Fetch sender profiles (avatar, displayName) for incoming requests
         const incomingWithProfiles = await Promise.all(pendingIncoming.map(async (reqItem) => {
-            const senderUser = await User.findOne({ username: reqItem.sender });
+            const senderUser = await User.findOne({ username: { $regex: new RegExp(`^${reqItem.sender}$`, "i") } });
             return {
                 _id: reqItem._id,
                 sender: reqItem.sender,
@@ -709,10 +724,47 @@ router.get("/friend-requests/pending", authenticateToken, async (req, res) => {
             };
         }));
 
-        res.json({ incoming: incomingWithProfiles });
+        // Fetch receiver profiles (avatar, displayName) for sent requests
+        const sentWithProfiles = await Promise.all(pendingSent.map(async (reqItem) => {
+            const receiverUser = await User.findOne({ username: { $regex: new RegExp(`^${reqItem.receiver}$`, "i") } });
+            return {
+                _id: reqItem._id,
+                receiver: reqItem.receiver,
+                displayName: receiverUser ? (receiverUser.displayName || reqItem.receiver) : reqItem.receiver,
+                avatar: receiverUser ? receiverUser.avatar : "",
+                createdAt: reqItem.createdAt
+            };
+        }));
+
+        res.json({ incoming: incomingWithProfiles, sent: sentWithProfiles });
     } catch (err) {
         console.error("Error fetching pending requests:", err);
         res.status(500).json({ message: "Server error fetching pending requests" });
+    }
+});
+
+// Get Sent Friend Requests List
+router.get("/friend-requests/sent", authenticateToken, async (req, res) => {
+    try {
+        if (req.user.isGuest) return res.json({ sent: [] });
+
+        const userRegex = new RegExp(`^${req.user.username}$`, "i");
+        const pendingSent = await FriendRequest.find({ sender: { $regex: userRegex }, status: "pending" });
+        const sentWithProfiles = await Promise.all(pendingSent.map(async (reqItem) => {
+            const receiverUser = await User.findOne({ username: { $regex: new RegExp(`^${reqItem.receiver}$`, "i") } });
+            return {
+                _id: reqItem._id,
+                receiver: reqItem.receiver,
+                displayName: receiverUser ? (receiverUser.displayName || reqItem.receiver) : reqItem.receiver,
+                avatar: receiverUser ? receiverUser.avatar : "",
+                createdAt: reqItem.createdAt
+            };
+        }));
+
+        res.json({ sent: sentWithProfiles });
+    } catch (err) {
+        console.error("Error fetching sent requests:", err);
+        res.status(500).json({ message: "Server error fetching sent requests" });
     }
 });
 

@@ -208,7 +208,7 @@ function ChatHeader({
                                             className="avatar header-avatar"
                                             style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
                                         />
-                                        <div className="chat-title">Your Messages</div>
+                                        <div className="chat-title">{privateUser?.displayName || privateUser?.username || username} (You)</div>
                                     </>
                                 ) : (
                                     <>
