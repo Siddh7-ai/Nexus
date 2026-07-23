@@ -130,6 +130,7 @@ function RoomList({
     sentRequestsCount = 0,
     pendingRequests = [],
     sentRequests = [],
+    onRefreshPendingRequests,
     deletedSystemRooms = [],
     onLogoClick,
     onLogout,
@@ -156,10 +157,10 @@ function RoomList({
             (typeof f === "string" ? f : f?.username || "").toLowerCase() === targetUsername.toLowerCase()
         );
         const isSent = (sentRequests || []).some(req => 
-            (req.receiver || "").toLowerCase() === targetUsername.toLowerCase()
+            (req.receiver || req.username || req.targetUsername || "").toLowerCase() === targetUsername.toLowerCase()
         );
         const isPendingIncoming = (pendingRequests || []).some(req => 
-            (req.sender || "").toLowerCase() === targetUsername.toLowerCase()
+            (req.sender || req.username || req.targetUsername || "").toLowerCase() === targetUsername.toLowerCase()
         );
         const defaultStatus = isFriend ? "friends" : (isSent ? "requested" : (isPendingIncoming ? "pending_approval" : "none"));
         const currentStatus = friendStatuses[targetUsername] || defaultStatus;
@@ -195,6 +196,7 @@ function RoomList({
                 if (data.friendshipStatus) {
                     setFriendStatuses(prev => ({ ...prev, [targetUsername]: data.friendshipStatus }));
                 }
+                if (onRefreshPendingRequests) onRefreshPendingRequests();
                 if (settingsProps?.setOwnProfileData) {
                     const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${currentUser}`, {
                         headers: { "Authorization": `Bearer ${token}` }
@@ -226,6 +228,7 @@ function RoomList({
             });
             if (response.ok) {
                 setFriendStatuses(prev => ({ ...prev, [targetUsername]: "none" }));
+                if (onRefreshPendingRequests) onRefreshPendingRequests();
                 if (settingsProps?.setOwnProfileData) {
                     const ownRes = await fetch(`${getBackendUrl()}/api/user/profile/${currentUser}`, {
                         headers: { "Authorization": `Bearer ${token}` }
@@ -907,10 +910,10 @@ function RoomList({
                                                                     (typeof f === "string" ? f : f?.username || "").toLowerCase() === user.username.toLowerCase()
                                                                 );
                                                                 const isSent = (sentRequests || []).some(req => 
-                                                                    (req.receiver || "").toLowerCase() === user.username.toLowerCase()
+                                                                    (req.receiver || req.username || req.targetUsername || "").toLowerCase() === user.username.toLowerCase()
                                                                 );
                                                                 const isPendingIncoming = (pendingRequests || []).some(req => 
-                                                                    (req.sender || "").toLowerCase() === user.username.toLowerCase()
+                                                                    (req.sender || req.username || req.targetUsername || "").toLowerCase() === user.username.toLowerCase()
                                                                 );
                                                                 const defaultStatus = isFriend ? "friends" : (isSent ? "requested" : (isPendingIncoming ? "pending_approval" : "none"));
                                                                 const status = friendStatuses[user.username] || defaultStatus;

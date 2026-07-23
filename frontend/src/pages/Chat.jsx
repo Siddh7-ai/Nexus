@@ -1154,10 +1154,11 @@ function Chat() {
     };
 
     const fetchPendingRequests = async () => {
-        if (isGuest || !username) return;
+        const token = getAuthToken();
+        if (isGuest || !token) return;
         try {
             const res = await fetch(`${getBackendUrl()}/api/user/friend-requests/pending`, {
-                headers: { "Authorization": `Bearer ${getAuthToken()}` }
+                headers: { "Authorization": `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
@@ -3655,6 +3656,7 @@ function Chat() {
                         pendingRequestsCount={pendingRequests.length}
                         pendingRequests={pendingRequests}
                         sentRequests={sentRequests}
+                        onRefreshPendingRequests={fetchPendingRequests}
                         unreadCounts={unreadCounts}
                         allUsers={allUsers}
                         dmConversations={dmConversations}

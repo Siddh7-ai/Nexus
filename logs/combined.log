@@ -825,3 +825,13 @@
 {"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 4.18s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-24 00:01:26"}
 {"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001\r\nPress CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-24 00:01:26"}
 {"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-24 00:03:20"}
+{"level":"info","message":"[Nexus Config] Environment variables validated successfully.","service":"nexus-backend","timestamp":"2026-07-24 00:04:28"}
+{"level":"info","message":"Successfully connected to MongoDB.","service":"nexus-backend","timestamp":"2026-07-24 00:04:28"}
+{"level":"info","message":"[Python ASR] Spawning Python ASR microservice process...","service":"nexus-backend","timestamp":"2026-07-24 00:04:29"}
+{"level":"info","message":"Server successfully started on port 5000","service":"nexus-backend","timestamp":"2026-07-24 00:04:29"}
+{"level":"info","message":"[Python ASR stdout]: [Python ASR] Initializing Backend ASR Service...\r\n[Python ASR] Model: base.en (Version: v1)\r\n[Python ASR] Attempting to load model on GPU (CUDA) with int8_float16...\r\n[Python ASR] Model loaded successfully in 3.37s on cuda (int8_float16)\r\n * Serving Flask app 'transcription_server'\r\n * Debug mode: off","service":"nexus-backend","timestamp":"2026-07-24 00:04:34"}
+{"level":"error","message":"[Python ASR stderr]: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\r\n * Running on http://127.0.0.1:5001","service":"nexus-backend","timestamp":"2026-07-24 00:04:34"}
+{"level":"error","message":"[Python ASR stderr]: Press CTRL+C to quit","service":"nexus-backend","timestamp":"2026-07-24 00:04:34"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-24 00:06:29"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-24 00:08:29"}
+{"level":"info","message":"[SLA Checker] Running background breach verification...","service":"nexus-backend","timestamp":"2026-07-24 00:10:29"}
